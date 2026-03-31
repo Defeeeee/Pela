@@ -3,7 +3,7 @@ name: Sync And Deploy to Server
 on:
   push:
     branches:
-      - main
+      - master
   workflow_dispatch:
 
 jobs:
