@@ -7,7 +7,41 @@ on:
   workflow_dispatch:
 
 jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Test Start
+        run: |
+          npm start &
+          # Wait for the server to start (Next.js is usually fast but we give it a few seconds)
+          for i in {1..10}; do
+            if curl -s http://localhost:9314 > /dev/null; then
+              echo "Server started successfully!"
+              exit 0
+            fi
+            echo "Waiting for server to start..."
+            sleep 2
+          done
+          echo "Server failed to start within 20 seconds"
+          exit 1
+
   deploy-to-server:
+    needs: build-and-test
     runs-on: ubuntu-latest
 
     environment:
