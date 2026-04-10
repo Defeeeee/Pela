@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation';
 import pages from '../customPages/pages';
 
-export default function CatchAllPage({ params }) {
-  const slug = params?.slug ?? [];
+export default async function CatchAllPage({ params }) {
+  const resolvedParams = await params;
+  const slug = resolvedParams?.slug ?? [];
   const path = '/' + (Array.isArray(slug) ? slug.join('/') : slug);
   const PageComp = pages[path];
   if (!PageComp) return notFound();

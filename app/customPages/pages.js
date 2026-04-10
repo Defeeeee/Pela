@@ -1,5 +1,5 @@
 import HealthPage from '../health/page';
-import { Home as HomePage } from '../home/page';
+import HomePage from '../home/page';
 
 const pages = {
   '/': HomePage,
