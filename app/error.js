@@ -1,4 +1,12 @@
-export default function HealthPage() {
+'use client';
+
+import { useEffect } from 'react';
+
+export default function Error({ error, reset }) {
+  useEffect(() => {
+    console.error(error);
+  }, [error]);
+
   return (
     <div style={{
       display: 'flex',
@@ -7,7 +15,7 @@ export default function HealthPage() {
       alignItems: 'center',
       minHeight: '100vh',
       backgroundColor: '#000',
-      backgroundImage: 'radial-gradient(circle at center, #1a1a1a 0%, #000 100%)',
+      backgroundImage: 'radial-gradient(circle at center, #1a0000 0%, #000 100%)',
       color: '#fff',
       fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
       padding: '20px',
@@ -24,14 +32,14 @@ export default function HealthPage() {
       `}</style>
       <div className="animate-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <img
-          src="/imgs/Pelado Feliz.jpeg"
-          alt="Pelado Feliz"
+          src="/imgs/Pelado Triste.jpeg"
+          alt="Pelado Triste"
           style={{
             width: '180px',
             height: '180px',
             borderRadius: '50%',
             marginBottom: '40px',
-            border: '2px solid rgba(255, 255, 255, 0.1)',
+            border: '2px solid rgba(255, 0, 0, 0.2)',
             boxShadow: '0 20px 50px rgba(0, 0, 0, 0.5)',
             objectFit: 'cover'
           }}
@@ -46,8 +54,26 @@ export default function HealthPage() {
           WebkitTextFillColor: 'transparent',
           textShadow: '0 10px 30px rgba(0, 0, 0, 0.5)'
         }}>
-          El pela sigue vivo y argumentando, creeme
+          Algo salió mal, el pela está triste.
         </h1>
+        <button
+          onClick={() => reset()}
+          style={{
+            marginTop: '30px',
+            padding: '12px 24px',
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            color: '#fff',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '1rem',
+            transition: 'all 0.2s ease'
+          }}
+          onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.2)'}
+          onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'}
+        >
+          Intentar de nuevo
+        </button>
       </div>
     </div>
   );
