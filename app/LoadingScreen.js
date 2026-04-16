@@ -2,11 +2,19 @@
 
 import { useState, useEffect } from 'react';
 
-export default function LoadingScreen({ fileName, delay, initialTitle }) {
+export default function LoadingScreen({ fileName, delay, initialTitle, message = 'Cargando al pelado...', onComplete }) {
   const [progress, setProgress] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    if (!delay || delay <= 0) {
+      setProgress(100);
+      setLoaded(true);
+      if (initialTitle) document.title = initialTitle;
+      if (onComplete) onComplete();
+      return;
+    }
+
     const start = Date.now();
     const interval = setInterval(() => {
       const elapsed = Date.now() - start;
@@ -17,14 +25,15 @@ export default function LoadingScreen({ fileName, delay, initialTitle }) {
     const timeout = setTimeout(() => {
       clearInterval(interval);
       setLoaded(true);
-      document.title = initialTitle;
+      if (initialTitle) document.title = initialTitle;
+      if (onComplete) onComplete();
     }, delay);
 
     return () => {
       clearInterval(interval);
       clearTimeout(timeout);
     };
-  }, [delay, initialTitle]);
+  }, [delay, initialTitle, onComplete]);
 
   const styles = {
     loader: {
@@ -68,7 +77,7 @@ export default function LoadingScreen({ fileName, delay, initialTitle }) {
   return (
     <>
       <div style={styles.loader}>
-        Cargando al pelado...
+        {message}
         <div style={styles.barBg}>
           <div style={styles.bar}></div>
         </div>
