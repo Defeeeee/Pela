@@ -68,36 +68,38 @@ export default function TodayPage() {
           />
         )}
         <main className={styles.container}>
-      <h1>¿Qué pelado sos hoy?</h1>
+          <div className={styles.animateContent}>
+            <h1 className={styles.title}>¿Qué pelado sos hoy?</h1>
 
-      <form onSubmit={handleSubmit} className={styles.form}>
-        <div className={styles.grid}>
-          {images.map((name, idx) => {
-            const value = name;
-            const src = `/imgs/${encodeURIComponent(name)}`;
-            return (
-              <label
-                key={idx}
-                className={`${styles.card} ${selected === value ? styles.selected : ""}`}
-              >
-                <input
-                  type="radio"
-                  name="pelado"
-                  value={value}
-                  checked={selected === value}
-                  onChange={() => setSelected(value)}
-                />
-                <img src={src} alt={value} className={styles.img} />
-                <div className={styles.caption}>{name.replace(/\.[^/.]+$/, "")}</div>
-              </label>
-            );
-          })}
-        </div>
+            <form onSubmit={handleSubmit} className={styles.form}>
+              <div className={styles.grid}>
+                {images.map((name, idx) => {
+                  const value = name;
+                  const src = `/imgs/${encodeURIComponent(name)}`;
+                  return (
+                    <label
+                      key={idx}
+                      className={`${styles.card} ${selected === value ? styles.selected : ""}`}
+                    >
+                      <input
+                        type="radio"
+                        name="pelado"
+                        value={value}
+                        checked={selected === value}
+                        onChange={() => setSelected(value)}
+                      />
+                      <img src={src} alt={value} className={styles.img} />
+                      <div className={styles.caption}>{name.replace(/\.[^/.]+$/, "")}</div>
+                    </label>
+                  );
+                })}
+              </div>
 
-        <div className={styles.actions}>
-          <button type="submit" className={styles.submit}>Enviar</button>
-        </div>
-      </form>
+              <div className={styles.actions}>
+                <button type="submit" className={styles.submit}>Enviar</button>
+              </div>
+            </form>
+          </div>
       </main>
     </>
   );
