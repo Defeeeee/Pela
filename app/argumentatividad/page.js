@@ -64,18 +64,6 @@ export default function ShipPage() {
       `}</style>
 
       <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <h1 style={{
-          fontSize: 'clamp(2rem, 8vw, 3.5rem)',
-          fontWeight: '900',
-          marginBottom: '50px',
-          background: 'linear-gradient(to bottom, #fff, #ffc0cb)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          textShadow: '0 10px 30px rgba(0, 0, 0, 0.5)'
-        }}>
-          EL SHIP DEL SIGLO
-        </h1>
-
         <div className="animate-ship">
           <div style={{ position: 'relative' }}>
             <img
