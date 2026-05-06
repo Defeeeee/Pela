@@ -53,8 +53,8 @@ export async function proxy(request) {
   const day = now.getDay() // 0 = Sunday, 6 = Saturday
   const hour = now.getHours()
 
-  // base blocked conditions: weekend or Friday after 15:00
-  let blocked = day === 6 || day === 0 || (day === 5 && hour >= 15)
+  // base blocked conditions: weekend, Friday after 15:00, or daily 18:00-06:00
+  let blocked = day === 6 || day === 0 || (day === 5 && hour >= 15) || (hour >= 18 || hour < 6)
 
   // Check Argentina holidays for the year of `now` and mark blocked if today is a holiday
   let matchedHoliday = null
