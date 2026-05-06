@@ -50,8 +50,10 @@ export async function proxy(request) {
     if (test) now = test
   }
 
-  const day = now.getDay() // 0 = Sunday, 6 = Saturday
-  const hour = now.getHours()
+  // Normalize to Argentina time (GMT-3) for logic checks
+  const argTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Argentina/Buenos_Aires' }))
+  const day = argTime.getDay() // 0 = Sunday, 6 = Saturday
+  const hour = argTime.getHours()
 
   // base blocked conditions: weekend, Friday after 15:00, or daily 18:00-06:00
   let blocked = day === 6 || day === 0 || (day === 5 && hour >= 15) || (hour >= 18 || hour < 6)
