@@ -1,4 +1,4 @@
-export default function ShipPage() {
+export default function ShipPage({ hideCoriglia = false }) {
   return (
     <div style={{
       display: 'flex',
@@ -65,14 +65,16 @@ export default function ShipPage() {
 
       <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div className="animate-ship">
-          <div style={{ position: 'relative' }}>
-            <img
-              src="/imgs/coriglia.webp"
-              alt="Coriglia"
-              className="profile-img"
-            />
-            <div style={{ marginTop: '15px', fontWeight: 'bold', color: '#ffc0cb' }}>Coriglia</div>
-          </div>
+          {!hideCoriglia && (
+            <div style={{ position: 'relative' }}>
+              <img
+                src="/imgs/coriglia.webp"
+                alt="Coriglia"
+                className="profile-img"
+              />
+              <div style={{ marginTop: '15px', fontWeight: 'bold', color: '#ffc0cb' }}>Coriglia</div>
+            </div>
+          )}
 
           <div className="animate-heart">❤</div>
 
