@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function ArgumentoPage() {
   const [argumento, setArgumento] = useState('');
@@ -66,100 +66,199 @@ export default function ArgumentoPage() {
       </form>
 
       {showPaywall && (
-        <MercadoPagoModal onClose={() => setShowPaywall(false)} />
+        <MercadoPagoFullScreen onClose={() => setShowPaywall(false)} />
       )}
     </div>
   );
 }
 
-function MercadoPagoModal({ onClose }) {
+function MercadoPagoFullScreen({ onClose }) {
+  const [step, setStep] = useState('select'); // select, processing, error
+  const [selectedMethod, setSelectedMethod] = useState(null);
+
+  const handleSelect = (method) => {
+    setSelectedMethod(method);
+  };
+
+  const handleConfirm = () => {
+    if (!selectedMethod) return;
+    setStep('processing');
+    setTimeout(() => {
+      setStep('error');
+    }, 2500);
+  };
+
   return (
     <div style={{
       position: 'fixed',
       inset: 0,
-      backgroundColor: 'rgba(0,0,0,0.9)',
+      backgroundColor: '#ebebeb',
+      zIndex: 30000,
       display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 20000,
-      fontFamily: '"Proxima Nova", -apple-system, "Helvetica Neue", Helvetica, Roboto, Arial, sans-serif'
+      flexDirection: 'column',
+      fontFamily: '"Proxima Nova", -apple-system, sans-serif'
     }}>
+      {/* MP Navigation Bar */}
       <div style={{
-        backgroundColor: '#ebebeb',
-        width: '100%',
-        maxWidth: '400px',
-        height: '100%',
-        maxHeight: '650px',
+        backgroundColor: '#009ee3',
+        height: '56px',
+        padding: '0 16px',
         display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-        borderRadius: '8px',
-        overflow: 'hidden'
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        color: '#fff',
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
       }}>
-        {/* MP Header */}
-        <div style={{
-          backgroundColor: '#009ee3',
-          padding: '16px',
-          color: '#fff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <span style={{ fontSize: '18px', fontWeight: '600' }}>Mercado Pago</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>✕</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer' }}>←</button>
+          <span style={{ fontSize: '18px', fontWeight: '500' }}>Mercado Pago</span>
         </div>
+        <div style={{ fontSize: '14px', fontWeight: '400', opacity: 0.9 }}>Ayuda</div>
+      </div>
 
-        {/* Content */}
-        <div style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <div style={{ backgroundColor: '#fff', padding: '20px', borderRadius: '4px', textAlign: 'center', marginBottom: '24px' }}>
-            <div style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>Vas a pagar a</div>
-            <div style={{ fontWeight: 'bold', fontSize: '18px', color: '#333' }}>Pela Corp. SAS</div>
-            <div style={{ fontSize: '32px', fontWeight: 'bold', color: '#333', marginTop: '20px' }}>$ 4.500,00</div>
-          </div>
-
-          <div style={{ color: '#333', fontWeight: '600', marginBottom: '16px' }}>¿Cómo querés pagar?</div>
-
-          {/* Payment Options */}
-          {[
-            { label: 'Nueva tarjeta de débito', icon: '💳' },
-            { label: 'Nueva tarjeta de crédito', icon: '💳' },
-            { label: 'Efectivo en puntos de pago', icon: '💵' },
-            { label: 'Transferencia electrónica', icon: '🏦' }
-          ].map((opt, i) => (
-            <div key={i} style={{
-              backgroundColor: '#fff',
-              padding: '16px',
-              borderRadius: '4px',
-              display: 'flex',
-              alignItems: 'center',
-              marginBottom: '8px',
-              cursor: 'pointer'
-            }}>
-              <span style={{ fontSize: '24px', marginRight: '16px' }}>{opt.icon}</span>
-              <span style={{ color: '#009ee3', fontSize: '16px' }}>{opt.label}</span>
+      <div style={{ 
+        flex: 1, 
+        overflowY: 'auto', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center',
+        padding: '24px 16px'
+      }}>
+        
+        {step === 'select' && (
+          <div style={{ width: '100%', maxWidth: '500px' }}>
+            <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '8px', textAlign: 'center', marginBottom: '16px', border: '1px solid #ddd' }}>
+              <div style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>Pela Corp. SAS</div>
+              <div style={{ fontSize: '36px', fontWeight: 'bold', color: '#333' }}>$ 4.500,00</div>
             </div>
-          ))}
 
-          <div style={{ flex: 1 }}></div>
+            <div style={{ color: '#333', fontWeight: '600', fontSize: '18px', marginBottom: '16px', paddingLeft: '4px' }}>
+              ¿Cómo querés pagar?
+            </div>
 
-          <button style={{
-            backgroundColor: 'rgba(0, 158, 227, 0.1)',
-            color: '#009ee3',
-            border: 'none',
-            padding: '16px',
-            borderRadius: '4px',
-            fontWeight: '600',
-            fontSize: '16px',
-            width: '100%',
-            cursor: 'not-allowed'
-          }}>
-            Confirmar pago
-          </button>
-          
-          <div style={{ textAlign: 'center', color: '#999', fontSize: '12px', marginTop: '16px' }}>
-            Protegido por Mercado Pago
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {[
+                { id: 'debito', label: 'Nueva tarjeta de débito', icon: '💳' },
+                { id: 'credito', label: 'Nueva tarjeta de crédito', icon: '💳' },
+                { id: 'efectivo', label: 'Efectivo en puntos de pago', icon: '💵' },
+                { id: 'transfer', label: 'Transferencia electrónica', icon: '🏦' }
+              ].map((opt) => (
+                <div 
+                  key={opt.id} 
+                  onClick={() => handleSelect(opt.id)}
+                  style={{
+                    backgroundColor: '#fff',
+                    padding: '20px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    border: selectedMethod === opt.id ? '2px solid #009ee3' : '1px solid #ddd',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <span style={{ fontSize: '24px', marginRight: '16px' }}>{opt.icon}</span>
+                  <span style={{ color: selectedMethod === opt.id ? '#009ee3' : '#333', fontSize: '16px', fontWeight: '500' }}>{opt.label}</span>
+                </div>
+              ))}
+            </div>
+
+            <button 
+              onClick={handleConfirm}
+              disabled={!selectedMethod}
+              style={{
+                backgroundColor: selectedMethod ? '#009ee3' : '#ccc',
+                color: '#fff',
+                border: 'none',
+                padding: '16px',
+                borderRadius: '6px',
+                fontWeight: '600',
+                fontSize: '18px',
+                width: '100%',
+                marginTop: '32px',
+                cursor: selectedMethod ? 'pointer' : 'not-allowed',
+                transition: 'background-color 0.3s'
+              }}
+            >
+              Continuar
+            </button>
           </div>
-        </div>
+        )}
+
+        {step === 'processing' && (
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="mp-spinner" style={{
+              width: '60px',
+              height: '60px',
+              border: '6px solid #ddd',
+              borderTopColor: '#009ee3',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            <p style={{ marginTop: '24px', color: '#333', fontSize: '18px', fontWeight: '500' }}>Estamos procesando tu pago...</p>
+            <style>{`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
+          </div>
+        )}
+
+        {step === 'error' && (
+          <div style={{ width: '100%', maxWidth: '500px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ 
+              width: '80px', 
+              height: '80px', 
+              backgroundColor: '#ff4b4b', 
+              borderRadius: '50%', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              color: '#fff',
+              fontSize: '40px',
+              marginBottom: '24px'
+            }}>!</div>
+            <h2 style={{ color: '#333', fontSize: '24px', marginBottom: '16px' }}>Pago rechazado</h2>
+            <p style={{ color: '#666', fontSize: '16px', lineHeight: '1.5', marginBottom: '32px' }}>
+              No pudimos procesar los $ 4.500,00. El banco informó que "el usuario no tiene suficiente pelada para avalar este argumento".
+            </p>
+            <button 
+              onClick={() => setStep('select')}
+              style={{
+                backgroundColor: '#009ee3',
+                color: '#fff',
+                border: 'none',
+                padding: '16px',
+                borderRadius: '6px',
+                fontWeight: '600',
+                fontSize: '18px',
+                width: '100%',
+                cursor: 'pointer'
+              }}
+            >
+              Intentar con otro medio
+            </button>
+            <button 
+              onClick={onClose}
+              style={{
+                marginTop: '16px',
+                background: 'none',
+                border: 'none',
+                color: '#009ee3',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: 'pointer'
+              }}
+            >
+              Volver al verificador
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div style={{ textAlign: 'center', padding: '16px', color: '#999', fontSize: '12px' }}>
+        Protegido por Mercado Pago
       </div>
     </div>
   );
