@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from 'next/navigation';
 import styles from "./page.module.css";
 import LoadingScreen from '../LoadingScreen';
+import CaptchaModal from './CaptchaModal';
 
 const images = [
   "Pelado Feliz.jpeg",
@@ -18,6 +19,7 @@ export default function TodayPage() {
   const [isSending, setIsSending] = useState(false);
   const [sendingFile, setSendingFile] = useState(null);
   const [sendingDelay, setSendingDelay] = useState(0);
+  const [showCaptcha, setShowCaptcha] = useState(false);
 
   const router = useRouter();
 
@@ -36,6 +38,12 @@ export default function TodayPage() {
       alert('Seleccioná un pelado antes de enviar.');
       return;
     }
+
+    setShowCaptcha(true);
+  };
+
+  const handleCaptchaVerify = async () => {
+    setShowCaptcha(false);
 
     // 5% chance to be sent to work
     if (Math.random() < 0.05) {
@@ -64,6 +72,12 @@ export default function TodayPage() {
 
     return (
       <>
+        {showCaptcha && (
+          <CaptchaModal 
+            onVerify={handleCaptchaVerify} 
+            onClose={() => setShowCaptcha(false)} 
+          />
+        )}
         {isSending && (
           <LoadingScreen
             fileName={sendingFile}
