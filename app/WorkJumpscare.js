@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 
 const workImages = [
   '/imgs/labura/Job-Application-Form-Template-Google-Docs-Word-Page-01.webp',
@@ -10,17 +11,21 @@ const workImages = [
 export default function WorkJumpscare() {
   const [show, setShow] = useState(false);
   const [imgSrc, setImgSrc] = useState('');
+  const pathname = usePathname();
 
   useEffect(() => {
-    // Check for jumpscare chance every 5 seconds
+    const isAutistaPage = pathname === '/autista';
+    const intervalTime = isAutistaPage ? 1000 : 5000;
+    const probability = isAutistaPage ? 0.50 : 0.50; // 50% chance in both, but interval is different
+
     const interval = setInterval(() => {
-      if (Math.random() < 0.50) { // 50% chance every 5s
+      if (Math.random() < probability) {
         trigger();
       }
-    }, 5000);
+    }, intervalTime);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [pathname]);
 
   const trigger = () => {
     const randomImg = workImages[Math.floor(Math.random() * workImages.length)];
