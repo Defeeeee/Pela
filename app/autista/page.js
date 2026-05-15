@@ -16,7 +16,16 @@ const allImages = [
 
 export default function AutistaPage() {
   const [currentIdx, setCurrentIdx] = useState(0);
+  const [filter, setFilter] = useState('');
   const timeoutRef = useRef(null);
+
+  const getRandomFilter = () => {
+    const saturate = Math.random() * 5; // 0 to 500%
+    const brightness = 0.5 + Math.random() * 1.5; // 50% to 200%
+    const contrast = 0.5 + Math.random() * 2; // 50% to 250%
+    const hue = Math.floor(Math.random() * 360); // 0 to 360deg
+    return `saturate(${saturate}) brightness(${brightness}) contrast(${contrast}) hue-rotate(${hue}deg)`;
+  };
 
   const getNextRandomIndex = (prevIdx) => {
     let nextIdx;
@@ -32,11 +41,13 @@ export default function AutistaPage() {
     timeoutRef.current = setTimeout(() => {
       const nextIdx = getNextRandomIndex(prevIdx);
       setCurrentIdx(nextIdx);
+      setFilter(getRandomFilter());
       scheduleNext(nextIdx);
     }, nextInterval);
   };
 
   useEffect(() => {
+    setFilter(getRandomFilter());
     scheduleNext(currentIdx);
     return () => {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -62,7 +73,8 @@ export default function AutistaPage() {
         style={{
           width: '100vw',
           height: '100vh',
-          objectFit: 'contain'
+          objectFit: 'contain',
+          filter: filter
         }}
       />
     </div>
