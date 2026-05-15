@@ -37,6 +37,12 @@ export default function TodayPage() {
       return;
     }
 
+    // 5% chance to be sent to work
+    if (Math.random() < 0.05) {
+      router.push('/labura');
+      return;
+    }
+
     const src = `/imgs/goat/${encodeURIComponent(selected)}`;
     const { width, height } = await loadImageSize(src);
     const pixelCount = width * height;
