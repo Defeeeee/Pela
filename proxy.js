@@ -18,6 +18,12 @@ function parseTestDate(request) {
   }
 }
 
+function isGodMode(request) {
+  const qp = request.nextUrl.searchParams.get('godMode')
+  const hdr = request.headers.get('x-god-mode')
+  return qp === 'true' || hdr === 'true'
+}
+
 async function fetchHolidaysForYear(year) {
   const nowTs = Date.now()
   // cache for 12 hours
@@ -57,6 +63,11 @@ export async function proxy(request) {
 
   // base blocked conditions: weekend, Friday after 15:00, or daily 18:00-06:00
   let blocked = day === 6 || day === 0 || (day === 5 && hour >= 15) || (hour >= 18 || hour < 6)
+
+  // Bypass if God Mode is active
+  if (!isProd && isGodMode(request)) {
+    blocked = false
+  }
 
   // Check Argentina holidays for the year of `now` and mark blocked if today is a holiday
   let matchedHoliday = null
