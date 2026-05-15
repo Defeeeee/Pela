@@ -46,6 +46,19 @@ async function fetchHolidaysForYear(year) {
 }
 
 export async function proxy(request) {
+  const pathname = request.nextUrl.pathname
+
+  // EXCLUDE ASSETS FROM PROXY LOGIC
+  // This prevents loading loops for images and static files
+  const isAsset = pathname.startsWith('/imgs') || 
+                  pathname.startsWith('/_next') || 
+                  pathname === '/favicon.ico' ||
+                  pathname.startsWith('/api')
+
+  if (isAsset) {
+    return NextResponse.next()
+  }
+
   // By default use server date/time
   let now = new Date()
 
@@ -99,7 +112,6 @@ export async function proxy(request) {
   } catch (e) {}
 
   // Prevent redirect loops: if already on /closed, allow rendering the closed page
-  const pathname = request.nextUrl.pathname
   if (blocked && pathname !== '/closed') {
     const url = request.nextUrl.clone()
     url.pathname = '/closed'
