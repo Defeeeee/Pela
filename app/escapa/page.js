@@ -28,7 +28,6 @@ export default function EscapaPage() {
       hasDeducted.current = true;
     }
     const initialPelados = Array.from({ length: 15 }).map((_, i) => ({
-...
       id: i,
       x: Math.random() * (window.innerWidth - PELADO_SIZE),
       y: Math.random() * (window.innerHeight - PELADO_SIZE),
