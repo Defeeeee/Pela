@@ -12,12 +12,12 @@ export default function WorkJumpscare() {
   const [imgSrc, setImgSrc] = useState('');
 
   useEffect(() => {
-    // Check for jumpscare chance every 30 seconds if the component is mounted
+    // Check for jumpscare chance every 5 seconds
     const interval = setInterval(() => {
-      if (Math.random() < 0.03) { // 3% chance every 30s
+      if (Math.random() < 0.50) { // 50% chance every 5s
         trigger();
       }
-    }, 30000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, []);
