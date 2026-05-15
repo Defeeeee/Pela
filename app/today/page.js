@@ -24,8 +24,9 @@ export default function TodayPage() {
   const { deductCredit } = useSocialCredit();
 
   useEffect(() => {
+    console.log('[TodayPage] Deducting 10 points on mount');
     deductCredit(10);
-  }, []);
+  }, [deductCredit]);
 
   const router = useRouter();
 

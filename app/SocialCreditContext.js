@@ -33,11 +33,19 @@ export function SocialCreditProvider({ children }) {
   }, [credit, isLoaded, pathname, router]);
 
   const addCredit = (amount) => {
-    setCredit(prev => Math.min(100, prev + amount));
+    setCredit(prev => {
+      const next = Math.min(100, prev + amount);
+      console.log(`[SocialCredit] Adding ${amount}. ${prev} -> ${next}`);
+      return next;
+    });
   };
 
   const deductCredit = (amount) => {
-    setCredit(prev => Math.max(0, prev - amount));
+    setCredit(prev => {
+      const next = Math.max(0, prev - amount);
+      console.log(`[SocialCredit] Deducting ${amount}. ${prev} -> ${next}`);
+      return next;
+    });
   };
 
   const value = {
