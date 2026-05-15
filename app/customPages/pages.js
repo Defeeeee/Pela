@@ -4,6 +4,7 @@ import InstantPage from '../instant/page';
 import ClosedPage from '../closed/page';
 import ShipPage from '../argumentatividad/page';
 import AutistaPage from '../autista/page';
+import EscapaPage from '../escapa/page';
 
 const pages = {
   '/': HomePage,
@@ -12,6 +13,7 @@ const pages = {
   '/closed': ClosedPage,
   '/argumentatividad': ShipPage,
   '/autista': AutistaPage,
+  '/escapa': EscapaPage,
 };
 
 export default pages;
