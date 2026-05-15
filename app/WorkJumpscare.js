@@ -14,9 +14,12 @@ export default function WorkJumpscare() {
   const pathname = usePathname();
 
   useEffect(() => {
+    const allowedRoutes = ['/', '/autista', '/escapa'];
+    if (!allowedRoutes.includes(pathname)) return;
+
     const isAutistaPage = pathname === '/autista';
     const intervalTime = isAutistaPage ? 1000 : 5000;
-    const probability = isAutistaPage ? 0.50 : 0.50; // 50% chance in both, but interval is different
+    const probability = 0.50; // 50% chance
 
     const interval = setInterval(() => {
       if (Math.random() < probability) {
