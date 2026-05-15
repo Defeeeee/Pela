@@ -10,7 +10,7 @@ const captchaImages = [
   { src: "/imgs/goat/Pelado Triste.jpeg", isBald: true },
   { src: "/imgs/cosas peladas/huevo-de-gallina-22169555.webp", isBald: false },
   { src: "/imgs/cosas peladas/La-importancia-del-Angulo-Q-para-cuidar-la-rodilla.webp", isBald: false },
-  { src: "/imgs/coriglia/coriglia.webp", isBald: true },
+  { src: "/imgs/coriglia/coriglia.webp", isBald: false },
   { src: "/imgs/labura/shovel.jpeg", isBald: false },
 ];
 
