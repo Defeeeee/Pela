@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react';
+import { useSocialCredit } from '../SocialCreditContext';
 
 const images = [
   "/imgs/goat/Pelado Feliz.jpeg",
@@ -18,11 +19,13 @@ export default function EscapaPage() {
   const [pelados, setPelados] = useState([]);
   const requestRef = useRef();
   const mouseRef = useRef({ x: -1000, y: -1000 });
-
-  // Initialize pelados positions
-  useEffect(() => {
-    const initialPelados = Array.from({ length: 15 }).map((_, i) => ({
-      id: i,
+  const { deductCredit } = useSocialCredit();
+// Initialize pelados positions
+useEffect(() => {
+  deductCredit(30);
+  const initialPelados = Array.from({ length: 15 }).map((_, i) => ({
+    id: i,
+...
       x: Math.random() * (window.innerWidth - PELADO_SIZE),
       y: Math.random() * (window.innerHeight - PELADO_SIZE),
       src: images[Math.floor(Math.random() * images.length)],

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from 'react';
+import { useSocialCredit } from '../SocialCreditContext';
 
 const allImages = [
   { src: "/imgs/coriglia/coriglia.webp", alt: "Coriglia" },
@@ -18,6 +19,7 @@ export default function AutistaPage() {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [filter, setFilter] = useState('');
   const timeoutRef = useRef(null);
+  const { deductCredit } = useSocialCredit();
 
   const getRandomFilter = () => {
     const saturate = Math.random() * 5; // 0 to 500%
@@ -47,6 +49,7 @@ export default function AutistaPage() {
   };
 
   useEffect(() => {
+    deductCredit(20);
     setFilter(getRandomFilter());
     scheduleNext(currentIdx);
     return () => {

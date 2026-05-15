@@ -1,10 +1,11 @@
 "use client"
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from 'next/navigation';
 import styles from "./page.module.css";
 import LoadingScreen from '../LoadingScreen';
 import CaptchaModal from './CaptchaModal';
+import { useSocialCredit } from '../SocialCreditContext';
 
 const images = [
   "Pelado Feliz.jpeg",
@@ -20,6 +21,11 @@ export default function TodayPage() {
   const [sendingFile, setSendingFile] = useState(null);
   const [sendingDelay, setSendingDelay] = useState(0);
   const [showCaptcha, setShowCaptcha] = useState(false);
+  const { deductCredit } = useSocialCredit();
+
+  useEffect(() => {
+    deductCredit(10);
+  }, []);
 
   const router = useRouter();
 
