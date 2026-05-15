@@ -44,7 +44,7 @@ function matchRequestedFile(files, requestedRaw) {
 }
 
 export default async function InstantPage({ searchParams }) {
-  const IMGS_DIR = path.join(process.cwd(), 'public', 'imgs');
+  const IMGS_DIR = path.join(process.cwd(), 'public', 'imgs', 'goat');
   const files = fs.existsSync(IMGS_DIR)
     ? fs.readdirSync(IMGS_DIR).filter(f => /\.(jpe?g|png|gif|webp)$/i.test(f))
     : [];
@@ -75,7 +75,7 @@ export default async function InstantPage({ searchParams }) {
     <div style={{ position: 'fixed', inset: 0 }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={`/imgs/${encodeURIComponent(fileName)}`}
+        src={`/imgs/goat/${encodeURIComponent(fileName)}`}
         alt={title}
         style={{ width: '100vw', height: '100vh', objectFit: 'fill' }}
       />

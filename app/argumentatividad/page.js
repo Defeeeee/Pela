@@ -68,7 +68,7 @@ export default function ShipPage({ hideCoriglia = false }) {
           {!hideCoriglia && (
             <div style={{ position: 'relative' }}>
               <img
-                src="/imgs/coriglia.webp"
+                src="/imgs/coriglia/coriglia.webp"
                 alt="Coriglia"
                 className="profile-img"
               />
@@ -80,7 +80,7 @@ export default function ShipPage({ hideCoriglia = false }) {
 
           <div style={{ position: 'relative' }}>
             <img
-              src="/imgs/Pelado Feliz.jpeg"
+              src="/imgs/goat/Pelado Feliz.jpeg"
               alt="Pelado Feliz"
               className="profile-img"
             />

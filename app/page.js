@@ -11,7 +11,7 @@ export default function RootPage() {
   if (showCoriglia) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#000' }}>
-        <img src="/imgs/coriglia.webp" alt="Coriglia" style={{ maxWidth: '90%', maxHeight: '90vh', objectFit: 'contain' }} />
+        <img src="/imgs/coriglia/coriglia.webp" alt="Coriglia" style={{ maxWidth: '90%', maxHeight: '90vh', objectFit: 'contain' }} />
       </div>
     );
   }

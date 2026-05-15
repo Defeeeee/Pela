@@ -4,7 +4,7 @@ import LoadingScreen from '../LoadingScreen';
 import sharp from 'sharp';
 
 export default async function Home() {
-  const IMGS_DIR = path.join(process.cwd(), 'public', 'imgs');
+  const IMGS_DIR = path.join(process.cwd(), 'public', 'imgs', 'goat');
   const files = fs.existsSync(IMGS_DIR)
     ? fs.readdirSync(IMGS_DIR).filter(f => /\.(jpe?g|png|gif|webp)$/i.test(f))
     : [];
