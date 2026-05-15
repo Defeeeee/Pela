@@ -35,25 +35,39 @@ export default function CaptchaModal({ onVerify, onClose }) {
   };
 
   const handleVerify = () => {
-    const selectedItems = selected.map(idx => grid[idx]);
     const correctItems = grid.filter(item => item.isBald);
-    const selectedCorrect = selectedItems.filter(item => item.isBald);
+    const selectedItems = selected.map(idx => grid[idx]);
 
-    // Basic logic: selected all bald items in the current grid and NO non-bald items
-    const allBaldSelected = selectedCorrect.length === correctItems.length;
-    const noWrongSelected = selectedItems.every(item => item.isBald);
+    // If there are NO bald items in the grid, user should have selected nothing (Skip mode)
+    if (correctItems.length === 0) {
+      if (selected.length === 0) {
+        onVerify();
+      } else {
+        triggerError();
+      }
+      return;
+    }
 
-    if (allBaldSelected && noWrongSelected) {
+    // Standard verification
+    const allBaldSelected = selectedItems.length === correctItems.length && 
+                           selectedItems.every(item => item.isBald);
+
+    if (allBaldSelected) {
       onVerify();
     } else {
-      setError(true);
-      // Reshuffle on failure
-      setTimeout(() => {
-        const shuffled = [...captchaImages].sort(() => 0.5 - Math.random());
-        setGrid(shuffled.slice(0, 9));
-        setSelected([]);
-      }, 1000);
+      triggerError();
     }
+  };
+
+  const triggerError = () => {
+    setError(true);
+    // Reshuffle on failure
+    setTimeout(() => {
+      const shuffled = [...captchaImages].sort(() => 0.5 - Math.random());
+      setGrid(shuffled.slice(0, 9));
+      setSelected([]);
+      setError(false);
+    }, 1500);
   };
 
   return (
@@ -161,10 +175,11 @@ export default function CaptchaModal({ onVerify, onClose }) {
               borderRadius: '2px',
               fontWeight: '700',
               cursor: 'pointer',
-              fontSize: '14px'
+              fontSize: '14px',
+              minWidth: '100px'
             }}
           >
-            VERIFICAR
+            {selected.length > 0 ? 'VERIFICAR' : 'OMITIR'}
           </button>
         </div>
       </div>
