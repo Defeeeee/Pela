@@ -22,10 +22,14 @@ export default function TodayPage() {
   const [sendingDelay, setSendingDelay] = useState(0);
   const [showCaptcha, setShowCaptcha] = useState(false);
   const { deductCredit } = useSocialCredit();
+  const hasDeducted = useRef(false);
 
   useEffect(() => {
-    console.log('[TodayPage] Deducting 10 points on mount');
-    deductCredit(10);
+    if (!hasDeducted.current) {
+      console.log('[TodayPage] Deducting 10 points on mount');
+      deductCredit(10);
+      hasDeducted.current = true;
+    }
   }, [deductCredit]);
 
   const router = useRouter();

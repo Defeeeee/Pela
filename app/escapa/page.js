@@ -14,17 +14,21 @@ const images = [
 const PELADO_SIZE = 120;
 const AVOID_RADIUS = 250;
 const SPEED = 8;
-
 export default function EscapaPage() {
   const [pelados, setPelados] = useState([]);
   const requestRef = useRef();
   const mouseRef = useRef({ x: -1000, y: -1000 });
   const { deductCredit } = useSocialCredit();
+  const hasDeducted = useRef(false);
 
   // Initialize pelados positions
   useEffect(() => {
-    deductCredit(30);
+    if (!hasDeducted.current) {
+      deductCredit(30);
+      hasDeducted.current = true;
+    }
     const initialPelados = Array.from({ length: 15 }).map((_, i) => ({
+...
       id: i,
       x: Math.random() * (window.innerWidth - PELADO_SIZE),
       y: Math.random() * (window.innerHeight - PELADO_SIZE),
