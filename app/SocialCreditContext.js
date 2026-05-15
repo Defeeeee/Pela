@@ -6,31 +6,33 @@ import { useRouter, usePathname } from 'next/navigation';
 const SocialCreditContext = createContext();
 
 export function SocialCreditProvider({ children }) {
-  // Initialize state directly from localStorage if available (Lazy initializer)
   const [credit, setCredit] = useState(100);
   const [isLoaded, setIsLoaded] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const isFirstLoad = useRef(true);
 
-  // Sync with localStorage once on mount
+  // Load from localStorage on mount
   useEffect(() => {
     const savedCredit = localStorage.getItem('pela_credit');
     if (savedCredit !== null) {
-      setCredit(parseInt(savedCredit, 10));
+      const val = parseInt(savedCredit, 10);
+      setCredit(val);
+      console.log(`[SocialCredit] Initial load from storage: ${val}`);
+    } else {
+      console.log(`[SocialCredit] No storage found, starting at 100`);
     }
     setIsLoaded(true);
   }, []);
 
-  // Save to localStorage whenever credit changes, but ONLY after initial load
+  // Sync to localStorage and handle redirection
   useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem('pela_credit', credit.toString());
-      
-      // Punishment logic: if credit is 0 and not on /labura, redirect
-      if (credit <= 0 && pathname !== '/labura') {
-        router.push('/labura');
-      }
+    if (!isLoaded) return;
+
+    localStorage.setItem('pela_credit', credit.toString());
+    
+    if (credit <= 0 && pathname !== '/labura') {
+      console.log(`[SocialCredit] Credit is 0. Redirecting to /labura from ${pathname}`);
+      router.push('/labura');
     }
   }, [credit, isLoaded, pathname, router]);
 
