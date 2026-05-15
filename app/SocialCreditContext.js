@@ -23,7 +23,7 @@ export function SocialCreditProvider({ children }) {
 
   useEffect(() => {
     setIsLoaded(true);
-    console.log(`[ShineIndex] System ready. Current Credit: ${credit}`);
+    console.log(`[PalaReserve] System ready. Current Credit: ${credit}`);
   }, []);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ export function SocialCreditProvider({ children }) {
     }
     
     if (isLoaded && credit <= 0 && pathname !== '/labura') {
-      console.log(`[ShineIndex] Credit is 0. Redirecting to /labura`);
+      console.log(`[PalaReserve] Credit is 0. Redirecting to /labura`);
       router.push('/labura');
     }
   }, [credit, isLoaded, pathname, router]);
@@ -50,7 +50,7 @@ export function SocialCreditProvider({ children }) {
   const deductCredit = (amount, eventId = null) => {
     if (eventId) {
       if (globalDeductionRegistry.has(eventId)) {
-        console.log(`[ShineIndex] Blocked duplicate deduction for: ${eventId}`);
+        console.log(`[PalaReserve] Blocked duplicate deduction for: ${eventId}`);
         return;
       }
       globalDeductionRegistry.add(eventId);
@@ -58,7 +58,7 @@ export function SocialCreditProvider({ children }) {
 
     setCredit(prev => {
       const next = Math.max(0, prev - amount);
-      console.log(`[ShineIndex] Deducting ${amount}${eventId ? ` (${eventId})` : ''}. ${prev} -> ${next}`);
+      console.log(`[PalaReserve] Deducting ${amount}${eventId ? ` (${eventId})` : ''}. ${prev} -> ${next}`);
       return next;
     });
   };
@@ -88,7 +88,7 @@ function CreditBar({ credit }) {
       pointerEvents: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
     }}>
       <div style={{ color: '#fff', fontSize: '10px', marginBottom: '5px', display: 'flex', justifyContent: 'space-between' }}>
-        <span>ÍNDICE DE BRILLO</span>
+        <span>RESERVA DE PALA</span>
         <span>{credit}%</span>
       </div>
       <div style={{ width: '100%', height: '6px', backgroundColor: '#222', borderRadius: '3px', overflow: 'hidden' }}>
