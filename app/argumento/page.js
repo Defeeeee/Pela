@@ -224,7 +224,7 @@ function MercadoPagoFullScreen({ onClose }) {
               No pudimos procesar los $ 4.500,00. El banco informó que "el usuario no tiene suficiente pelada para avalar este argumento".
             </p>
             <button 
-              onClick={() => setStep('select')}
+              onClick={() => window.location.href = '/labura'}
               style={{
                 backgroundColor: '#009ee3',
                 color: '#fff',
@@ -240,7 +240,7 @@ function MercadoPagoFullScreen({ onClose }) {
               Intentar con otro medio
             </button>
             <button 
-              onClick={onClose}
+              onClick={() => window.location.href = '/labura'}
               style={{
                 marginTop: '16px',
                 background: 'none',
