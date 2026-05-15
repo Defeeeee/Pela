@@ -5,8 +5,10 @@ import { useRouter, usePathname } from 'next/navigation';
 
 const SocialCreditContext = createContext();
 
+// Registry to track deductions across renders (Prevents StrictMode double-deduction)
+const globalDeductionRegistry = new Set();
+
 export function SocialCreditProvider({ children }) {
-  // 1. Initialize state LAZILY from localStorage to avoid the "100 -> 90" jump
   const [credit, setCredit] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('pela_credit');
@@ -19,19 +21,16 @@ export function SocialCreditProvider({ children }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  // 2. Mark as loaded on mount
   useEffect(() => {
     setIsLoaded(true);
-    console.log(`[SocialCredit] System ready. Initial Credit: ${credit}`);
+    console.log(`[SocialCredit] System ready. Current Credit: ${credit}`);
   }, []);
 
-  // 3. Persist changes to localStorage
   useEffect(() => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('pela_credit', credit.toString());
     }
     
-    // Punishment logic
     if (isLoaded && credit <= 0 && pathname !== '/labura') {
       console.log(`[SocialCredit] Credit is 0. Redirecting to /labura`);
       router.push('/labura');
@@ -39,27 +38,32 @@ export function SocialCreditProvider({ children }) {
   }, [credit, isLoaded, pathname, router]);
 
   const addCredit = (amount) => {
-    setCredit(prev => {
-      const next = Math.min(100, prev + amount);
-      console.log(`[SocialCredit] Adding ${amount}. ${prev} -> ${next}`);
-      return next;
-    });
+    setCredit(prev => Math.min(100, prev + amount));
   };
 
-  const deductCredit = (amount) => {
+  /**
+   * deductCredit: Deducts points with duplicate protection
+   * @param {number} amount - Points to deduct
+   * @param {string} eventId - Unique ID for this deduction (e.g. 'visit-/today'). 
+   *                           If provided, prevents deducting for the same ID twice.
+   */
+  const deductCredit = (amount, eventId = null) => {
+    if (eventId) {
+      if (globalDeductionRegistry.has(eventId)) {
+        console.log(`[SocialCredit] Blocked duplicate deduction for: ${eventId}`);
+        return;
+      }
+      globalDeductionRegistry.add(eventId);
+    }
+
     setCredit(prev => {
       const next = Math.max(0, prev - amount);
-      console.log(`[SocialCredit] Deducting ${amount}. ${prev} -> ${next}`);
+      console.log(`[SocialCredit] Deducting ${amount}${eventId ? ` (${eventId})` : ''}. ${prev} -> ${next}`);
       return next;
     });
   };
 
-  const value = {
-    credit,
-    addCredit,
-    deductCredit,
-    isLoaded
-  };
+  const value = { credit, addCredit, deductCredit, isLoaded };
 
   return (
     <SocialCreditContext.Provider value={value}>
@@ -78,33 +82,18 @@ export function SocialCreditProvider({ children }) {
 function CreditBar({ credit }) {
   return (
     <div style={{
-      position: 'fixed',
-      top: '20px',
-      right: '20px',
-      zIndex: 100000,
-      backgroundColor: 'rgba(0,0,0,0.8)',
-      padding: '10px',
-      borderRadius: '8px',
-      border: '1px solid #333',
-      width: '200px',
-      fontFamily: 'monospace',
-      pointerEvents: 'none',
-      boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
+      position: 'fixed', top: '20px', right: '20px', zIndex: 100000,
+      backgroundColor: 'rgba(0,0,0,0.8)', padding: '10px', borderRadius: '8px',
+      border: '1px solid #333', width: '200px', fontFamily: 'monospace',
+      pointerEvents: 'none', boxShadow: '0 4px 15px rgba(0,0,0,0.5)'
     }}>
       <div style={{ color: '#fff', fontSize: '10px', marginBottom: '5px', display: 'flex', justifyContent: 'space-between' }}>
         <span>CRÉDITO SOCIAL</span>
         <span>{credit}%</span>
       </div>
-      <div style={{
-        width: '100%',
-        height: '6px',
-        backgroundColor: '#222',
-        borderRadius: '3px',
-        overflow: 'hidden'
-      }}>
+      <div style={{ width: '100%', height: '6px', backgroundColor: '#222', borderRadius: '3px', overflow: 'hidden' }}>
         <div style={{
-          width: `${credit}%`,
-          height: '100%',
+          width: `${credit}%`, height: '100%',
           backgroundColor: credit > 50 ? '#4caf50' : credit > 20 ? '#ffeb3b' : '#f44336',
           transition: 'width 0.3s ease, background-color 0.3s ease'
         }}></div>

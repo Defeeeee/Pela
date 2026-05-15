@@ -27,7 +27,7 @@ export default function TodayPage() {
   useEffect(() => {
     if (!hasDeducted.current) {
       console.log('[TodayPage] Deducting 10 points on mount');
-      deductCredit(10);
+      deductCredit(10, 'visit-/today');
       hasDeducted.current = true;
     }
   }, [deductCredit]);

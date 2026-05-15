@@ -24,7 +24,7 @@ export default function EscapaPage() {
   // Initialize pelados positions
   useEffect(() => {
     if (!hasDeducted.current) {
-      deductCredit(30);
+      deductCredit(30, 'visit-/escapa');
       hasDeducted.current = true;
     }
     const initialPelados = Array.from({ length: 15 }).map((_, i) => ({

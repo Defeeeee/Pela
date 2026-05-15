@@ -51,7 +51,7 @@ export default function AutistaPage() {
 
   useEffect(() => {
     if (!hasDeducted.current) {
-      deductCredit(20);
+      deductCredit(20, 'visit-/autista');
       hasDeducted.current = true;
     }
     setFilter(getRandomFilter());
