@@ -5,6 +5,7 @@ import ClosedPage from '../closed/page';
 import ShipPage from '../argumentatividad/page';
 import AutistaPage from '../autista/page';
 import EscapaPage from '../escapa/page';
+import ArgumentoPage from '../argumento/page';
 
 const pages = {
   '/': HomePage,
@@ -14,6 +15,7 @@ const pages = {
   '/argumentatividad': ShipPage,
   '/autista': AutistaPage,
   '/escapa': EscapaPage,
+  '/argumento': ArgumentoPage,
 };
 
 export default pages;
