@@ -6,32 +6,34 @@ import { useRouter, usePathname } from 'next/navigation';
 const SocialCreditContext = createContext();
 
 export function SocialCreditProvider({ children }) {
-  const [credit, setCredit] = useState(100);
+  // 1. Initialize state LAZILY from localStorage to avoid the "100 -> 90" jump
+  const [credit, setCredit] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('pela_credit');
+      return saved !== null ? parseInt(saved, 10) : 100;
+    }
+    return 100;
+  });
+  
   const [isLoaded, setIsLoaded] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
-  // Load from localStorage on mount
+  // 2. Mark as loaded on mount
   useEffect(() => {
-    const savedCredit = localStorage.getItem('pela_credit');
-    if (savedCredit !== null) {
-      const val = parseInt(savedCredit, 10);
-      setCredit(val);
-      console.log(`[SocialCredit] Initial load from storage: ${val}`);
-    } else {
-      console.log(`[SocialCredit] No storage found, starting at 100`);
-    }
     setIsLoaded(true);
+    console.log(`[SocialCredit] System ready. Initial Credit: ${credit}`);
   }, []);
 
-  // Sync to localStorage and handle redirection
+  // 3. Persist changes to localStorage
   useEffect(() => {
-    if (!isLoaded) return;
-
-    localStorage.setItem('pela_credit', credit.toString());
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('pela_credit', credit.toString());
+    }
     
-    if (credit <= 0 && pathname !== '/labura') {
-      console.log(`[SocialCredit] Credit is 0. Redirecting to /labura from ${pathname}`);
+    // Punishment logic
+    if (isLoaded && credit <= 0 && pathname !== '/labura') {
+      console.log(`[SocialCredit] Credit is 0. Redirecting to /labura`);
       router.push('/labura');
     }
   }, [credit, isLoaded, pathname, router]);
