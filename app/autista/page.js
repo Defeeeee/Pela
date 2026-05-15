@@ -23,7 +23,7 @@ export default function AutistaPage() {
   };
 
   const scheduleNext = (prevIdx) => {
-    const nextInterval = Math.random() * (1500 - 200) + 200; // Random between 0.2s and 1.5s
+    const nextInterval = Math.random() * (500 - 100) + 100; // Random between 0.1s and 0.5s
     
     timeoutRef.current = setTimeout(() => {
       const nextIdx = getNextRandomIndex(prevIdx);
