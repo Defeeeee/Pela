@@ -15,250 +15,289 @@ export default function ArgumentoPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundColor: '#000',
+      backgroundColor: '#0a0a0a',
       color: '#fff',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      padding: '40px 20px',
-      fontFamily: 'sans-serif'
+      padding: '60px 20px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
     }}>
-      <h1 style={{ fontSize: '2rem', marginBottom: '10px' }}>Verificador de Argumentatividad</h1>
-      <p style={{ color: '#888', marginBottom: '40px', textAlign: 'center' }}>
-        Nuestro algoritmo avanzado basado en pelados determinará la validez de tu razonamiento.
-      </p>
+      <div style={{ textAlign: 'center', maxWidth: '700px', marginBottom: '40px' }}>
+        <h1 style={{ fontSize: '2.5rem', fontWeight: '800', marginBottom: '16px', letterSpacing: '-0.02em' }}>
+          Analizador de Argumentatividad <span style={{ color: '#0070f3' }}>Pro</span>
+        </h1>
+        <p style={{ color: '#888', fontSize: '1.1rem', lineHeight: '1.5' }}>
+          Utilizamos redes neuronales de pelados de alta densidad para validar la coherencia de tus ideas. 
+          Ingresa tu texto a continuación para un escaneo profundo.
+        </p>
+      </div>
 
-      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '600px' }}>
-        <textarea
-          value={argumento}
-          onChange={(e) => setArgumento(e.target.value)}
-          placeholder="Escribí tu argumento acá..."
-          style={{
-            width: '100%',
-            height: '200px',
-            backgroundColor: '#111',
-            border: '1px solid #333',
-            borderRadius: '10px',
-            color: '#fff',
-            padding: '15px',
-            fontSize: '1rem',
-            marginBottom: '20px',
-            outline: 'none',
-            resize: 'none'
-          }}
-        />
+      <form onSubmit={handleSubmit} style={{ width: '100%', maxWidth: '700px', position: 'relative' }}>
+        <div style={{
+          position: 'relative',
+          backgroundColor: '#111',
+          borderRadius: '16px',
+          border: '1px solid #333',
+          padding: '2px',
+          boxShadow: '0 20px 50px rgba(0,0,0,0.5)'
+        }}>
+          <textarea
+            value={argumento}
+            onChange={(e) => setArgumento(e.target.value)}
+            placeholder="Escribe tu argumento o tesis aquí..."
+            style={{
+              width: '100%',
+              height: '250px',
+              backgroundColor: 'transparent',
+              border: 'none',
+              color: '#fff',
+              padding: '20px',
+              fontSize: '1.1rem',
+              outline: 'none',
+              resize: 'none',
+              fontFamily: 'inherit'
+            }}
+          />
+        </div>
         <button
           type="submit"
           style={{
+            marginTop: '24px',
             width: '100%',
-            padding: '15px',
+            padding: '18px',
             backgroundColor: '#fff',
             color: '#000',
             border: 'none',
-            borderRadius: '10px',
+            borderRadius: '12px',
             fontSize: '1.1rem',
-            fontWeight: 'bold',
-            cursor: 'pointer'
+            fontWeight: '700',
+            cursor: 'pointer',
+            transition: 'transform 0.1s, background-color 0.2s',
           }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = '#ececec'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = '#fff'}
         >
-          Verificar Argumento
+          Verificar con Pela-AI™
         </button>
       </form>
 
       {showPaywall && (
-        <MercadoPagoFullScreen onClose={() => setShowPaywall(false)} />
+        <GenericPaywall onClose={() => setShowPaywall(false)} />
       )}
     </div>
   );
 }
 
-function MercadoPagoFullScreen({ onClose }) {
-  const [step, setStep] = useState('select'); // select, processing, error
-  const [selectedMethod, setSelectedMethod] = useState(null);
+function GenericPaywall({ onClose }) {
+  const [step, setStep] = useState('input'); // input, processing, error
+  const [cardData, setCardData] = useState({ number: '', expiry: '', cvc: '', name: '' });
 
-  const handleSelect = (method) => {
-    setSelectedMethod(method);
-  };
-
-  const handleConfirm = () => {
-    if (!selectedMethod) return;
+  const handlePay = (e) => {
+    e.preventDefault();
     setStep('processing');
     setTimeout(() => {
       setStep('error');
-    }, 2500);
+    }, 3000);
+  };
+
+  const formatCardNumber = (value) => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    const matches = v.match(/\d{4,16}/g);
+    const match = matches && matches[0] || '';
+    const parts = [];
+    for (let i = 0, len = match.length; i < len; i += 4) {
+      parts.push(match.substring(i, i + 4));
+    }
+    if (parts.length) return parts.join(' ');
+    return value;
   };
 
   return (
     <div style={{
       position: 'fixed',
       inset: 0,
-      backgroundColor: '#ebebeb',
-      zIndex: 30000,
+      backgroundColor: '#fff',
+      color: '#30313d',
+      zIndex: 50000,
       display: 'flex',
       flexDirection: 'column',
-      fontFamily: '"Proxima Nova", -apple-system, sans-serif'
+      fontFamily: '-apple-system, sans-serif',
+      animation: 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)'
     }}>
-      {/* MP Navigation Bar */}
+      <style>{`
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .input-field {
+          border: 1px solid #e6e6e6;
+          border-radius: 4px;
+          padding: 12px;
+          font-size: 16px;
+          width: 100%;
+          outline: none;
+          transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .input-field:focus {
+          border-color: #0070f3;
+          box-shadow: 0 0 0 3px rgba(0, 112, 243, 0.1);
+        }
+      `}</style>
+
+      {/* Modern Header */}
       <div style={{
-        backgroundColor: '#009ee3',
-        height: '56px',
-        padding: '0 16px',
+        padding: '20px 40px',
+        borderBottom: '1px solid #f0f0f0',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        color: '#fff',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        justifyContent: 'space-between'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#fff', fontSize: '24px', cursor: 'pointer' }}>←</button>
-          <span style={{ fontSize: '18px', fontWeight: '500' }}>Mercado Pago</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ width: '24px', height: '24px', backgroundColor: '#30313d', borderRadius: '4px' }}></div>
+          <span style={{ fontWeight: '700', fontSize: '18px' }}>Secure Checkout</span>
         </div>
-        <div style={{ fontSize: '14px', fontWeight: '400', opacity: 0.9 }}>Ayuda</div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#a3acb9' }}>✕</button>
       </div>
 
-      <div style={{ 
-        flex: 1, 
-        overflowY: 'auto', 
-        display: 'flex', 
-        flexDirection: 'column', 
-        alignItems: 'center',
-        padding: '24px 16px'
-      }}>
-        
-        {step === 'select' && (
-          <div style={{ width: '100%', maxWidth: '500px' }}>
-            <div style={{ backgroundColor: '#fff', padding: '24px', borderRadius: '8px', textAlign: 'center', marginBottom: '16px', border: '1px solid #ddd' }}>
-              <div style={{ color: '#666', fontSize: '14px', marginBottom: '8px' }}>Pela Corp. SAS</div>
-              <div style={{ fontSize: '36px', fontWeight: 'bold', color: '#333' }}>$ 4.500,00</div>
-            </div>
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', padding: '40px 20px', overflowY: 'auto' }}>
+        <div style={{ width: '100%', maxWidth: '420px' }}>
+          
+          {step === 'input' && (
+            <form onSubmit={handlePay}>
+              <div style={{ marginBottom: '32px' }}>
+                <div style={{ color: '#697386', fontSize: '14px', fontWeight: '500', marginBottom: '4px' }}>Pay Pela Corp.</div>
+                <div style={{ fontSize: '32px', fontWeight: '700', color: '#1a1f36' }}>$4.500,00 ARS</div>
+              </div>
 
-            <div style={{ color: '#333', fontWeight: '600', fontSize: '18px', marginBottom: '16px', paddingLeft: '4px' }}>
-              ¿Cómo querés pagar?
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {[
-                { id: 'debito', label: 'Nueva tarjeta de débito', icon: '💳' },
-                { id: 'credito', label: 'Nueva tarjeta de crédito', icon: '💳' },
-                { id: 'efectivo', label: 'Efectivo en puntos de pago', icon: '💵' },
-                { id: 'transfer', label: 'Transferencia electrónica', icon: '🏦' }
-              ].map((opt) => (
-                <div 
-                  key={opt.id} 
-                  onClick={() => handleSelect(opt.id)}
-                  style={{
-                    backgroundColor: '#fff',
-                    padding: '20px',
-                    borderRadius: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    border: selectedMethod === opt.id ? '2px solid #009ee3' : '1px solid #ddd',
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                    transition: 'all 0.2s'
-                  }}
-                >
-                  <span style={{ fontSize: '24px', marginRight: '16px' }}>{opt.icon}</span>
-                  <span style={{ color: selectedMethod === opt.id ? '#009ee3' : '#333', fontSize: '16px', fontWeight: '500' }}>{opt.label}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '8px', color: '#1a1f36' }}>Email address</label>
+                  <input type="email" className="input-field" placeholder="email@ejemplo.com" required />
                 </div>
-              ))}
-            </div>
 
-            <button 
-              onClick={handleConfirm}
-              disabled={!selectedMethod}
-              style={{
-                backgroundColor: selectedMethod ? '#009ee3' : '#ccc',
-                color: '#fff',
-                border: 'none',
-                padding: '16px',
-                borderRadius: '6px',
-                fontWeight: '600',
-                fontSize: '18px',
-                width: '100%',
+                <div>
+                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '8px', color: '#1a1f36' }}>Card information</label>
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    <input 
+                      type="text" 
+                      className="input-field" 
+                      style={{ borderRadius: '4px 4px 0 0' }}
+                      placeholder="1234 5678 1234 5678" 
+                      value={cardData.number}
+                      onChange={(e) => setCardData({...cardData, number: formatCardNumber(e.target.value)})}
+                      maxLength="19"
+                      required 
+                    />
+                    <div style={{ display: 'flex', marginTop: '-1px' }}>
+                      <input 
+                        type="text" 
+                        className="input-field" 
+                        style={{ borderRadius: '0 0 0 4px', borderRight: 'none' }}
+                        placeholder="MM / YY" 
+                        maxLength="5"
+                        required 
+                      />
+                      <input 
+                        type="text" 
+                        className="input-field" 
+                        style={{ borderRadius: '0 0 4px 0' }}
+                        placeholder="CVC" 
+                        maxLength="3"
+                        required 
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', marginBottom: '8px', color: '#1a1f36' }}>Cardholder name</label>
+                  <input type="text" className="input-field" placeholder="Full name on card" required />
+                </div>
+              </div>
+
+              <button type="submit" style={{
                 marginTop: '32px',
-                cursor: selectedMethod ? 'pointer' : 'not-allowed',
-                transition: 'background-color 0.3s'
-              }}
-            >
-              Continuar
-            </button>
-          </div>
-        )}
-
-        {step === 'processing' && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            <div className="mp-spinner" style={{
-              width: '60px',
-              height: '60px',
-              border: '6px solid #ddd',
-              borderTopColor: '#009ee3',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite'
-            }}></div>
-            <p style={{ marginTop: '24px', color: '#333', fontSize: '18px', fontWeight: '500' }}>Estamos procesando tu pago...</p>
-            <style>{`
-              @keyframes spin {
-                to { transform: rotate(360deg); }
-              }
-            `}</style>
-          </div>
-        )}
-
-        {step === 'error' && (
-          <div style={{ width: '100%', maxWidth: '500px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ 
-              width: '80px', 
-              height: '80px', 
-              backgroundColor: '#ff4b4b', 
-              borderRadius: '50%', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              color: '#fff',
-              fontSize: '40px',
-              marginBottom: '24px'
-            }}>!</div>
-            <h2 style={{ color: '#333', fontSize: '24px', marginBottom: '16px' }}>Pago rechazado</h2>
-            <p style={{ color: '#666', fontSize: '16px', lineHeight: '1.5', marginBottom: '32px' }}>
-              No pudimos procesar los $ 4.500,00. El banco informó que "el usuario no tiene suficiente pelada para avalar este argumento".
-            </p>
-            <button 
-              onClick={() => window.location.href = '/labura'}
-              style={{
-                backgroundColor: '#009ee3',
+                width: '100%',
+                padding: '12px',
+                backgroundColor: '#0070f3',
                 color: '#fff',
                 border: 'none',
-                padding: '16px',
-                borderRadius: '6px',
-                fontWeight: '600',
-                fontSize: '18px',
-                width: '100%',
-                cursor: 'pointer'
-              }}
-            >
-              Intentar con otro medio
-            </button>
-            <button 
-              onClick={() => window.location.href = '/labura'}
-              style={{
-                marginTop: '16px',
-                background: 'none',
-                border: 'none',
-                color: '#009ee3',
+                borderRadius: '4px',
                 fontSize: '16px',
                 fontWeight: '600',
-                cursor: 'pointer'
-              }}
-            >
-              Volver al verificador
-            </button>
-          </div>
-        )}
-      </div>
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+              }}>
+                Pay $4.500,00
+              </button>
 
-      <div style={{ textAlign: 'center', padding: '16px', color: '#999', fontSize: '12px' }}>
-        Protegido por Mercado Pago
+              <div style={{ marginTop: '24px', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', color: '#a3acb9' }}>Powered by</span>
+                <span style={{ fontSize: '14px', fontWeight: '700', color: '#a3acb9' }}>Stripe-Pela</span>
+              </div>
+            </form>
+          )}
+
+          {step === 'processing' && (
+            <div style={{ height: '300px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                border: '3px solid #f3f3f3',
+                borderTopColor: '#0070f3',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite'
+              }}></div>
+              <p style={{ marginTop: '24px', color: '#1a1f36', fontWeight: '500' }}>Confirming your payment...</p>
+            </div>
+          )}
+
+          {step === 'error' && (
+            <div style={{ textAlign: 'center', animation: 'fadeIn 0.3s ease' }}>
+              <div style={{ 
+                width: '64px', 
+                height: '64px', 
+                backgroundColor: '#feb2b2', 
+                borderRadius: '50%', 
+                margin: '0 auto 24px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#c53030',
+                fontSize: '32px',
+                fontWeight: 'bold'
+              }}>!</div>
+              <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#1a1f36', marginBottom: '12px' }}>Your card was declined</h2>
+              <p style={{ color: '#697386', fontSize: '16px', lineHeight: '1.5', marginBottom: '32px' }}>
+                El procesador de pagos ha detectado que no posees la cantidad de folículos capilares necesaria para garantizar esta transacción. 
+                El banco sugiere que intentes con una actividad más productiva.
+              </p>
+              
+              <button 
+                onClick={() => window.location.href = '/labura'}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: '#0070f3',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Cerrar y Agarrar la Pala
+              </button>
+              
+              <p 
+                onClick={() => window.location.href = '/labura'}
+                style={{ marginTop: '20px', color: '#0070f3', fontSize: '14px', fontWeight: '500', cursor: 'pointer' }}
+              >
+                Probar con otra tarjeta (No va a andar tampoco)
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
