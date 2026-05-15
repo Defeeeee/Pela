@@ -37,7 +37,7 @@ export default function TodayPage() {
       return;
     }
 
-    const src = `/imgs/${encodeURIComponent(selected)}`;
+    const src = `/imgs/goat/${encodeURIComponent(selected)}`;
     const { width, height } = await loadImageSize(src);
     const pixelCount = width * height;
 
@@ -75,7 +75,7 @@ export default function TodayPage() {
               <div className={styles.grid}>
                 {images.map((name, idx) => {
                   const value = name;
-                  const src = `/imgs/${encodeURIComponent(name)}`;
+                  const src = `/imgs/goat/${encodeURIComponent(name)}`;
                   return (
                     <label
                       key={idx}

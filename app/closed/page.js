@@ -25,7 +25,7 @@ export default function ClosedPage() {
 
       <div className="animate-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <img
-          src="/imgs/pelado QEPD.jpg"
+          src="/imgs/goat/pelado QEPD.jpg"
           alt="Pelado QEPD"
           style={{
             width: '180px',

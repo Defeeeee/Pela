@@ -27,7 +27,7 @@ export default function NotFound() {
 
       <div className="animate-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <img
-          src="/imgs/pelado sospechoso.jpg"
+          src="/imgs/goat/pelado sospechoso.jpg"
           alt="Pelado Sospechoso"
           style={{
             width: '180px',

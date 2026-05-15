@@ -85,7 +85,7 @@ export default function LoadingScreen({ fileName, delay, initialTitle, message =
       <div style={styles.imgContainer}>
         {/* Using a regular img here because next/image object-fit: fill with 100vw/vh is tricky to match exactly the simple behavior of express app */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/imgs/${fileName}`} alt={fileName} style={styles.img} />
+        <img src={`/imgs/goat/${fileName}`} alt={fileName} style={styles.img} />
       </div>
     </>
   );

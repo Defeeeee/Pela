@@ -32,7 +32,7 @@ export default function Error({ error, reset }) {
       `}</style>
       <div className="animate-content" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <img
-          src="/imgs/Pelado Triste.jpeg"
+          src="/imgs/goat/Pelado Triste.jpeg"
           alt="Pelado Triste"
           style={{
             width: '180px',
