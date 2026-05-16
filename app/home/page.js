@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
-import LoadingScreen from '../LoadingScreen';
 import sharp from 'sharp';
+import HomeClient from './HomeClient';
 
 export default async function Home() {
   const IMGS_DIR = path.join(process.cwd(), 'public', 'imgs', 'goat');
@@ -32,7 +32,7 @@ export default async function Home() {
   const delay = Math.max(0, stats.height * stats.width + extraDelay);
   
   return (
-    <LoadingScreen fileName={fileName} delay={delay} initialTitle={title} />
+    <HomeClient fileName={fileName} delay={delay} initialTitle={title} />
   );
 }
 

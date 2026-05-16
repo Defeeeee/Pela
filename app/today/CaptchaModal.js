@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react';
+import { useSocialCredit } from '../SocialCreditContext';
 
 const captchaImages = [
   { src: "/imgs/goat/Pelado Feliz.jpeg", isBald: true },
@@ -18,6 +19,7 @@ export default function CaptchaModal({ onVerify, onClose }) {
   const [grid, setGrid] = useState([]);
   const [selected, setSelected] = useState([]);
   const [error, setError] = useState(false);
+  const { deductCredit } = useSocialCredit();
 
   useEffect(() => {
     // Shuffle and pick 9
@@ -61,6 +63,7 @@ export default function CaptchaModal({ onVerify, onClose }) {
 
   const triggerError = () => {
     setError(true);
+    deductCredit(15);
     // Reshuffle on failure
     setTimeout(() => {
       const shuffled = [...captchaImages].sort(() => 0.5 - Math.random());

@@ -1,4 +1,18 @@
+"use client"
+
+import { useEffect } from 'react';
+import { useSocialCredit } from '../SocialCreditContext';
+
 export default function LaburaPage() {
+  const { addCredit } = useSocialCredit();
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      addCredit(1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div style={{
       display: 'flex',
