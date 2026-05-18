@@ -7,8 +7,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-and-test:
+  build-and-deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ secrets.PRODUCTION_URL }}
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -19,56 +23,49 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      - name: Cache Next.js build
+        uses: actions/cache@v3
+        with:
+          path: ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+          restore-keys: |
+            ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Build
         run: npm run build
 
-      - name: Test Start
+      - name: Prepare standalone for transfer
         run: |
-          npm start &
-          # Wait for the server to start (Next.js is usually fast but we give it a few seconds)
-          for i in {1..10}; do
-            if curl -s http://localhost:9314 > /dev/null; then
-              echo "Server started successfully!"
-              exit 0
-            fi
-            echo "Waiting for server to start..."
-            sleep 2
-          done
-          echo "Server failed to start within 20 seconds"
-          exit 1
+          mkdir deploy
+          cp -r .next/standalone/* deploy/
+          cp -r public deploy/
+          mkdir -p deploy/.next
+          cp -r .next/static deploy/.next/
+          cp ecosystem.config.cjs deploy/
 
-  deploy-to-server:
-    needs: build-and-test
-    runs-on: ubuntu-latest
+      - name: Deploy to Server
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "deploy/*"
+          target: "/home/ubuntu/pela"
+          strip_components: 1
 
-    environment:
-      name: production
-      url: ${{ steps.get-url.outputs.url }}
-
-    steps:
-    - name: Set Environment URL
-      id: get-url
-      run: echo "url=${{ secrets.PRODUCTION_URL }}" >> $GITHUB_OUTPUT
-
-    - name: Checkout repository code
-      uses: actions/checkout@v3
-
-    - name: Run Remote Deployment Script
-      uses: appleboy/ssh-action@v1.0.1
-      with:
-        host: ${{ secrets.SERVER_IP }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SSH_PRIVATE_KEY }}
-        script: |
-          export NVM_DIR="$HOME/.nvm"
-          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-          cd /home/ubuntu/pela
-          git pull origin master
-          npm install
-          npm run build
-          # Efficiently reload or start the process
-          pm2 startOrReload ecosystem.config.cjs --update-env
-          pm2 save
+      - name: Reload PM2
+        uses: appleboy/ssh-action@v1.0.1
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            cd /home/ubuntu/pela
+            # The files are already there thanks to scp-action
+            pm2 startOrReload ecosystem.config.cjs --update-env
+            pm2 save
