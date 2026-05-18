@@ -11,9 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: ${{ secrets.PRODUCTION_URL }}
+      url: ${{ steps.get-url.outputs.url }}
 
     steps:
+      - name: Set Environment URL
+        id: get-url
+        run: echo "url=${{ secrets.PRODUCTION_URL }}" >> $GITHUB_OUTPUT
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
