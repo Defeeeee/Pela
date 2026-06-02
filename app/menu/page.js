@@ -1,4 +1,7 @@
+"use client"
+
 import Link from "next/link";
+import { useState, useEffect } from "react";
 
 const routesConfig = [
   { path: "/", label: "Inicio / Pelado Random", desc: "Carga un pelado aleatorio con tu Reserva de Pala.", icon: "🥚" },
@@ -16,6 +19,26 @@ const routesConfig = [
 ];
 
 export default function MenuPage() {
+  const [showSecret, setShowSecret] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const active = localStorage.getItem("pela_secret") === "true";
+      setShowSecret(active);
+    }
+  }, []);
+
+  const handleTitleDoubleClick = () => {
+    const next = !showSecret;
+    setShowSecret(next);
+    localStorage.setItem("pela_secret", next ? "true" : "false");
+  };
+
+  const visibleRoutes = routesConfig.filter((route) => {
+    if (route.path === "/clicker") return showSecret;
+    return true;
+  });
+
   return (
     <div className="menu-container">
       <style>{`
@@ -241,14 +264,14 @@ export default function MenuPage() {
 
       <div className="menu-content">
         <header className="menu-header">
-          <h1 className="menu-title">Panel de Control</h1>
+          <h1 className="menu-title" onDoubleClick={handleTitleDoubleClick} style={{ cursor: "pointer", userSelect: "none" }}>Panel de Control</h1>
           <p className="menu-subtitle">
             Seleccioná tu destino dentro del ecosistema folicular de Pelados y Pala.
           </p>
         </header>
 
         <div className="menu-grid">
-          {routesConfig.map((route) => (
+          {visibleRoutes.map((route) => (
             <Link key={route.path} href={route.path} className="menu-card-link">
               <article className="menu-card">
                 <div className="menu-card-top">

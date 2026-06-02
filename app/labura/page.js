@@ -1,12 +1,16 @@
 "use client"
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSocialCredit } from '../SocialCreditContext';
 
 export default function LaburaPage() {
   const { addCredit } = useSocialCredit();
+  const [showSecret, setShowSecret] = useState(false);
 
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      setShowSecret(localStorage.getItem("pela_secret") === "true");
+    }
     const interval = setInterval(() => {
       addCredit(1);
     }, 1000);
@@ -39,22 +43,24 @@ export default function LaburaPage() {
       <h1 style={{ fontSize: '2.5rem', marginBottom: '10px' }}>Hoy no hay pelado</h1>
       <p style={{ fontSize: '1.5rem', color: '#ccc' }}>Hoy se labura.</p>
 
-      <a href="/clicker" style={{
-        marginTop: '30px',
-        color: '#ffeb3b',
-        textDecoration: 'none',
-        fontSize: '1.1rem',
-        fontWeight: 'bold',
-        border: '1px solid #ffeb3b',
-        padding: '12px 28px',
-        borderRadius: '8px',
-        backgroundColor: 'rgba(255, 235, 59, 0.05)',
-        boxShadow: '0 0 15px rgba(255, 235, 59, 0.1)',
-        transition: 'all 0.2s ease',
-        textAlign: 'center'
-      }}>
-        Minar Palas en Pala Clicker ⛏️
-      </a>
+      {showSecret && (
+        <a href="/clicker" style={{
+          marginTop: '30px',
+          color: '#ffeb3b',
+          textDecoration: 'none',
+          fontSize: '1.1rem',
+          fontWeight: 'bold',
+          border: '1px solid #ffeb3b',
+          padding: '12px 28px',
+          borderRadius: '8px',
+          backgroundColor: 'rgba(255, 235, 59, 0.05)',
+          boxShadow: '0 0 15px rgba(255, 235, 59, 0.1)',
+          transition: 'all 0.2s ease',
+          textAlign: 'center'
+        }}>
+          Minar Palas en Pala Clicker ⛏️
+        </a>
+      )}
       
       <a href="/" style={{
         marginTop: '24px',
