@@ -4,6 +4,7 @@ const routesConfig = [
   { path: "/", label: "Inicio / Pelado Random", desc: "Carga un pelado aleatorio con tu Reserva de Pala.", icon: "🥚" },
   { path: "/today", label: "¿Qué pelado sos hoy?", desc: "Test de compatibilidad folicular diario.", icon: "📅" },
   { path: "/buckets", label: "El juego del pelado", desc: "Seguí al pelado feliz antes de que se mezclen.", icon: "🪣" },
+  { path: "/clicker", label: "Pala Clicker", desc: "Miná palas de trabajo y automatizá tu producción.", icon: "⛏️" },
   { path: "/escapa", label: "Escapá a la pala", desc: "Evitá el trabajo duro haciendo huir a los pelados.", icon: "🏃" },
   { path: "/autista", label: "Modo Autista", desc: "Estímulos visuales y fluctuación de filtros saturados.", icon: "⚡" },
   { path: "/argumento", label: "Pela-AI™ Pro", desc: "Analizador de argumentatividad mediante redes capilares.", icon: "🧠" },
