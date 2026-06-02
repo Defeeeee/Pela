@@ -44,7 +44,7 @@ jobs:
       - name: Prepare standalone for transfer
         run: |
           mkdir deploy
-          cp -r .next/standalone/* deploy/
+          cp -r .next/standalone/. deploy/
           cp -r public deploy/
           mkdir -p deploy/.next
           cp -r .next/static deploy/.next/
