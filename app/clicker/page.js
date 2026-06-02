@@ -1,67 +1,274 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSocialCredit } from "../SocialCreditContext";
 
 const UPGRADES_CONFIG = [
   { id: "madera", name: "Pala de Madera", baseCost: 15, increase: 1, desc: "Sencilla pero noble. Auto-genera +1 pala/s.", emoji: "🪵" },
-  { id: "acero", name: "Pala de Acero", baseCost: 100, increase: 5, desc: "Forjada en las minas de folículos. Auto-genera +5 pala/s.", emoji: "⚔️" },
-  { id: "pasante", name: "Contratar Pasante", baseCost: 500, increase: 25, desc: "Un becario entusiasta que labura por vos. Auto-genera +25 pala/s.", emoji: "👔" },
-  { id: "pela_ai", name: "Pela-AI™ Bot", baseCost: 3000, increase: 150, desc: "Automatización neuronal artificial. Auto-genera +150 pala/s.", emoji: "🤖" },
-  { id: "minoxidil", name: "Reactor de Minoxidil", baseCost: 20000, increase: 1000, desc: "Energía pura a base de loción capilar. Auto-genera +1000 pala/s.", emoji: "🌋" },
+  { id: "acero", name: "Pala de Acero", baseCost: 150, increase: 5, desc: "Forjada en las minas de folículos. Auto-genera +5 pala/s.", emoji: "⚔️" },
+  { id: "pasante", name: "Contratar Pasante", baseCost: 1200, increase: 25, desc: "Un becario entusiasta que labura por vos. Auto-genera +25 pala/s.", emoji: "👔" },
+  { id: "pela_ai", name: "Pela-AI™ Bot", baseCost: 10000, increase: 150, desc: "Automatización neuronal artificial. Auto-genera +150 pala/s.", emoji: "🤖" },
+  { id: "minoxidil", name: "Reactor de Minoxidil", baseCost: 80000, increase: 1000, desc: "Energía pura a base de loción capilar. Auto-genera +1000 pala/s.", emoji: "🌋" },
+];
+
+const TOOLS_CONFIG = [
+  { id: "afilador", name: "Afilador de Acero", baseCost: 50, increase: 1, critIncrease: 0, desc: "Afila el borde. +1 por click.", emoji: "🪛" },
+  { id: "mango", name: "Mango Ergonómico", baseCost: 350, increase: 5, critIncrease: 0.01, desc: "+5 por click y +1% de Prob. Crítica.", emoji: "🪓" },
+  { id: "guantes", name: "Guantes de Kevlar", baseCost: 2500, increase: 25, critIncrease: 0.02, desc: "+25 por click y +2% de Prob. Crítica.", emoji: "🧤" },
+  { id: "locion", name: "Loción Hidratante", baseCost: 15000, increase: 150, critIncrease: 0.05, desc: "+150 por click y +5% de Prob. Crítica.", emoji: "🧴" },
+  { id: "gravitacional", name: "Pala Gravitacional", baseCost: 100000, increase: 1000, critIncrease: 0.1, desc: "+1000 por click y +10% de Prob. Crítica.", emoji: "🌌" },
+];
+
+const PRESTIGE_UPGRADES_CONFIG = [
+  { id: "cegador", name: "Brillo Cegador", cost: 1, desc: "Clicks ganan +5% de tus PPS actuales.", emoji: "☀️" },
+  { id: "contratos", name: "Contratos Ficticios", cost: 2, desc: "Los Upgrades (PPS) cuestan 15% menos.", emoji: "📃" },
+  { id: "buff_double", name: "Licencia de Pela-AI", cost: 3, desc: "Doble efectividad (x2) en Buffs activos.", emoji: "🎖️" },
+  { id: "iman", name: "Imán de Pelados", cost: 4, desc: "Pelados voladores aparecen 50% más seguido.", emoji: "🧲" },
+];
+
+const GACHA_ITEMS = [
+  { id: "gorra", name: "Gorra de Lana", desc: "+5% Fuerza de Click.", emoji: "🧢", weight: 35 },
+  { id: "minoxidil_viejito", name: "Minoxidil Viejito", desc: "+5% Multiplicador de PPS.", emoji: "🧪", weight: 35 },
+  { id: "secador_roto", name: "Secador de Pelo Roto", desc: "+1.5% Prob. Crítica.", emoji: "💨", weight: 18 },
+  { id: "pala_jefe", name: "Pala del Jefe", desc: "+15% Fuerza de Click.", emoji: "🏆", weight: 10 },
+  { id: "peluca_cotillon", name: "Peluca de Cotillón", desc: "+15% PPS y +3% Prob. Crítica.", emoji: "🦱", weight: 2 },
 ];
 
 const EXCHANGE_COST = 100;
 const EXCHANGE_CREDIT = 10;
+const PRESTIGE_THRESHOLD = 100000;
+const GACHA_COST = 500;
+
+const TRIVIA_POOL = [
+  {
+    q: "¿Cuál es el peor enemigo natural del pelado?",
+    o: ["El viento fuerte", "El champú anticaspa", "El peine", "La gorra de lana"],
+    c: 2,
+  },
+  {
+    q: "¿Qué debés hacer si tu Reserva de Pala llega a 0%?",
+    o: ["Dormir una siesta", "Agarrar la pala y laburar", "Comprar bitcoins", "Llorar en Twitter"],
+    c: 1,
+  },
+  {
+    q: "¿De qué está compuesto el brillo reflejante del pelado feliz?",
+    o: ["Grasa de asado", "Grafeno de Folículo", "Barniz marino", "Luz solar acumulada"],
+    c: 1,
+  },
+  {
+    q: "¿Qué misterioso romance desafía toda lógica argumentativa?",
+    o: ["El Pelado y la Pala", "Coriglia y Pelado Feliz", "El becario y las horas extra", "El Minoxidil y el peine"],
+    c: 1,
+  },
+];
 
 export default function ClickerPage() {
   const { addCredit, credit } = useSocialCredit();
   const [isClientLoaded, setIsClientLoaded] = useState(false);
+  
+  // Game states
   const [palas, setPalas] = useState(0);
-  const [upgrades, setUpgrades] = useState({
-    madera: 0,
-    acero: 0,
-    pasante: 0,
-    pela_ai: 0,
-    minoxidil: 0,
-  });
+  const [upgrades, setUpgrades] = useState({ madera: 0, acero: 0, pasante: 0, pela_ai: 0, minoxidil: 0 });
+  const [tools, setTools] = useState({ afilador: 0, mango: 0, guantes: 0, locion: 0, gravitacional: 0 });
+  const [inventory, setInventory] = useState({ gorra: 0, minoxidil_viejito: 0, secador_roto: 0, pala_jefe: 0, peluca_cotillon: 0 });
+  
+  // Prestige states
+  const [brillo, setBrillo] = useState(0); // prestige currency owned
+  const [prestigeUpgrades, setPrestigeUpgrades] = useState({ cegador: 0, contratos: 0, buff_double: 0, iman: 0 });
 
+  // Sound settings
+  const [muted, setMuted] = useState(false);
+
+  // Floating text particles
   const [floatingTexts, setFloatingTexts] = useState([]);
   const shovelRef = useRef(null);
 
-  // Load from localStorage on mount (prevents SSR hydration issues)
+  // Shovel shake state on critical click
+  const [shake, setShake] = useState(false);
+
+  // Shop Tab System: "passive" | "active" | "collection" | "casino" | "prestige"
+  const [shopTab, setShopTab] = useState("passive");
+
+  // Combo multiplier states
+  const [combo, setCombo] = useState(0);
+  const lastClickTimeRef = useRef(0);
+
+  // Flying Pelado state
+  const [flyingPelado, setFlyingPelado] = useState(null);
+
+  // Buff state
+  const [buff, setBuff] = useState(null);
+  const [buffMessage, setBuffMessage] = useState("");
+
+  // Trivia state
+  const [trivia, setTrivia] = useState(null);
+
+  // Gacha states
+  const [spinning, setSpinning] = useState(false);
+  const [spinResult, setSpinResult] = useState(null);
+
+  // Casino states
+  const [betPercent, setBetPercent] = useState(25);
+  const [flipping, setFlipping] = useState(false);
+  const [flipResult, setFlipResult] = useState(null);
+
+  // Achievements state
+  const [achievements, setAchievements] = useState({
+    first_upgrade: false,
+    negrero: false,
+    gold_click: false,
+    first_prestige: false,
+  });
+
+  // Synthesized Sound Triggers (Web Audio API)
+  const playSound = (type) => {
+    if (muted) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      if (type === "click") {
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(150, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.12);
+      } else if (type === "crit") {
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(120, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(320, ctx.currentTime + 0.18);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.18);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.18);
+      } else if (type === "buy") {
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(320, ctx.currentTime);
+        osc.frequency.setValueAtTime(440, ctx.currentTime + 0.08);
+        osc.frequency.setValueAtTime(580, ctx.currentTime + 0.16);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.24);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.24);
+      } else if (type === "gacha") {
+        let time = ctx.currentTime;
+        for (let i = 0; i < 5; i++) {
+          const subOsc = ctx.createOscillator();
+          const subGain = ctx.createGain();
+          subOsc.frequency.setValueAtTime(200 + i * 90, time);
+          subGain.gain.setValueAtTime(0.06, time);
+          subGain.gain.exponentialRampToValueAtTime(0.001, time + 0.07);
+          subOsc.connect(subGain);
+          subGain.connect(ctx.destination);
+          subOsc.start(time);
+          subOsc.stop(time + 0.07);
+          time += 0.09;
+        }
+      } else if (type === "flip") {
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(220, ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      }
+    } catch (e) {}
+  };
+
+  // Load game from local storage on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const savedPalas = localStorage.getItem("clicker_palas");
-      const savedUpgrades = localStorage.getItem("clicker_upgrades");
+      const savedPalas = localStorage.getItem("clicker_palas_v5");
+      const savedUpgrades = localStorage.getItem("clicker_upgrades_v5");
+      const savedTools = localStorage.getItem("clicker_tools_v5");
+      const savedInventory = localStorage.getItem("clicker_inventory_v5");
+      const savedBrillo = localStorage.getItem("clicker_brillo_v5");
+      const savedPrestigeUpgrades = localStorage.getItem("clicker_prestige_upgrades_v5");
+      const savedAchievements = localStorage.getItem("clicker_achievements_v5");
+      const savedMuted = localStorage.getItem("clicker_muted");
 
       if (savedPalas !== null) setPalas(parseFloat(savedPalas));
+      if (savedBrillo !== null) setBrillo(parseInt(savedBrillo, 10));
+      if (savedMuted !== null) setMuted(savedMuted === "true");
+      
       if (savedUpgrades !== null) {
         try {
           setUpgrades(JSON.parse(savedUpgrades));
-        } catch (e) {
-          console.error("Error loading upgrades", e);
-        }
+        } catch (e) {}
       }
+      if (savedTools !== null) {
+        try {
+          setTools(JSON.parse(savedTools));
+        } catch (e) {}
+      }
+      if (savedInventory !== null) {
+        try {
+          setInventory(JSON.parse(savedInventory));
+        } catch (e) {}
+      }
+      if (savedPrestigeUpgrades !== null) {
+        try {
+          setPrestigeUpgrades(JSON.parse(savedPrestigeUpgrades));
+        } catch (e) {}
+      }
+      if (savedAchievements !== null) {
+        try {
+          setAchievements(JSON.parse(savedAchievements));
+        } catch (e) {}
+      }
+
       setIsClientLoaded(true);
     }
   }, []);
 
-  // Save to localStorage whenever states change
+  // Save game to local storage
   useEffect(() => {
     if (isClientLoaded) {
-      localStorage.setItem("clicker_palas", palas.toString());
-      localStorage.setItem("clicker_upgrades", JSON.stringify(upgrades));
+      localStorage.setItem("clicker_palas_v5", palas.toString());
+      localStorage.setItem("clicker_upgrades_v5", JSON.stringify(upgrades));
+      localStorage.setItem("clicker_tools_v5", JSON.stringify(tools));
+      localStorage.setItem("clicker_inventory_v5", JSON.stringify(inventory));
+      localStorage.setItem("clicker_brillo_v5", brillo.toString());
+      localStorage.setItem("clicker_prestige_upgrades_v5", JSON.stringify(prestigeUpgrades));
+      localStorage.setItem("clicker_achievements_v5", JSON.stringify(achievements));
+      localStorage.setItem("clicker_muted", muted.toString());
     }
-  }, [palas, upgrades, isClientLoaded]);
+  }, [palas, upgrades, tools, inventory, brillo, prestigeUpgrades, achievements, muted, isClientLoaded]);
 
-  // Compute Palas Per Second (PPS)
-  const palasPerSecond = Object.keys(upgrades).reduce((total, id) => {
+  // Compute passive modifiers from Gacha inventory
+  const inventoryClickMultiplier = 1 + (inventory.gorra || 0) * 0.05 + (inventory.pala_jefe || 0) * 0.15;
+  const inventoryPPSMultiplier = 1 + (inventory.minoxidil_viejito || 0) * 0.05 + (inventory.peluca_cotillon || 0) * 0.15;
+  const inventoryCritChance = (inventory.secador_roto || 0) * 0.015 + (inventory.peluca_cotillon || 0) * 0.03;
+
+  // Compute Base Palas Per Second (PPS)
+  const basePPS = Object.keys(upgrades).reduce((total, id) => {
     const config = UPGRADES_CONFIG.find((u) => u.id === id);
     return total + (upgrades[id] || 0) * (config ? config.increase : 0);
   }, 0);
 
-  // Auto-generation timer
+  // Apply Prestige and Buff multipliers to PPS
+  const prestigeMultiplier = 1 + brillo * 0.12; // +12% per prestige point
+  
+  // Prestige Shop Buff double effect
+  const buffDbl = prestigeUpgrades.buff_double ? 2 : 1;
+  const buffPPSMultiplier = buff && buff.type === "hype" ? buff.multiplier * buffDbl : 1;
+  const palasPerSecond = basePPS * prestigeMultiplier * buffPPSMultiplier * inventoryPPSMultiplier;
+
+  // Auto-generation loop (updates 10 times per second)
   useEffect(() => {
     if (!isClientLoaded || palasPerSecond <= 0) return;
 
@@ -72,9 +279,247 @@ export default function ClickerPage() {
     return () => clearInterval(interval);
   }, [palasPerSecond, isClientLoaded]);
 
-  // Handle click on shovel
+  // Combo decay loop
+  useEffect(() => {
+    if (!isClientLoaded) return;
+
+    const interval = setInterval(() => {
+      setCombo((prev) => Math.max(0, prev - 4));
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [isClientLoaded]);
+
+  // Check achievements
+  useEffect(() => {
+    if (!isClientLoaded) return;
+
+    const hasUpgrade = Object.values(upgrades).some((count) => count > 0) || Object.values(tools).some((count) => count > 0);
+    const hasNegrero = upgrades.pasante >= 10;
+    const hasPrestige = brillo > 0;
+
+    let updated = false;
+    const newAchievements = { ...achievements };
+
+    if (hasUpgrade && !achievements.first_upgrade) {
+      newAchievements.first_upgrade = true;
+      updated = true;
+    }
+    if (hasNegrero && !achievements.negrero) {
+      newAchievements.negrero = true;
+      updated = true;
+    }
+    if (hasPrestige && !achievements.first_prestige) {
+      newAchievements.first_prestige = true;
+      updated = true;
+    }
+
+    if (updated) {
+      setAchievements(newAchievements);
+      triggerFlashMessage("¡Logro Desbloqueado! 🏆");
+    }
+  }, [upgrades, tools, brillo, isClientLoaded]);
+
+  // Check buff expiration
+  useEffect(() => {
+    if (!buff) return;
+    const checkInterval = setInterval(() => {
+      if (Date.now() > buff.endTime) {
+        setBuff(null);
+        triggerFlashMessage("El efecto del buff ha terminado.");
+      }
+    }, 500);
+    return () => clearInterval(checkInterval);
+  }, [buff]);
+
+  // Trivia countdown timer
+  useEffect(() => {
+    if (!trivia) return;
+
+    const interval = setInterval(() => {
+      setTrivia((prev) => {
+        if (!prev) return null;
+        if (prev.timer <= 1) {
+          triggerFlashMessage("Se acabó el tiempo de la trivia.");
+          return null;
+        }
+        return { ...prev, timer: prev.timer - 1 };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [trivia]);
+
+  // Flying Pelado spawn logic
+  useEffect(() => {
+    if (!isClientLoaded) return;
+
+    // Prestige Shop Magnet item increases spawn frequency (+50% spawn rate)
+    const frequencyFactor = prestigeUpgrades.iman ? 6500 : 10000;
+
+    const spawnInterval = setInterval(() => {
+      if (flyingPelado || trivia) return;
+
+      if (Math.random() < 0.18) {
+        const side = Math.random() < 0.5 ? "left" : "right";
+        const startX = side === "left" ? -100 : window.innerWidth + 10;
+        const startY = Math.random() * (window.innerHeight - 250) + 100;
+        const speedX = side === "left" ? Math.random() * 2 + 2 : -(Math.random() * 2 + 2);
+        const speedY = (Math.random() - 0.5) * 1.5;
+
+        setFlyingPelado({
+          id: Date.now(),
+          x: startX,
+          y: startY,
+          vx: speedX,
+          vy: speedY,
+          size: 75,
+        });
+      }
+    }, frequencyFactor);
+
+    return () => clearInterval(spawnInterval);
+  }, [flyingPelado, trivia, prestigeUpgrades.iman, isClientLoaded]);
+
+  // Flying Pelado physics loop
+  useEffect(() => {
+    if (!flyingPelado) return;
+
+    const physicsInterval = setInterval(() => {
+      setFlyingPelado((prev) => {
+        if (!prev) return null;
+        const newX = prev.x + prev.vx;
+        const newY = prev.y + prev.vy;
+
+        if (
+          (prev.vx > 0 && newX > window.innerWidth + 150) ||
+          (prev.vx < 0 && newX < -150) ||
+          newY < -150 ||
+          newY > window.innerHeight + 150
+        ) {
+          return null;
+        }
+
+        return { ...prev, x: newX, y: newY };
+      });
+    }, 30);
+
+    return () => clearInterval(physicsInterval);
+  }, [flyingPelado]);
+
+  // Trigger floating/banner notifications
+  const triggerFlashMessage = (msg) => {
+    setBuffMessage(msg);
+    setTimeout(() => {
+      setBuffMessage("");
+    }, 4000);
+  };
+
+  // Combo calculation
+  const getComboMultiplier = () => {
+    if (combo >= 90) return 3.0;
+    if (combo >= 50) return 2.0;
+    if (combo >= 20) return 1.5;
+    return 1.0;
+  };
+
+  const comboMultiplier = getComboMultiplier();
+
+  // Active upgrades click power calculation
+  const activeClickPower = Object.keys(tools).reduce((total, id) => {
+    const config = TOOLS_CONFIG.find((t) => t.id === id);
+    return total + (tools[id] || 0) * (config ? config.increase : 0);
+  }, 0);
+
+  // Active upgrades critical chance calculation
+  const activeCritChance = Object.keys(tools).reduce((total, id) => {
+    const config = TOOLS_CONFIG.find((t) => t.id === id);
+    return total + (tools[id] || 0) * (config ? config.critIncrease : 0);
+  }, 0);
+
+  const totalCritChance = 0.05 + activeCritChance + inventoryCritChance;
+
+  // Prestige Shop cegador effect: clicks gain +5% of current PPS
+  const ppsClickBonus = prestigeUpgrades.cegador ? palasPerSecond * 0.05 : 0;
+
+  // Click power calculation
+  const baseClickPower = 1 + activeClickPower + ppsClickBonus;
+  const buffClickMultiplier = buff && buff.type === "fever" ? buff.multiplier * buffDbl : 1;
+  const clickPower = baseClickPower * prestigeMultiplier * comboMultiplier * buffClickMultiplier * inventoryClickMultiplier;
+
+  // Handle clicking the flying pelado
+  const handleFlyingPeladoClick = (e) => {
+    e.stopPropagation();
+    if (!flyingPelado) return;
+
+    playSound("buy");
+    if (!achievements.gold_click) {
+      setAchievements((prev) => ({ ...prev, gold_click: true }));
+    }
+
+    setFlyingPelado(null);
+
+    if (Math.random() < 0.40) {
+      const questionData = TRIVIA_POOL[Math.floor(Math.random() * TRIVIA_POOL.length)];
+      setTrivia({
+        q: questionData.q,
+        o: questionData.o,
+        c: questionData.c,
+        timer: 7,
+      });
+    } else {
+      applyRandomFlyingBuff();
+    }
+  };
+
+  const applyRandomFlyingBuff = () => {
+    const rewards = [
+      { type: "fever", name: "Fiebre Argumentativa (Click x7)", multiplier: 7, duration: 15000 },
+      { type: "hype", name: "Hiper-Laburo (PPS x2)", multiplier: 2, duration: 25000 },
+      { type: "rain", name: "Lluvia de Palas" },
+    ];
+
+    const chosen = rewards[Math.floor(Math.random() * rewards.length)];
+    
+    if (chosen.type === "rain") {
+      const award = Math.max(50, Math.floor(palasPerSecond * 45));
+      setPalas((prev) => prev + award);
+      triggerFlashMessage(`¡Lluvia de Palas! Ganaste +${award.toLocaleString()} palas inmediatamente.`);
+    } else {
+      setBuff({
+        type: chosen.type,
+        name: chosen.name,
+        multiplier: chosen.multiplier,
+        endTime: Date.now() + chosen.duration,
+      });
+      triggerFlashMessage(`¡Buff Activado! ${chosen.name} por ${chosen.duration / 1000}s.`);
+    }
+  };
+
+  // Handle trivia answer selection
+  const handleTriviaAnswer = (index) => {
+    if (!trivia) return;
+
+    if (index === trivia.c) {
+      playSound("buy");
+      setBuff({
+        type: "fever",
+        name: "Fiebre Extrema (Click x15)",
+        multiplier: 15,
+        endTime: Date.now() + 15000,
+      });
+      setPalas((prev) => prev + Math.max(100, Math.floor(palasPerSecond * 60)));
+      triggerFlashMessage("¡Correcto! Recibís x15 de Clicks por 15s y palas extra.");
+    } else {
+      playSound("click");
+      triggerFlashMessage("¡Incorrecto! No ganás ningún bono.");
+    }
+
+    setTrivia(null);
+  };
+
+  // Main shovel click handler
   const handleShovelClick = (e) => {
-    // Determine click position relative to shovel container
     let clickX = 0;
     let clickY = 0;
 
@@ -87,37 +532,66 @@ export default function ClickerPage() {
       clickY = 100 + Math.random() * 50;
     }
 
-    // Add pala
-    setPalas((prev) => prev + 1);
+    const now = Date.now();
+    const delay = now - lastClickTimeRef.current;
+    lastClickTimeRef.current = now;
+    
+    if (delay < 400) {
+      setCombo((prev) => Math.min(100, prev + 8));
+    } else {
+      setCombo((prev) => Math.min(100, prev + 4));
+    }
 
-    // Spawn floating text
+    const isCrit = Math.random() < totalCritChance;
+    const finalPower = isCrit ? clickPower * 10 : clickPower;
+
+    if (isCrit) {
+      playSound("crit");
+      setShake(true);
+      setTimeout(() => setShake(false), 150);
+    } else {
+      playSound("click");
+    }
+
+    setPalas((prev) => prev + finalPower);
+
+    const roundedPower = parseFloat(finalPower.toFixed(1));
     const newText = {
       id: Date.now() + Math.random(),
-      text: "+1",
+      text: isCrit ? `¡CRÍTICO! +${roundedPower}` : `+${roundedPower}`,
       x: clickX,
       y: clickY,
+      color: isCrit ? "#ff3b3b" : buff && buff.type === "fever" ? "#ff8c3b" : combo >= 50 ? "#ffeb3b" : "#ffffff",
+      scale: isCrit ? 1.4 : 1,
     };
 
     setFloatingTexts((prev) => [...prev, newText]);
 
-    // Clean up floating text after 1s
     setTimeout(() => {
       setFloatingTexts((prev) => prev.filter((t) => t.id !== newText.id));
     }, 900);
   };
 
-  // Get current cost of an upgrade
-  const getUpgradeCost = (id) => {
-    const config = UPGRADES_CONFIG.find((u) => u.id === id);
+  // Get current cost of upgrade (passive, active, prestige)
+  const getCost = (id, isTool = false) => {
+    const list = isTool ? TOOLS_CONFIG : UPGRADES_CONFIG;
+    const config = list.find((u) => u.id === id);
     if (!config) return 999999;
-    const count = upgrades[id] || 0;
-    return Math.floor(config.baseCost * Math.pow(1.15, count));
+    const count = isTool ? (tools[id] || 0) : (upgrades[id] || 0);
+    const rawCost = Math.floor(config.baseCost * Math.pow(1.15, count));
+
+    // Prestige Shop contratos discount: 15% off per level
+    if (!isTool && prestigeUpgrades.contratos > 0) {
+      return Math.max(1, Math.floor(rawCost * (1 - 0.15 * prestigeUpgrades.contratos)));
+    }
+    return rawCost;
   };
 
-  // Buy upgrade
+  // Buy passive upgrade
   const buyUpgrade = (id) => {
-    const cost = getUpgradeCost(id);
+    const cost = getCost(id, false);
     if (palas >= cost) {
+      playSound("buy");
       setPalas((prev) => prev - cost);
       setUpgrades((prev) => ({
         ...prev,
@@ -126,33 +600,113 @@ export default function ClickerPage() {
     }
   };
 
-  // Canjear Palas for global credit
+  // Buy tool upgrade
+  const buyTool = (id) => {
+    const cost = getCost(id, true);
+    if (palas >= cost) {
+      playSound("buy");
+      setPalas((prev) => prev - cost);
+      setTools((prev) => ({
+        ...prev,
+        [id]: (prev[id] || 0) + 1,
+      }));
+    }
+  };
+
+  // Buy prestige shop upgrade
+  const buyPrestigeUpgrade = (id) => {
+    const config = PRESTIGE_UPGRADES_CONFIG.find((u) => u.id === id);
+    if (config && brillo >= config.cost && !prestigeUpgrades[id]) {
+      playSound("buy");
+      setBrillo((prev) => prev - config.cost);
+      setPrestigeUpgrades((prev) => ({
+        ...prev,
+        [id]: 1,
+      }));
+      triggerFlashMessage(`¡Compraste permanentemente: ${config.name}! ✨`);
+    }
+  };
+
+  // Lotería Folicular (Gacha Spin)
+  const spinGacha = () => {
+    if (palas < GACHA_COST || spinning) return;
+    
+    playSound("gacha");
+    setPalas((prev) => prev - GACHA_COST);
+    setSpinning(true);
+    setSpinResult(null);
+
+    setTimeout(() => {
+      const totalWeight = GACHA_ITEMS.reduce((sum, item) => sum + item.weight, 0);
+      let rand = Math.random() * totalWeight;
+      let selected = GACHA_ITEMS[0];
+
+      for (const item of GACHA_ITEMS) {
+        rand -= item.weight;
+        if (rand <= 0) {
+          selected = item;
+          break;
+        }
+      }
+
+      setInventory((prev) => ({
+        ...prev,
+        [selected.id]: (prev[selected.id] || 0) + 1,
+      }));
+      setSpinResult(selected);
+      setSpinning(false);
+      triggerFlashMessage(`¡Loot: ${selected.name}! ${selected.emoji}`);
+    }, 1200);
+  };
+
+  // Casino (Doble o Nada) Coin Flip
+  const gambleFlip = () => {
+    if (palas <= 10 || flipping) return;
+    
+    playSound("flip");
+    const betAmount = Math.floor(palas * (betPercent / 100));
+    setFlipping(true);
+    setFlipResult(null);
+
+    setTimeout(() => {
+      const isWin = Math.random() < 0.5;
+      if (isWin) {
+        setPalas((prev) => prev + betAmount);
+        setFlipResult("win");
+        triggerFlashMessage(`¡Apuesta Ganada! +${betAmount.toLocaleString()} palas.`);
+      } else {
+        setPalas((prev) => Math.max(0, prev - betAmount));
+        setFlipResult("lose");
+        triggerFlashMessage(`¡Apuesta Perdida! -${betAmount.toLocaleString()} palas.`);
+      }
+      setFlipping(false);
+    }, 1500);
+  };
+
+  // Execute Prestige
+  const executePrestige = () => {
+    if (palas >= PRESTIGE_THRESHOLD) {
+      playSound("buy");
+      const earnedShine = Math.floor(palas / PRESTIGE_THRESHOLD);
+      setBrillo((prev) => prev + earnedShine);
+      setPalas(0);
+      setUpgrades({ madera: 0, acero: 0, pasante: 0, pela_ai: 0, minoxidil: 0 });
+      setTools({ afilador: 0, mango: 0, guantes: 0, locion: 0, gravitacional: 0 });
+      setInventory({ gorra: 0, minoxidil_viejito: 0, secador_roto: 0, pala_jefe: 0, peluca_cotillon: 0 });
+      setCombo(0);
+      setBuff(null);
+      triggerFlashMessage(`¡Hiciste la Gran Pelada! Ganaste +${earnedShine} de Brillo Capilar.`);
+    }
+  };
+
+  // Canjear Palas
   const handleExchange = () => {
     if (palas >= EXCHANGE_COST) {
+      playSound("buy");
       setPalas((prev) => prev - EXCHANGE_COST);
       addCredit(EXCHANGE_CREDIT);
     }
   };
-
-  if (!isClientLoaded) {
-    return (
-      <div className="clicker-loading">
-        Cargando pala clicker...
-        <style>{`
-          .clicker-loading {
-            min-height: 100vh;
-            background: #000;
-            color: #ffeb3b;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-            font-family: monospace;
-          }
-        `}</style>
-      </div>
-    );
-  }
 
   return (
     <div className="clicker-stage">
@@ -179,13 +733,13 @@ export default function ClickerPage() {
           font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
           position: relative;
           overflow-x: hidden;
-          padding: 60px 20px;
+          padding: 40px 20px;
           box-sizing: border-box;
         }
 
         .clicker-content {
           width: 100%;
-          max-width: 1000px;
+          max-width: 1100px;
           background: var(--card-bg);
           border: 1px solid var(--card-border-gold);
           border-radius: 28px;
@@ -195,12 +749,12 @@ export default function ClickerPage() {
           position: relative;
           z-index: 1;
           display: grid;
-          grid-template-columns: 1.1fr 0.9fr;
+          grid-template-columns: 1.15fr 0.85fr;
           gap: 36px;
           box-sizing: border-box;
         }
 
-        @media (max-width: 820px) {
+        @media (max-width: 900px) {
           .clicker-content {
             grid-template-columns: 1fr;
             padding: 24px;
@@ -212,13 +766,12 @@ export default function ClickerPage() {
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
           text-align: center;
           border-right: 1px solid rgba(255, 255, 255, 0.08);
           padding-right: 20px;
         }
 
-        @media (max-width: 820px) {
+        @media (max-width: 900px) {
           .clicker-left {
             border-right: none;
             padding-right: 0;
@@ -227,48 +780,136 @@ export default function ClickerPage() {
           }
         }
 
+        .clicker-title-area {
+          margin-bottom: 18px;
+          position: relative;
+          width: 100%;
+        }
+
+        .mute-toggle-btn {
+          position: absolute;
+          right: 0;
+          top: 10px;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.08);
+          color: var(--gold);
+          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.2s;
+        }
+
+        .mute-toggle-btn:hover {
+          background: rgba(255, 235, 59, 0.1);
+        }
+
         .clicker-title {
           font-size: clamp(2rem, 4vw, 2.8rem);
           font-weight: 900;
           letter-spacing: -0.02em;
           text-transform: uppercase;
-          margin: 0 0 6px;
+          margin: 0 0 4px;
           background: linear-gradient(135deg, #ffffff 40%, var(--gold) 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
         }
 
-        .clicker-subtitle {
-          font-size: 0.95rem;
-          color: var(--text-muted);
-          margin: 0 0 30px;
+        .prestige-badge {
+          background: linear-gradient(90deg, #ffc107, #ffeb3b);
+          color: #000;
+          padding: 3px 12px;
+          border-radius: 99px;
+          font-size: 0.8rem;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          box-shadow: 0 0 15px rgba(255, 235, 59, 0.35);
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
         }
 
         .counter-box {
-          margin-bottom: 24px;
+          margin-bottom: 16px;
         }
 
         .counter-num {
-          font-size: 3.5rem;
+          font-size: clamp(3rem, 6vw, 4.2rem);
           font-weight: 900;
           font-family: monospace;
           color: var(--gold);
           text-shadow: 0 0 20px rgba(255, 235, 59, 0.3);
-          line-height: 1;
-          margin-bottom: 4px;
+          line-height: 1.1;
+          margin-bottom: 2px;
         }
 
         .counter-pps {
-          font-size: 0.95rem;
+          font-size: 0.92rem;
           color: var(--text-muted);
-          font-weight: 500;
+          font-weight: 600;
+          display: flex;
+          gap: 12px;
+          justify-content: center;
+        }
+
+        /* Combo styles */
+        .combo-container {
+          width: 240px;
+          margin-bottom: 18px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+        }
+
+        .combo-header {
+          display: flex;
+          justify-content: space-between;
+          width: 100%;
+          font-size: 0.8rem;
+          font-weight: 700;
+          color: var(--text-muted);
+          margin-bottom: 5px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        .combo-bar-bg {
+          width: 100%;
+          height: 10px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 99px;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .combo-bar-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #ffc107, #ffeb3b);
+          box-shadow: 0 0 8px var(--gold);
+          transition: width 0.1s linear;
+        }
+
+        .combo-badge {
+          background: rgba(255, 235, 59, 0.2);
+          border: 1px solid var(--gold);
+          color: var(--gold);
+          font-size: 0.75rem;
+          font-weight: 800;
+          padding: 1px 6px;
+          border-radius: 4px;
         }
 
         .shovel-wrapper {
           position: relative;
-          width: 240px;
-          height: 240px;
-          margin: 20px 0 30px;
+          width: 230px;
+          height: 230px;
+          margin-bottom: 24px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -327,12 +968,44 @@ export default function ClickerPage() {
           transform: scale(0.94) rotate(-20deg);
         }
 
+        .shovel-button.shake .shovel-image {
+          animation: shake-fast 0.15s infinite alternate;
+        }
+
+        @keyframes shake-fast {
+          0% { transform: scale(0.95) rotate(-12deg) translate(3px, 2px); }
+          100% { transform: scale(0.95) rotate(-18deg) translate(-3px, -2px); }
+        }
+
+        /* Flying Pelado style */
+        .flying-pelado {
+          position: fixed;
+          cursor: pointer;
+          z-index: 99999;
+          user-select: none;
+          transition: transform 0.1s;
+        }
+
+        .flying-pelado:hover {
+          transform: scale(1.15);
+        }
+
+        .flying-pelado-img {
+          border-radius: 50%;
+          border: 3px solid var(--gold);
+          box-shadow: 0 0 25px var(--gold), 0 10px 30px rgba(0, 0, 0, 0.8);
+          animation: spin-slow 8s linear infinite;
+        }
+
+        @keyframes spin-slow {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
         .float-text {
           position: absolute;
-          font-size: 1.5rem;
+          font-size: 1.4rem;
           font-weight: 900;
-          color: var(--gold);
-          text-shadow: 0 0 10px rgba(255, 235, 59, 0.8), 0 2px 4px #000;
           pointer-events: none;
           animation: floatUp 0.9s cubic-bezier(0.25, 1, 0.5, 1) forwards;
           z-index: 10;
@@ -349,75 +1022,316 @@ export default function ClickerPage() {
           }
         }
 
-        .exchange-panel {
-          background: rgba(255, 235, 59, 0.03);
-          border: 1px solid rgba(255, 235, 59, 0.1);
+        /* Banner alerts */
+        .notification-banner {
+          position: fixed;
+          top: 30px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: rgba(20, 20, 5, 0.92);
+          border: 2px solid var(--gold);
+          border-radius: 12px;
+          padding: 12px 28px;
+          box-shadow: 0 15px 40px rgba(0, 0, 0, 0.8), 0 0 25px rgba(255, 235, 59, 0.2);
+          z-index: 100000;
+          color: #fff;
+          font-weight: 700;
+          text-align: center;
+          backdrop-filter: blur(12px);
+          animation: slideDown 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes slideDown {
+          from { transform: translate(-50%, -80px); opacity: 0; }
+          to { transform: translate(-50%, 0); opacity: 1; }
+        }
+
+        /* Active buff indicator */
+        .buff-indicator {
+          background: rgba(255, 235, 59, 0.08);
+          border: 1px solid var(--gold);
+          border-radius: 12px;
+          padding: 8px 16px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 0.85rem;
+          font-weight: 700;
+          color: var(--gold);
+          margin-bottom: 20px;
+          box-shadow: 0 0 15px rgba(255, 235, 59, 0.1);
+        }
+
+        .buff-pulse {
+          width: 8px;
+          height: 8px;
+          background: #4caf50;
+          border-radius: 50%;
+          animation: pulse-green 1s infinite alternate;
+        }
+
+        /* Action panels row */
+        .action-panels-row {
+          display: flex;
+          gap: 16px;
+          width: 100%;
+          justify-content: center;
+          margin-top: 10px;
+        }
+
+        @media (max-width: 500px) {
+          .action-panels-row {
+            flex-direction: column;
+            align-items: center;
+          }
+        }
+
+        .action-card {
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 20px;
           padding: 16px;
-          width: 100%;
-          max-width: 320px;
+          flex: 1;
+          max-width: 240px;
           box-sizing: border-box;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 12px;
+          gap: 10px;
+          text-align: center;
         }
 
-        .exchange-text {
+        .action-card.gold-themed {
+          border-color: rgba(255, 235, 59, 0.12);
+          background: rgba(255, 235, 59, 0.02);
+        }
+
+        .action-card-title {
           font-size: 0.85rem;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: #ffffff;
+        }
+
+        .action-card.gold-themed .action-card-title {
+          color: var(--gold);
+        }
+
+        .action-card-text {
+          font-size: 0.78rem;
           color: var(--text-muted);
-          line-height: 1.4;
+          line-height: 1.45;
+          margin: 0;
+          flex: 1;
         }
 
-        .exchange-button {
-          background: var(--gold);
-          color: #000;
+        .action-btn {
+          width: 100%;
           border: none;
-          padding: 10px 20px;
-          border-radius: 99px;
-          font-weight: 700;
-          font-size: 0.85rem;
+          padding: 10px;
+          border-radius: 12px;
+          font-weight: 750;
+          font-size: 0.8rem;
           text-transform: uppercase;
           cursor: pointer;
           transition: all 0.2s ease;
-          width: 100%;
+          letter-spacing: 0.02em;
         }
 
-        .exchange-button:hover:not(:disabled) {
+        .action-btn.gold-fill {
+          background: var(--gold);
+          color: #000;
+        }
+
+        .action-btn.gold-fill:hover:not(:disabled) {
           background: var(--gold-hover);
           transform: translateY(-1px);
         }
 
-        .exchange-button:disabled {
-          background: rgba(255, 255, 255, 0.1);
-          color: rgba(255, 255, 255, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+        .action-btn.gold-outline {
+          background: transparent;
+          border: 1px solid var(--gold);
+          color: var(--gold);
+        }
+
+        .action-btn.gold-outline:hover:not(:disabled) {
+          background: rgba(255, 235, 59, 0.1);
+          transform: translateY(-1px);
+        }
+
+        .action-btn:disabled {
+          background: rgba(255, 255, 255, 0.05);
+          color: rgba(255, 255, 255, 0.25);
+          border: 1px solid rgba(255, 255, 255, 0.02);
           cursor: not-allowed;
         }
 
+        /* Trivia Popup Modal */
+        .trivia-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(5, 5, 2, 0.95);
+          backdrop-filter: blur(25px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 200000;
+          padding: 20px;
+          animation: fadeIn 0.25s ease forwards;
+        }
+
+        .trivia-card {
+          width: 100%;
+          max-width: 520px;
+          background: rgba(25, 25, 10, 0.85);
+          border: 2px solid var(--gold);
+          border-radius: 24px;
+          padding: 28px;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 235, 59, 0.25);
+          text-align: center;
+          box-sizing: border-box;
+          position: relative;
+        }
+
+        .trivia-timer-badge {
+          position: absolute;
+          top: -15px;
+          left: 50%;
+          transform: translateX(-50%);
+          background: #ff3b3b;
+          color: #fff;
+          font-weight: 800;
+          padding: 4px 16px;
+          border-radius: 99px;
+          font-size: 0.85rem;
+          box-shadow: 0 5px 15px rgba(255, 59, 59, 0.4);
+        }
+
+        .trivia-badge {
+          font-size: 0.8rem;
+          font-weight: 800;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: var(--gold);
+          margin-bottom: 12px;
+          display: block;
+        }
+
+        .trivia-q {
+          font-size: 1.35rem;
+          font-weight: 800;
+          margin: 0 0 24px;
+          line-height: 1.4;
+          color: #ffffff;
+        }
+
+        .trivia-options {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .trivia-opt-btn {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          color: #ffffff;
+          padding: 14px 20px;
+          border-radius: 14px;
+          font-size: 0.95rem;
+          font-weight: 600;
+          text-align: left;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .trivia-opt-btn:hover {
+          background: rgba(255, 235, 59, 0.08);
+          border-color: var(--gold);
+          transform: translateY(-1px);
+        }
+
+        .trivia-opt-letter {
+          background: rgba(255, 235, 59, 0.15);
+          color: var(--gold);
+          width: 24px;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 6px;
+          font-size: 0.8rem;
+          font-weight: 800;
+        }
+
+        /* Clicker Right Layout */
         .clicker-right {
           display: flex;
           flex-direction: column;
           gap: 16px;
-          max-height: 480px;
-          overflow-y: auto;
-          padding-right: 6px;
         }
 
-        .clicker-right::-webkit-scrollbar {
+        /* Tabs styling */
+        .shop-tabs {
+          display: grid;
+          grid-template-columns: repeat(5, 1fr);
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 14px;
+          padding: 4px;
+          gap: 2px;
+        }
+
+        .shop-tab-btn {
+          background: transparent;
+          border: none;
+          color: var(--text-muted);
+          padding: 8px 2px;
+          border-radius: 10px;
+          font-size: 0.65rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          text-transform: uppercase;
+          letter-spacing: 0.01em;
+          text-align: center;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .shop-tab-btn.active {
+          background: rgba(255, 235, 59, 0.1);
+          color: var(--gold);
+          border: 1px solid rgba(255, 235, 59, 0.15);
+        }
+
+        .upgrades-container {
+          max-height: 380px;
+          overflow-y: auto;
+          padding-right: 6px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .upgrades-container::-webkit-scrollbar {
           width: 6px;
         }
 
-        .clicker-right::-webkit-scrollbar-track {
+        .upgrades-container::-webkit-scrollbar-track {
           background: transparent;
         }
 
-        .clicker-right::-webkit-scrollbar-thumb {
+        .upgrades-container::-webkit-scrollbar-thumb {
           background: rgba(255, 235, 59, 0.15);
           border-radius: 99px;
         }
 
-        .clicker-right::-webkit-scrollbar-thumb:hover {
+        .upgrades-container::-webkit-scrollbar-thumb:hover {
           background: rgba(255, 235, 59, 0.3);
         }
 
@@ -425,11 +1339,11 @@ export default function ClickerPage() {
           background: rgba(255, 255, 255, 0.02);
           border: 1px solid rgba(255, 255, 255, 0.05);
           border-radius: 16px;
-          padding: 14px 16px;
+          padding: 12px 14px;
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 16px;
+          gap: 12px;
           transition: all 0.2s ease;
         }
 
@@ -440,16 +1354,16 @@ export default function ClickerPage() {
 
         .upgrade-info {
           display: flex;
-          gap: 14px;
+          gap: 12px;
           align-items: center;
           flex: 1;
         }
 
         .upgrade-emoji {
-          font-size: 1.6rem;
+          font-size: 1.5rem;
           background: rgba(255, 255, 255, 0.03);
-          width: 44px;
-          height: 44px;
+          width: 40px;
+          height: 40px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -463,38 +1377,39 @@ export default function ClickerPage() {
         }
 
         .upgrade-title {
-          font-size: 0.95rem;
+          font-size: 0.9rem;
           font-weight: 700;
           color: #fff;
-          margin-bottom: 2px;
+          margin: 0 0 2px;
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
         }
 
         .upgrade-count-badge {
           background: rgba(255, 255, 255, 0.08);
-          padding: 2px 8px;
+          padding: 1px 6px;
           border-radius: 99px;
-          font-size: 0.75rem;
+          font-size: 0.72rem;
           font-weight: 700;
           color: var(--gold);
         }
 
         .upgrade-desc {
-          font-size: 0.8rem;
+          font-size: 0.78rem;
           color: var(--text-muted);
-          line-height: 1.3;
+          line-height: 1.35;
+          margin: 0;
         }
 
         .upgrade-buy-btn {
-          background: rgba(255, 235, 59, 0.1);
-          border: 1px solid rgba(255, 235, 59, 0.25);
+          background: rgba(255, 235, 59, 0.08);
+          border: 1px solid rgba(255, 235, 59, 0.2);
           color: var(--gold);
-          padding: 8px 16px;
+          padding: 8px 12px;
           border-radius: 12px;
           font-weight: 700;
-          font-size: 0.85rem;
+          font-size: 0.82rem;
           cursor: pointer;
           transition: all 0.2s ease;
           display: flex;
@@ -510,19 +1425,188 @@ export default function ClickerPage() {
         }
 
         .upgrade-buy-btn:disabled {
-          opacity: 0.5;
+          opacity: 0.45;
           cursor: not-allowed;
-          border-color: rgba(255, 255, 255, 0.1);
+          border-color: rgba(255, 255, 255, 0.08);
           color: var(--text-muted);
           background: transparent;
         }
 
         .upgrade-cost-label {
-          font-size: 0.7rem;
+          font-size: 0.65rem;
           font-weight: 500;
           opacity: 0.8;
           margin-top: 1px;
           text-transform: uppercase;
+        }
+
+        /* Gacha Box Layout */
+        .gacha-panel {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+          background: rgba(255, 255, 255, 0.01);
+          border: 1px solid rgba(255, 255, 255, 0.04);
+          border-radius: 20px;
+          padding: 20px;
+          text-align: center;
+        }
+
+        .gacha-wheel {
+          width: 100px;
+          height: 100px;
+          border-radius: 50%;
+          border: 3px dashed var(--gold);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 2.5rem;
+          background: rgba(255, 235, 59, 0.03);
+          box-shadow: 0 0 20px rgba(255, 235, 59, 0.05);
+          position: relative;
+        }
+
+        .gacha-wheel.spinning {
+          animation: spin-fast-anim 0.15s linear infinite;
+          border-color: #ff3b3b;
+          box-shadow: 0 0 25px rgba(255, 59, 59, 0.2);
+        }
+
+        @keyframes spin-fast-anim {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+
+        .gacha-item-award {
+          animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+          background: rgba(255, 235, 59, 0.1);
+          border: 1px solid var(--gold);
+          border-radius: 12px;
+          padding: 8px 16px;
+          margin-top: 5px;
+        }
+
+        @keyframes popIn {
+          from { transform: scale(0.7); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+
+        /* Casino panel layout */
+        .casino-panel {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+          background: rgba(255, 255, 255, 0.01);
+          border: 1px solid rgba(255, 255, 255, 0.04);
+          border-radius: 20px;
+          padding: 20px;
+          text-align: center;
+        }
+
+        .casino-coin {
+          width: 80px;
+          height: 80px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #ffd700, #ffeb3b, #b8860b);
+          border: 2px solid #fff;
+          box-shadow: 0 10px 20px rgba(0,0,0,0.5), 0 0 15px rgba(255,235,59,0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 2rem;
+          font-weight: 900;
+          color: #000;
+          text-shadow: 0 1px 1px #fff;
+        }
+
+        .casino-coin.flipping {
+          animation: coin-flip-animation 0.2s linear infinite;
+        }
+
+        @keyframes coin-flip-animation {
+          0% { transform: rotateY(0deg); }
+          100% { transform: rotateY(360deg); }
+        }
+
+        .casino-bet-selector {
+          display: flex;
+          gap: 8px;
+          width: 100%;
+        }
+
+        .casino-bet-btn {
+          flex: 1;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          color: #ffffff;
+          padding: 8px;
+          border-radius: 8px;
+          font-size: 0.8rem;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        .casino-bet-btn.active {
+          background: var(--gold);
+          color: #000;
+          border-color: var(--gold);
+        }
+
+        /* Achievements Box */
+        .achievements-box {
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid rgba(255, 255, 255, 0.04);
+          border-radius: 20px;
+          padding: 16px;
+          margin-top: 6px;
+        }
+
+        .achievements-title {
+          font-size: 0.9rem;
+          font-weight: 800;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          margin-bottom: 12px;
+          color: var(--text-muted);
+        }
+
+        .achievements-list {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+        }
+
+        .achievement-badge {
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          padding: 8px 12px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 0.76rem;
+          font-weight: 600;
+          color: rgba(255, 255, 255, 0.4);
+          transition: all 0.3s ease;
+        }
+
+        .achievement-badge.unlocked {
+          background: rgba(255, 235, 59, 0.05);
+          border-color: rgba(255, 235, 59, 0.2);
+          color: #ffffff;
+          box-shadow: inset 0 0 10px rgba(255, 235, 59, 0.03);
+        }
+
+        .achievement-badge.unlocked .achievement-star {
+          color: var(--gold);
+          text-shadow: 0 0 5px var(--gold);
+        }
+
+        .achievement-star {
+          font-size: 0.95rem;
+          color: rgba(255, 255, 255, 0.15);
         }
 
         .back-link-container {
@@ -531,7 +1615,7 @@ export default function ClickerPage() {
           margin-top: 10px;
         }
 
-        @media (max-width: 820px) {
+        @media (max-width: 900px) {
           .back-link-container {
             grid-column: span 1;
           }
@@ -553,20 +1637,115 @@ export default function ClickerPage() {
         }
       `}</style>
 
+      {/* Floating notification banner */}
+      {buffMessage && (
+        <div className="notification-banner">
+          {buffMessage}
+        </div>
+      )}
+
+      {/* Folicular Trivia Modal Popup */}
+      {trivia && (
+        <div className="trivia-overlay">
+          <div className="trivia-card">
+            <span className="trivia-timer-badge">Tiempo: {trivia.timer}s</span>
+            <span className="trivia-badge">Trivia Folicular</span>
+            <h2 className="trivia-q">{trivia.q}</h2>
+            <div className="trivia-options">
+              {trivia.o.map((opt, i) => (
+                <button
+                  key={i}
+                  className="trivia-opt-btn"
+                  onClick={() => handleTriviaAnswer(i)}
+                  type="button"
+                >
+                  <span className="trivia-opt-letter">{["A", "B", "C", "D"][i]}</span>
+                  <span>{opt}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Golden Click Flying Pelado */}
+      {flyingPelado && !trivia && (
+        <div
+          className="flying-pelado"
+          style={{
+            left: `${flyingPelado.x}px`,
+            top: `${flyingPelado.y}px`,
+            width: `${flyingPelado.size}px`,
+            height: `${flyingPelado.size}px`,
+          }}
+          onClick={handleFlyingPeladoClick}
+        >
+          <img
+            src="/imgs/goat/Pelado Feliz.jpeg"
+            alt="Golden Pelado"
+            className="flying-pelado-img"
+            style={{
+              width: `${flyingPelado.size}px`,
+              height: `${flyingPelado.size}px`,
+              objectFit: "cover",
+            }}
+          />
+        </div>
+      )}
+
       <div className="clicker-content">
         <div className="clicker-left">
-          <h1 className="clicker-title">Pala Clicker</h1>
-          <p className="clicker-subtitle">Laburá haciendo clicks y canjealos por Reserva de Pala.</p>
+          <div className="clicker-title-area">
+            <h1 className="clicker-title">Pala Clicker</h1>
+            {brillo > 0 && (
+              <div className="prestige-badge">
+                <span>✨</span> Brillo Capilar +{brillo}
+              </div>
+            )}
+            
+            {/* Audio Mute/Unmute Toggle */}
+            <button
+              className="mute-toggle-btn"
+              onClick={() => setMuted((prev) => !prev)}
+              title={muted ? "Activar Sonido" : "Silenciar"}
+              type="button"
+            >
+              {muted ? "🔇" : "🔊"}
+            </button>
+          </div>
 
           <div className="counter-box">
             <div className="counter-num">{Math.floor(palas).toLocaleString()}</div>
-            <div className="counter-pps">Auto: {palasPerSecond.toFixed(1)} palas/s</div>
+            <div className="counter-pps">
+              <span>Auto: {palasPerSecond.toLocaleString(undefined, { maximumFractionDigits: 1 })}/s</span>
+              <span style={{ color: "rgba(255,255,255,0.2)" }}>•</span>
+              <span>Click: {clickPower.toLocaleString(undefined, { maximumFractionDigits: 1 })} (+{(totalCritChance * 100).toFixed(1)}% Crit)</span>
+            </div>
+          </div>
+
+          {/* Active Buff Indicator */}
+          {buff && (
+            <div className="buff-indicator">
+              <span className="buff-pulse" />
+              <span>{buff.name} ({Math.max(0, Math.ceil((buff.endTime - Date.now()) / 1000))}s)</span>
+            </div>
+          )}
+
+          {/* Click Combo bar */}
+          <div className="combo-container">
+            <div className="combo-header">
+              <span>Velocidad de Click</span>
+              <span className="combo-badge">{comboMultiplier.toFixed(1)}x Combo</span>
+            </div>
+            <div className="combo-bar-bg">
+              <div className="combo-bar-fill" style={{ width: `${combo}%` }} />
+            </div>
           </div>
 
           <div className="shovel-wrapper">
             <button
               ref={shovelRef}
-              className="shovel-button"
+              className={`shovel-button ${shake ? "shake" : ""}`}
               onClick={handleShovelClick}
               type="button"
             >
@@ -577,71 +1756,269 @@ export default function ClickerPage() {
               <span
                 key={txt.id}
                 className="float-text"
-                style={{ left: `${txt.x}px`, top: `${txt.y}px` }}
+                style={{
+                  left: `${txt.x}px`,
+                  top: `${txt.y}px`,
+                  color: txt.color,
+                  transform: `translate(-50%, -50%) scale(${txt.scale})`,
+                  fontWeight: txt.scale > 1 ? "900" : "700"
+                }}
               >
                 {txt.text}
               </span>
             ))}
           </div>
 
-          <div className="exchange-panel">
-            <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>
-              Canjear Reserva de Pala
+          <div className="action-panels-row">
+            {/* Canjear panel */}
+            <div className="action-card">
+              <div className="action-card-title">Canjear Crédito</div>
+              <p className="action-card-text">
+                Cambia {EXCHANGE_COST} palas por +{EXCHANGE_CREDIT}% de Reserva de Pala.
+              </p>
+              <button
+                className="action-btn gold-fill"
+                disabled={palas < EXCHANGE_COST || credit >= 100}
+                onClick={handleExchange}
+                type="button"
+              >
+                {credit >= 100 ? "Máximo" : "Canjear"}
+              </button>
             </div>
-            <div className="exchange-text">
-              Consumí {EXCHANGE_COST} palas de laburo para recargar +{EXCHANGE_CREDIT}% de tu Reserva de Pala global.
+
+            {/* Prestige panel */}
+            <div className="action-card gold-themed">
+              <div className="action-card-title">La Gran Pelada</div>
+              <p className="action-card-text">
+                Reinicia tu juego a cambio de Brillo Capilar (+12% permanente). Requiere {PRESTIGE_THRESHOLD.toLocaleString()} palas.
+              </p>
+              <button
+                className="action-btn gold-outline"
+                disabled={palas < PRESTIGE_THRESHOLD}
+                onClick={executePrestige}
+                type="button"
+              >
+                Prestigio (+{Math.floor(palas / PRESTIGE_THRESHOLD)})
+              </button>
             </div>
-            <button
-              className="exchange-button"
-              disabled={palas < EXCHANGE_COST || credit >= 100}
-              onClick={handleExchange}
-              type="button"
-            >
-              {credit >= 100 ? "Reserva al máximo" : `Canjear (${EXCHANGE_COST} palas)`}
-            </button>
           </div>
         </div>
 
         <div className="clicker-right">
-          <h2 style={{ fontSize: "1.2rem", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.02em", margin: "0 0 10px 0" }}>
-            Upgrades de Laburo
-          </h2>
+          <div className="shop-tabs">
+            <button className={`shop-tab-btn ${shopTab === "passive" ? "active" : ""}`} onClick={() => setShopTab("passive")} type="button">Pasivas</button>
+            <button className={`shop-tab-btn ${shopTab === "active" ? "active" : ""}`} onClick={() => setShopTab("active")} type="button">Clicks</button>
+            <button className={`shop-tab-btn ${shopTab === "collection" ? "active" : ""}`} onClick={() => setShopTab("collection")} type="button">Loot</button>
+            <button className={`shop-tab-btn ${shopTab === "casino" ? "active" : ""}`} onClick={() => setShopTab("casino")} type="button">Casino</button>
+            <button className={`shop-tab-btn ${shopTab === "prestige" ? "active" : ""}`} onClick={() => setShopTab("prestige")} type="button">Brillo</button>
+          </div>
 
-          {UPGRADES_CONFIG.map((upgrade) => {
-            const cost = getUpgradeCost(upgrade.id);
-            const count = upgrades[upgrade.id] || 0;
-            const canAfford = palas >= cost;
+          <div className="upgrades-container">
+            {shopTab === "passive" && (
+              /* Passive PPS Upgrades */
+              UPGRADES_CONFIG.map((upgrade) => {
+                const cost = getCost(upgrade.id, false);
+                const count = upgrades[upgrade.id] || 0;
+                const canAfford = palas >= cost;
 
-            return (
-              <div
-                key={upgrade.id}
-                className={`upgrade-card ${!canAfford ? "disabled" : ""}`}
-              >
-                <div className="upgrade-info">
-                  <div className="upgrade-emoji">{upgrade.emoji}</div>
-                  <div className="upgrade-details">
-                    <h3 className="upgrade-title">
-                      <span>{upgrade.name}</span>
-                      {count > 0 && (
-                        <span className="upgrade-count-badge">x{count}</span>
-                      )}
-                    </h3>
-                    <p className="upgrade-desc">{upgrade.desc}</p>
+                return (
+                  <div key={upgrade.id} className={`upgrade-card ${!canAfford ? "disabled" : ""}`}>
+                    <div className="upgrade-info">
+                      <div className="upgrade-emoji">{upgrade.emoji}</div>
+                      <div className="upgrade-details">
+                        <h3 className="upgrade-title">
+                          <span>{upgrade.name}</span>
+                          {count > 0 && <span className="upgrade-count-badge">x{count}</span>}
+                        </h3>
+                        <p className="upgrade-desc">{upgrade.desc}</p>
+                      </div>
+                    </div>
+                    <button className="upgrade-buy-btn" disabled={!canAfford} onClick={() => buyUpgrade(upgrade.id)} type="button">
+                      <span>{cost.toLocaleString()}</span>
+                      <span className="upgrade-cost-label">Palas</span>
+                    </button>
                   </div>
+                );
+              })
+            )}
+
+            {shopTab === "active" && (
+              /* Active Click Upgrades */
+              TOOLS_CONFIG.map((tool) => {
+                const cost = getCost(tool.id, true);
+                const count = tools[tool.id] || 0;
+                const canAfford = palas >= cost;
+
+                return (
+                  <div key={tool.id} className={`upgrade-card ${!canAfford ? "disabled" : ""}`}>
+                    <div className="upgrade-info">
+                      <div className="upgrade-emoji">{tool.emoji}</div>
+                      <div className="upgrade-details">
+                        <h3 className="upgrade-title">
+                          <span>{tool.name}</span>
+                          {count > 0 && <span className="upgrade-count-badge">x{count}</span>}
+                        </h3>
+                        <p className="upgrade-desc">{tool.desc}</p>
+                      </div>
+                    </div>
+                    <button className="upgrade-buy-btn" disabled={!canAfford} onClick={() => buyTool(tool.id)} type="button">
+                      <span>{cost.toLocaleString()}</span>
+                      <span className="upgrade-cost-label">Palas</span>
+                    </button>
+                  </div>
+                );
+              })
+            )}
+
+            {shopTab === "collection" && (
+              /* Gacha Spin & Collection */
+              <div className="gacha-panel">
+                <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>Lotería Folicular</div>
+                <p className="upgrade-desc">Gastá {GACHA_COST} palas para tirar la ruleta de ítems coleccionables.</p>
+                <div className={`gacha-wheel ${spinning ? "spinning" : ""}`}>
+                  {spinning ? "🌀" : "🥚"}
+                </div>
+                
+                <button className="action-btn gold-fill" disabled={palas < GACHA_COST || spinning} onClick={spinGacha} type="button">
+                  {spinning ? "Girando..." : `Girar (${GACHA_COST} palas)`}
+                </button>
+
+                {spinResult && (
+                  <div className="gacha-item-award">
+                    ¡Ganaste <strong>{spinResult.name}</strong> {spinResult.emoji}!
+                  </div>
+                )}
+
+                <div style={{ width: "100%", textAlign: "left", marginTop: "10px", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "12px" }}>
+                  <div style={{ fontWeight: 700, fontSize: "0.85rem", marginBottom: "8px" }}>Tu Colección:</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {GACHA_ITEMS.map((item) => {
+                      const count = inventory[item.id] || 0;
+                      return (
+                        <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", color: count > 0 ? "#fff" : "rgba(255,255,255,0.25)" }}>
+                          <span style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+                            <span>{item.emoji}</span>
+                            <span>{item.name}</span>
+                          </span>
+                          <span style={{ fontWeight: 700 }}>x{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {shopTab === "casino" && (
+              /* Gambling Doble o Nada */
+              <div className="casino-panel">
+                <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>Doble o Nada</div>
+                <p className="upgrade-desc">Apostá un porcentaje de tus palas a cara o ceca de cabeza de pelado.</p>
+                
+                <div className={`casino-coin ${flipping ? "flipping" : ""}`}>
+                  {flipping ? "🪙" : "🥚"}
+                </div>
+
+                <div className="casino-bet-selector">
+                  {[10, 25, 50].map((pct) => (
+                    <button
+                      key={pct}
+                      className={`casino-bet-btn ${betPercent === pct ? "active" : ""}`}
+                      onClick={() => setBetPercent(pct)}
+                      disabled={flipping}
+                      type="button"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
                 </div>
 
                 <button
-                  className="upgrade-buy-btn"
-                  disabled={!canAfford}
-                  onClick={() => buyUpgrade(upgrade.id)}
+                  className="action-btn gold-fill"
+                  disabled={palas <= 10 || flipping}
+                  onClick={gambleFlip}
                   type="button"
                 >
-                  <span>{cost.toLocaleString()}</span>
-                  <span className="upgrade-cost-label">Palas</span>
+                  {flipping ? "Girando..." : `Apostar ${Math.floor(palas * (betPercent / 100)).toLocaleString()} palas`}
                 </button>
+
+                {flipResult && !flipping && (
+                  <div style={{ fontWeight: 800, fontSize: "0.9rem", color: flipResult === "win" ? "#4caf50" : "#f44336" }}>
+                    {flipResult === "win" ? "¡Ganaste!" : "¡Perdiste!"}
+                  </div>
+                )}
               </div>
-            );
-          })}
+            )}
+
+            {shopTab === "prestige" && (
+              /* Prestige Upgrades Shop (spending Brillo Capilar) */
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={{ background: "rgba(255, 235, 59, 0.03)", border: "1px solid rgba(255, 235, 59, 0.15)", borderRadius: "16px", padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase", color: "var(--gold)", marginBottom: "4px" }}>Tus Brillo Capilar</div>
+                  <div style={{ fontSize: "2rem", fontWeight: 900, fontFamily: "monospace", color: "#fff" }}>{brillo} ✨</div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {PRESTIGE_UPGRADES_CONFIG.map((upgrade) => {
+                    const owned = prestigeUpgrades[upgrade.id] > 0;
+                    const canAfford = brillo >= upgrade.cost;
+
+                    return (
+                      <div key={upgrade.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.02)", border: owned ? "1px solid rgba(255, 235, 59, 0.2)" : "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "10px 12px", gap: "10px" }}>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center", flex: 1 }}>
+                          <span style={{ fontSize: "1.4rem" }}>{upgrade.emoji}</span>
+                          <div style={{ display: "flex", flexDirection: "column", textAlign: "left" }}>
+                            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: owned ? "var(--gold)" : "#fff" }}>{upgrade.name}</span>
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.25 }}>{upgrade.desc}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          className="upgrade-buy-btn"
+                          disabled={owned || !canAfford}
+                          onClick={() => buyPrestigeUpgrade(upgrade.id)}
+                          type="button"
+                          style={{ minWidth: "70px", padding: "6px" }}
+                        >
+                          {owned ? (
+                            <span style={{ color: "var(--gold)" }}>Comprado</span>
+                          ) : (
+                            <>
+                              <span>{upgrade.cost}</span>
+                              <span style={{ fontSize: "0.6rem" }}>Brillo</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Achievements list */}
+          <div className="achievements-box">
+            <div className="achievements-title">Logros Laborales</div>
+            <div className="achievements-list">
+              <div className={`achievement-badge ${achievements.first_upgrade ? "unlocked" : ""}`}>
+                <span className="achievement-star">★</span>
+                <span>Primer Contrato</span>
+              </div>
+              <div className={`achievement-badge ${achievements.negrero ? "unlocked" : ""}`}>
+                <span className="achievement-star">★</span>
+                <span>Jefe Negrero</span>
+              </div>
+              <div className={`achievement-badge ${achievements.gold_click ? "unlocked" : ""}`}>
+                <span className="achievement-star">★</span>
+                <span>Fiebre del Pelado</span>
+              </div>
+              <div className={`achievement-badge ${achievements.first_prestige ? "unlocked" : ""}`}>
+                <span className="achievement-star">★</span>
+                <span>Brillo Inmortal</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="back-link-container">
