@@ -9,6 +9,9 @@ const UPGRADES_CONFIG = [
   { id: "pasante", name: "Contratar Pasante", baseCost: 1200, increase: 25, desc: "Un becario entusiasta que labura por vos. Auto-genera +25 pala/s.", emoji: "👔" },
   { id: "pela_ai", name: "Pela-AI™ Bot", baseCost: 10000, increase: 150, desc: "Automatización neuronal artificial. Auto-genera +150 pala/s.", emoji: "🤖" },
   { id: "minoxidil", name: "Reactor de Minoxidil", baseCost: 80000, increase: 1000, desc: "Energía pura a base de loción capilar. Auto-genera +1000 pala/s.", emoji: "🌋" },
+  { id: "clonacion", name: "Clonación de Pelados", baseCost: 1000000, increase: 15000, desc: "Bio-ingeniería capilar a gran escala. Auto-genera +15k pala/s.", emoji: "👥" },
+  { id: "sonda", name: "Sonda Folicular", baseCost: 50000000, increase: 500000, desc: "Exploración cósmica en búsqueda de cabello. Auto-genera +500k pala/s.", emoji: "🛰️" },
+  { id: "agujero", name: "Agujero Negro de Pelas", baseCost: 2000000000, increase: 20000000, desc: "Gravedad infinita que atrae trabajo. Auto-genera +20M pala/s.", emoji: "🕳️" },
 ];
 
 const TOOLS_CONFIG = [
@@ -68,13 +71,41 @@ export default function ClickerPage() {
   
   // Game states
   const [palas, setPalas] = useState(0);
-  const [upgrades, setUpgrades] = useState({ madera: 0, acero: 0, pasante: 0, pela_ai: 0, minoxidil: 0 });
-  const [tools, setTools] = useState({ afilador: 0, mango: 0, guantes: 0, locion: 0, gravitacional: 0 });
-  const [inventory, setInventory] = useState({ gorra: 0, minoxidil_viejito: 0, secador_roto: 0, pala_jefe: 0, peluca_cotillon: 0 });
+  const [upgrades, setUpgrades] = useState({
+    madera: 0,
+    acero: 0,
+    pasante: 0,
+    pela_ai: 0,
+    minoxidil: 0,
+    clonacion: 0,
+    sonda: 0,
+    agujero: 0,
+  });
+
+  const [tools, setTools] = useState({
+    afilador: 0,
+    mango: 0,
+    guantes: 0,
+    locion: 0,
+    gravitacional: 0,
+  });
+  
+  const [inventory, setInventory] = useState({
+    gorra: 0,
+    minoxidil_viejito: 0,
+    secador_roto: 0,
+    pala_jefe: 0,
+    peluca_cotillon: 0,
+  });
   
   // Prestige states
-  const [brillo, setBrillo] = useState(0); // prestige currency owned
-  const [prestigeUpgrades, setPrestigeUpgrades] = useState({ cegador: 0, contratos: 0, buff_double: 0, iman: 0 });
+  const [brillo, setBrillo] = useState(0);
+  const [prestigeUpgrades, setPrestigeUpgrades] = useState({
+    cegador: 0,
+    contratos: 0,
+    buff_double: 0,
+    iman: 0,
+  });
 
   // Sound settings
   const [muted, setMuted] = useState(false);
@@ -120,7 +151,7 @@ export default function ClickerPage() {
     first_prestige: false,
   });
 
-  // Synthesized Sound Triggers (Web Audio API)
+  // Synthesized Sound Triggers
   const playSound = (type) => {
     if (muted) return;
     try {
@@ -192,13 +223,13 @@ export default function ClickerPage() {
   // Load game from local storage on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const savedPalas = localStorage.getItem("clicker_palas_v5");
-      const savedUpgrades = localStorage.getItem("clicker_upgrades_v5");
-      const savedTools = localStorage.getItem("clicker_tools_v5");
-      const savedInventory = localStorage.getItem("clicker_inventory_v5");
-      const savedBrillo = localStorage.getItem("clicker_brillo_v5");
-      const savedPrestigeUpgrades = localStorage.getItem("clicker_prestige_upgrades_v5");
-      const savedAchievements = localStorage.getItem("clicker_achievements_v5");
+      const savedPalas = localStorage.getItem("clicker_palas_v6");
+      const savedUpgrades = localStorage.getItem("clicker_upgrades_v6");
+      const savedTools = localStorage.getItem("clicker_tools_v6");
+      const savedInventory = localStorage.getItem("clicker_inventory_v6");
+      const savedBrillo = localStorage.getItem("clicker_brillo_v6");
+      const savedPrestigeUpgrades = localStorage.getItem("clicker_prestige_upgrades_v6");
+      const savedAchievements = localStorage.getItem("clicker_achievements_v6");
       const savedMuted = localStorage.getItem("clicker_muted");
 
       if (savedPalas !== null) setPalas(parseFloat(savedPalas));
@@ -238,13 +269,13 @@ export default function ClickerPage() {
   // Save game to local storage
   useEffect(() => {
     if (isClientLoaded) {
-      localStorage.setItem("clicker_palas_v5", palas.toString());
-      localStorage.setItem("clicker_upgrades_v5", JSON.stringify(upgrades));
-      localStorage.setItem("clicker_tools_v5", JSON.stringify(tools));
-      localStorage.setItem("clicker_inventory_v5", JSON.stringify(inventory));
-      localStorage.setItem("clicker_brillo_v5", brillo.toString());
-      localStorage.setItem("clicker_prestige_upgrades_v5", JSON.stringify(prestigeUpgrades));
-      localStorage.setItem("clicker_achievements_v5", JSON.stringify(achievements));
+      localStorage.setItem("clicker_palas_v6", palas.toString());
+      localStorage.setItem("clicker_upgrades_v6", JSON.stringify(upgrades));
+      localStorage.setItem("clicker_tools_v6", JSON.stringify(tools));
+      localStorage.setItem("clicker_inventory_v6", JSON.stringify(inventory));
+      localStorage.setItem("clicker_brillo_v6", brillo.toString());
+      localStorage.setItem("clicker_prestige_upgrades_v6", JSON.stringify(prestigeUpgrades));
+      localStorage.setItem("clicker_achievements_v6", JSON.stringify(achievements));
       localStorage.setItem("clicker_muted", muted.toString());
     }
   }, [palas, upgrades, tools, inventory, brillo, prestigeUpgrades, achievements, muted, isClientLoaded]);
@@ -261,7 +292,7 @@ export default function ClickerPage() {
   }, 0);
 
   // Apply Prestige and Buff multipliers to PPS
-  const prestigeMultiplier = 1 + brillo * 0.12; // +12% per prestige point
+  const prestigeMultiplier = 1 + brillo * 0.12;
   
   // Prestige Shop Buff double effect
   const buffDbl = prestigeUpgrades.buff_double ? 2 : 1;
@@ -354,7 +385,6 @@ export default function ClickerPage() {
   useEffect(() => {
     if (!isClientLoaded) return;
 
-    // Prestige Shop Magnet item increases spawn frequency (+50% spawn rate)
     const frequencyFactor = prestigeUpgrades.iman ? 6500 : 10000;
 
     const spawnInterval = setInterval(() => {
@@ -439,7 +469,7 @@ export default function ClickerPage() {
 
   const totalCritChance = 0.05 + activeCritChance + inventoryCritChance;
 
-  // Prestige Shop cegador effect: clicks gain +5% of current PPS
+  // Prestige Shop cegador effect
   const ppsClickBonus = prestigeUpgrades.cegador ? palasPerSecond * 0.05 : 0;
 
   // Click power calculation
@@ -572,7 +602,7 @@ export default function ClickerPage() {
     }, 900);
   };
 
-  // Get current cost of upgrade (passive, active, prestige)
+  // Get current cost of upgrade
   const getCost = (id, isTool = false) => {
     const list = isTool ? TOOLS_CONFIG : UPGRADES_CONFIG;
     const config = list.find((u) => u.id === id);
@@ -659,7 +689,7 @@ export default function ClickerPage() {
     }, 1200);
   };
 
-  // Casino (Doble o Nada) Coin Flip
+  // Casino (Doble o Nada) Coin Flip with 30% AFIP Tax on wins
   const gambleFlip = () => {
     if (palas <= 10 || flipping) return;
     
@@ -671,40 +701,50 @@ export default function ClickerPage() {
     setTimeout(() => {
       const isWin = Math.random() < 0.5;
       if (isWin) {
-        setPalas((prev) => prev + betAmount);
+        // Tax 30% on the bet winnings: only receive 70% of the bet as gains
+        const netWinnings = Math.floor(betAmount * 0.7);
+        setPalas((prev) => prev + netWinnings);
         setFlipResult("win");
-        triggerFlashMessage(`¡Apuesta Ganada! +${betAmount.toLocaleString()} palas.`);
+        triggerFlashMessage(`¡Apuesta Ganada! AFIP retuvo el 30% del premio. Ganancia neta: +${netWinnings.toLocaleString()} palas.`);
       } else {
+        // Lose 100% of the bet amount
         setPalas((prev) => Math.max(0, prev - betAmount));
         setFlipResult("lose");
-        triggerFlashMessage(`¡Apuesta Perdida! -${betAmount.toLocaleString()} palas.`);
+        triggerFlashMessage(`¡Apuesta Perdida! Perdiste -${betAmount.toLocaleString()} palas.`);
       }
       setFlipping(false);
     }, 1500);
   };
 
+  // Calculate prestige points gained (Quadratic prestige scaling formula)
+  const getGainedBrillo = () => {
+    return Math.max(0, Math.floor(Math.sqrt(palas / PRESTIGE_THRESHOLD)) - brillo);
+  };
+
+  const gainedBrillo = getGainedBrillo();
+
   // Execute Prestige
   const executePrestige = () => {
-    if (palas >= PRESTIGE_THRESHOLD) {
+    if (gainedBrillo > 0) {
       playSound("buy");
-      const earnedShine = Math.floor(palas / PRESTIGE_THRESHOLD);
-      setBrillo((prev) => prev + earnedShine);
+      setBrillo((prev) => prev + gainedBrillo);
       setPalas(0);
-      setUpgrades({ madera: 0, acero: 0, pasante: 0, pela_ai: 0, minoxidil: 0 });
+      setUpgrades({ madera: 0, acero: 0, pasante: 0, pela_ai: 0, minoxidil: 0, clonacion: 0, sonda: 0, agujero: 0 });
       setTools({ afilador: 0, mango: 0, guantes: 0, locion: 0, gravitacional: 0 });
       setInventory({ gorra: 0, minoxidil_viejito: 0, secador_roto: 0, pala_jefe: 0, peluca_cotillon: 0 });
       setCombo(0);
       setBuff(null);
-      triggerFlashMessage(`¡Hiciste la Gran Pelada! Ganaste +${earnedShine} de Brillo Capilar.`);
+      triggerFlashMessage(`¡Hiciste la Gran Pelada! Ganaste +${gainedBrillo} de Brillo Capilar.`);
     }
   };
 
-  // Canjear Palas
+  // Canjear Palas por Reserva de Pala (Social Credit)
   const handleExchange = () => {
-    if (palas >= EXCHANGE_COST) {
+    if (palas >= EXCHANGE_COST && credit < 100) {
       playSound("buy");
       setPalas((prev) => prev - EXCHANGE_COST);
       addCredit(EXCHANGE_CREDIT);
+      triggerFlashMessage(`¡Canjeaste ${EXCHANGE_COST} palas por +${EXCHANGE_CREDIT}% de Reserva de Pala!`);
     }
   };
 
@@ -969,10 +1009,10 @@ export default function ClickerPage() {
         }
 
         .shovel-button.shake .shovel-image {
-          animation: shake-fast 0.15s infinite alternate;
+          animation: shake-fast-anim 0.15s infinite alternate;
         }
 
-        @keyframes shake-fast {
+        @keyframes shake-fast-anim {
           0% { transform: scale(0.95) rotate(-12deg) translate(3px, 2px); }
           100% { transform: scale(0.95) rotate(-18deg) translate(-3px, -2px); }
         }
@@ -1790,15 +1830,15 @@ export default function ClickerPage() {
             <div className="action-card gold-themed">
               <div className="action-card-title">La Gran Pelada</div>
               <p className="action-card-text">
-                Reinicia tu juego a cambio de Brillo Capilar (+12% permanente). Requiere {PRESTIGE_THRESHOLD.toLocaleString()} palas.
+                Reinicia tu juego a cambio de Brillo Capilar. Requiere palas proporcionales a tu nivel.
               </p>
               <button
                 className="action-btn gold-outline"
-                disabled={palas < PRESTIGE_THRESHOLD}
+                disabled={gainedBrillo <= 0}
                 onClick={executePrestige}
                 type="button"
               >
-                Prestigio (+{Math.floor(palas / PRESTIGE_THRESHOLD)})
+                Prestigio (+{gainedBrillo})
               </button>
             </div>
           </div>
@@ -1914,6 +1954,7 @@ export default function ClickerPage() {
               <div className="casino-panel">
                 <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>Doble o Nada</div>
                 <p className="upgrade-desc">Apostá un porcentaje de tus palas a cara o ceca de cabeza de pelado.</p>
+                <div style={{ fontSize: "0.75rem", color: "#ffc107", fontWeight: 700 }}>⚠️ Retención AFIP del 30% en premios ganados</div>
                 
                 <div className={`casino-coin ${flipping ? "flipping" : ""}`}>
                   {flipping ? "🪙" : "🥚"}
