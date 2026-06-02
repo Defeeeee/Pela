@@ -42,6 +42,40 @@ const EXCHANGE_CREDIT = 10;
 const PRESTIGE_THRESHOLD = 100000;
 const GACHA_COST = 500;
 
+const SUFFIXES = [
+  { value: 1e6, symbol: "M" },
+  { value: 1e9, symbol: "B" },
+  { value: 1e12, symbol: "T" },
+  { value: 1e15, symbol: "Qa" },
+  { value: 1e18, symbol: "Qi" },
+  { value: 1e21, symbol: "Sx" },
+  { value: 1e24, symbol: "Sp" },
+  { value: 1e27, symbol: "Oc" },
+  { value: 1e30, symbol: "No" },
+  { value: 1e33, symbol: "Dc" },
+  { value: 1e36, symbol: "Ud" },
+  { value: 1e39, symbol: "Dd" },
+];
+
+const formatVal = (num, decimals = 1) => {
+  if (num === null || num === undefined || isNaN(num)) return "0";
+  if (num === Infinity) return "∞";
+  
+  const absNum = Math.abs(num);
+  if (absNum < 1e6) {
+    return num.toLocaleString(undefined, { maximumFractionDigits: decimals });
+  }
+  
+  for (let i = SUFFIXES.length - 1; i >= 0; i--) {
+    if (absNum >= SUFFIXES[i].value) {
+      const formatted = (num / SUFFIXES[i].value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+      return `${formatted} ${SUFFIXES[i].symbol}`;
+    }
+  }
+  
+  return num.toLocaleString(undefined, { maximumFractionDigits: 2 });
+};
+
 const TRIVIA_POOL = [
   {
     q: "¿Cuál es el peor enemigo natural del pelado?",
@@ -514,7 +548,7 @@ export default function ClickerPage() {
     if (chosen.type === "rain") {
       const award = Math.max(50, Math.floor(palasPerSecond * 45));
       setPalas((prev) => prev + award);
-      triggerFlashMessage(`¡Lluvia de Palas! Ganaste +${award.toLocaleString()} palas inmediatamente.`);
+      triggerFlashMessage(`¡Lluvia de Palas! Ganaste +${formatVal(award)} palas inmediatamente.`);
     } else {
       setBuff({
         type: chosen.type,
@@ -705,12 +739,12 @@ export default function ClickerPage() {
         const netWinnings = Math.floor(betAmount * 0.7);
         setPalas((prev) => prev + netWinnings);
         setFlipResult("win");
-        triggerFlashMessage(`¡Apuesta Ganada! AFIP retuvo el 30% del premio. Ganancia neta: +${netWinnings.toLocaleString()} palas.`);
+        triggerFlashMessage(`¡Apuesta Ganada! AFIP retuvo el 30% del premio. Ganancia neta: +${formatVal(netWinnings)} palas.`);
       } else {
         // Lose 100% of the bet amount
         setPalas((prev) => Math.max(0, prev - betAmount));
         setFlipResult("lose");
-        triggerFlashMessage(`¡Apuesta Perdida! Perdiste -${betAmount.toLocaleString()} palas.`);
+        triggerFlashMessage(`¡Apuesta Perdida! Perdiste -${formatVal(betAmount)} palas.`);
       }
       setFlipping(false);
     }, 1500);
@@ -734,7 +768,7 @@ export default function ClickerPage() {
       setInventory({ gorra: 0, minoxidil_viejito: 0, secador_roto: 0, pala_jefe: 0, peluca_cotillon: 0 });
       setCombo(0);
       setBuff(null);
-      triggerFlashMessage(`¡Hiciste la Gran Pelada! Ganaste +${gainedBrillo} de Brillo Capilar.`);
+      triggerFlashMessage(`¡Hiciste la Gran Pelada! Ganaste +${formatVal(gainedBrillo)} de Brillo Capilar.`);
     }
   };
 
@@ -1738,8 +1772,8 @@ export default function ClickerPage() {
           <div className="clicker-title-area">
             <h1 className="clicker-title">Pala Clicker</h1>
             {brillo > 0 && (
-              <div className="prestige-badge">
-                <span>✨</span> Brillo Capilar +{brillo}
+              <div className="prestige-badge" title={brillo.toLocaleString()}>
+                <span>✨</span> Brillo Capilar +{formatVal(brillo)}
               </div>
             )}
             
@@ -1755,11 +1789,11 @@ export default function ClickerPage() {
           </div>
 
           <div className="counter-box">
-            <div className="counter-num">{Math.floor(palas).toLocaleString()}</div>
+            <div className="counter-num" title={Math.floor(palas).toLocaleString()}>{formatVal(palas, 0)}</div>
             <div className="counter-pps">
-              <span>Auto: {palasPerSecond.toLocaleString(undefined, { maximumFractionDigits: 1 })}/s</span>
+              <span title={palasPerSecond.toLocaleString()}>Auto: {formatVal(palasPerSecond)}/s</span>
               <span style={{ color: "rgba(255,255,255,0.2)" }}>•</span>
-              <span>Click: {clickPower.toLocaleString(undefined, { maximumFractionDigits: 1 })} (+{(totalCritChance * 100).toFixed(1)}% Crit)</span>
+              <span title={clickPower.toLocaleString()}>Click: {formatVal(clickPower)} (+{(totalCritChance * 100).toFixed(1)}% Crit)</span>
             </div>
           </div>
 
@@ -1837,8 +1871,9 @@ export default function ClickerPage() {
                 disabled={gainedBrillo <= 0}
                 onClick={executePrestige}
                 type="button"
+                title={gainedBrillo.toLocaleString()}
               >
-                Prestigio (+{gainedBrillo})
+                Prestigio (+{formatVal(gainedBrillo)})
               </button>
             </div>
           </div>
@@ -1873,8 +1908,8 @@ export default function ClickerPage() {
                         <p className="upgrade-desc">{upgrade.desc}</p>
                       </div>
                     </div>
-                    <button className="upgrade-buy-btn" disabled={!canAfford} onClick={() => buyUpgrade(upgrade.id)} type="button">
-                      <span>{cost.toLocaleString()}</span>
+                    <button className="upgrade-buy-btn" disabled={!canAfford} onClick={() => buyUpgrade(upgrade.id)} type="button" title={cost.toLocaleString()}>
+                      <span>{formatVal(cost)}</span>
                       <span className="upgrade-cost-label">Palas</span>
                     </button>
                   </div>
@@ -1901,8 +1936,8 @@ export default function ClickerPage() {
                         <p className="upgrade-desc">{tool.desc}</p>
                       </div>
                     </div>
-                    <button className="upgrade-buy-btn" disabled={!canAfford} onClick={() => buyTool(tool.id)} type="button">
-                      <span>{cost.toLocaleString()}</span>
+                    <button className="upgrade-buy-btn" disabled={!canAfford} onClick={() => buyTool(tool.id)} type="button" title={cost.toLocaleString()}>
+                      <span>{formatVal(cost)}</span>
                       <span className="upgrade-cost-label">Palas</span>
                     </button>
                   </div>
@@ -1979,8 +2014,9 @@ export default function ClickerPage() {
                   disabled={palas <= 10 || flipping}
                   onClick={gambleFlip}
                   type="button"
+                  title={Math.floor(palas * (betPercent / 100)).toLocaleString()}
                 >
-                  {flipping ? "Girando..." : `Apostar ${Math.floor(palas * (betPercent / 100)).toLocaleString()} palas`}
+                  {flipping ? "Girando..." : `Apostar ${formatVal(Math.floor(palas * (betPercent / 100)))} palas`}
                 </button>
 
                 {flipResult && !flipping && (
@@ -1996,7 +2032,7 @@ export default function ClickerPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 <div style={{ background: "rgba(255, 235, 59, 0.03)", border: "1px solid rgba(255, 235, 59, 0.15)", borderRadius: "16px", padding: "12px", textAlign: "center" }}>
                   <div style={{ fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase", color: "var(--gold)", marginBottom: "4px" }}>Tus Brillo Capilar</div>
-                  <div style={{ fontSize: "2rem", fontWeight: 900, fontFamily: "monospace", color: "#fff" }}>{brillo} ✨</div>
+                  <div style={{ fontSize: "2rem", fontWeight: 900, fontFamily: "monospace", color: "#fff" }} title={brillo.toLocaleString()}>{formatVal(brillo)} ✨</div>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
