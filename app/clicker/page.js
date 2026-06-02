@@ -7,11 +7,19 @@ const UPGRADES_CONFIG = [
   { id: "madera", name: "Pala de Madera", baseCost: 15, increase: 1, desc: "Sencilla pero noble. Auto-genera +1 pala/s.", emoji: "🪵" },
   { id: "acero", name: "Pala de Acero", baseCost: 150, increase: 5, desc: "Forjada en las minas de folículos. Auto-genera +5 pala/s.", emoji: "⚔️" },
   { id: "pasante", name: "Contratar Pasante", baseCost: 1200, increase: 25, desc: "Un becario entusiasta que labura por vos. Auto-genera +25 pala/s.", emoji: "👔" },
+  { id: "union_delegate", name: "Delegado Sindical", baseCost: 15000, increase: 0, desc: "Sindicato de la Pala. Aumenta la producción pasiva un 25%, pero habilita huelgas aleatorias.", emoji: "🪧" },
   { id: "pela_ai", name: "Pela-AI™ Bot", baseCost: 10000, increase: 150, desc: "Automatización neuronal artificial. Auto-genera +150 pala/s.", emoji: "🤖" },
   { id: "minoxidil", name: "Reactor de Minoxidil", baseCost: 80000, increase: 1000, desc: "Energía pura a base de loción capilar. Auto-genera +1000 pala/s.", emoji: "🌋" },
   { id: "clonacion", name: "Clonación de Pelados", baseCost: 1000000, increase: 15000, desc: "Bio-ingeniería capilar a gran escala. Auto-genera +15k pala/s.", emoji: "👥" },
   { id: "sonda", name: "Sonda Folicular", baseCost: 50000000, increase: 500000, desc: "Exploración cósmica en búsqueda de cabello. Auto-genera +500k pala/s.", emoji: "🛰️" },
   { id: "agujero", name: "Agujero Negro de Pelas", baseCost: 2000000000, increase: 20000000, desc: "Gravedad infinita que atrae trabajo. Auto-genera +20M pala/s.", emoji: "🕳️" },
+];
+
+const STOCKS_CONFIG = [
+  { id: "minx", name: "Minoxidil Labs Corp", ticker: "MINX", basePrice: 100, desc: "Biotecnología folicular avanzada.", emoji: "🧪" },
+  { id: "pluc", name: "Pelucas S.A.", ticker: "PLUC", basePrice: 250, desc: "Líder global en cabelleras sintéticas.", emoji: "🦱" },
+  { id: "gras", name: "Grasa de Asado Co.", ticker: "GRAS", basePrice: 50, desc: "Aporte lipídico para el brillo craneal.", emoji: "🥩" },
+  { id: "gorr", name: "Hats & Caps S.R.L.", ticker: "GORR", basePrice: 15, desc: "Protección textil contra rayos solares.", emoji: "🧢" }
 ];
 
 const TOOLS_CONFIG = [
@@ -121,12 +129,24 @@ export default function ClickerPage() {
     madera: 0,
     acero: 0,
     pasante: 0,
+    union_delegate: 0,
     pela_ai: 0,
     minoxidil: 0,
     clonacion: 0,
     sonda: 0,
     agujero: 0,
   });
+
+  const [shares, setShares] = useState({ minx: 0, pluc: 0, gras: 0, gorr: 0 });
+  const [stockPrices, setStockPrices] = useState({ minx: 100, pluc: 250, gras: 50, gorr: 15 });
+  const [stockHistory, setStockHistory] = useState({ minx: [100], pluc: [250], gras: [50], gorr: [15] });
+  const [strikeActive, setStrikeActive] = useState(false);
+  const [loan, setLoan] = useState({ amount: 0, dueTime: 0 });
+  const [isGarnished, setIsGarnished] = useState(false);
+  const [boss, setBoss] = useState(null);
+  const [mateSpawning, setMateSpawning] = useState(false);
+  const [mateCoords, setMateCoords] = useState({ top: "50%", left: "50%" });
+  const [mateGame, setMateGame] = useState(null);
 
   const [tools, setTools] = useState({
     afilador: 0,
@@ -277,10 +297,15 @@ export default function ClickerPage() {
       const savedPrestigeUpgrades = localStorage.getItem("clicker_prestige_upgrades_v6");
       const savedAchievements = localStorage.getItem("clicker_achievements_v6");
       const savedMuted = localStorage.getItem("clicker_muted");
+      const savedShares = localStorage.getItem("clicker_shares_v6");
+      const savedStockPrices = localStorage.getItem("clicker_stock_prices_v6");
+      const savedLoan = localStorage.getItem("clicker_loan_v6");
+      const savedGarnished = localStorage.getItem("clicker_garnished_v6");
 
       if (savedPalas !== null) setPalas(parseFloat(savedPalas));
       if (savedBrillo !== null) setBrillo(parseInt(savedBrillo, 10));
       if (savedMuted !== null) setMuted(savedMuted === "true");
+      if (savedGarnished !== null) setIsGarnished(savedGarnished === "true");
       
       if (savedUpgrades !== null) {
         try {
@@ -307,6 +332,26 @@ export default function ClickerPage() {
           setAchievements(JSON.parse(savedAchievements));
         } catch (e) {}
       }
+      if (savedShares !== null) {
+        try {
+          setShares(JSON.parse(savedShares));
+        } catch (e) {}
+      }
+      if (savedStockPrices !== null) {
+        try {
+          const parsed = JSON.parse(savedStockPrices);
+          setStockPrices(parsed);
+          // Initialize stock history with loaded prices
+          const hist = {};
+          Object.keys(parsed).forEach(k => { hist[k] = [parsed[k]]; });
+          setStockHistory(hist);
+        } catch (e) {}
+      }
+      if (savedLoan !== null) {
+        try {
+          setLoan(JSON.parse(savedLoan));
+        } catch (e) {}
+      }
 
       setIsClientLoaded(true);
     }
@@ -323,8 +368,12 @@ export default function ClickerPage() {
       localStorage.setItem("clicker_prestige_upgrades_v6", JSON.stringify(prestigeUpgrades));
       localStorage.setItem("clicker_achievements_v6", JSON.stringify(achievements));
       localStorage.setItem("clicker_muted", muted.toString());
+      localStorage.setItem("clicker_shares_v6", JSON.stringify(shares));
+      localStorage.setItem("clicker_stock_prices_v6", JSON.stringify(stockPrices));
+      localStorage.setItem("clicker_loan_v6", JSON.stringify(loan));
+      localStorage.setItem("clicker_garnished_v6", isGarnished.toString());
     }
-  }, [palas, upgrades, tools, inventory, brillo, prestigeUpgrades, achievements, muted, isClientLoaded]);
+  }, [palas, upgrades, tools, inventory, brillo, prestigeUpgrades, achievements, muted, shares, stockPrices, loan, isGarnished, isClientLoaded]);
 
   // Compute passive modifiers from Gacha inventory
   const inventoryClickMultiplier = 1 + (inventory.gorra || 0) * 0.05 + (inventory.pala_jefe || 0) * 0.15;
@@ -343,7 +392,8 @@ export default function ClickerPage() {
   // Prestige Shop Buff double effect
   const buffDbl = prestigeUpgrades.buff_double ? 2 : 1;
   const buffPPSMultiplier = buff && buff.type === "hype" ? buff.multiplier * buffDbl : 1;
-  const palasPerSecond = basePPS * prestigeMultiplier * buffPPSMultiplier * inventoryPPSMultiplier;
+  const unionMultiplier = upgrades.union_delegate ? 1.25 : 1.0;
+  const palasPerSecond = strikeActive ? 0 : basePPS * prestigeMultiplier * buffPPSMultiplier * inventoryPPSMultiplier * unionMultiplier;
 
   // Auto-generation loop (updates 10 times per second)
   useEffect(() => {
@@ -521,7 +571,8 @@ export default function ClickerPage() {
   // Click power calculation
   const baseClickPower = 1 + activeClickPower + ppsClickBonus;
   const buffClickMultiplier = buff && buff.type === "fever" ? buff.multiplier * buffDbl : 1;
-  const clickPower = baseClickPower * prestigeMultiplier * comboMultiplier * buffClickMultiplier * inventoryClickMultiplier;
+  const garnishFactor = isGarnished ? 0.5 : 1.0;
+  const clickPower = baseClickPower * prestigeMultiplier * comboMultiplier * buffClickMultiplier * inventoryClickMultiplier * garnishFactor;
 
   // Handle clicking the flying pelado
   const handleFlyingPeladoClick = (e) => {
@@ -535,13 +586,23 @@ export default function ClickerPage() {
 
     setFlyingPelado(null);
 
-    if (Math.random() < 0.40) {
+    const rand = Math.random();
+    if (rand < 0.08) {
+      const bossHp = Math.max(50, 50 * (1 + Object.values(tools).reduce((a,b)=>a+b, 0)));
+      setBoss({
+        hp: bossHp,
+        maxHp: bossHp,
+        timeLeft: 15
+      });
+      triggerFlashMessage("⚠️ ¡APARECIÓ EL PEINE ASESINO! Defendé tus folículos.");
+    } else if (rand < 0.45) {
       const questionData = TRIVIA_POOL[Math.floor(Math.random() * TRIVIA_POOL.length)];
       setTrivia({
         q: questionData.q,
         o: questionData.o,
         c: questionData.c,
-        timer: 7,
+        timer: 10,
+        isUnion: false
       });
     } else {
       applyRandomFlyingBuff();
@@ -578,17 +639,28 @@ export default function ClickerPage() {
 
     if (index === trivia.c) {
       playSound("buy");
-      setBuff({
-        type: "fever",
-        name: "Fiebre Extrema (Click x15)",
-        multiplier: 15,
-        endTime: Date.now() + 15000,
-      });
-      setPalas((prev) => prev + Math.max(100, Math.floor(palasPerSecond * 60)));
-      triggerFlashMessage("¡Correcto! Recibís x15 de Clicks por 15s y palas extra.");
+      if (trivia.isUnion) {
+        setStrikeActive(false);
+        triggerFlashMessage("¡Convenio firmado! Volvió la producción laboral.");
+      } else {
+        setBuff({
+          type: "fever",
+          name: "Fiebre Extrema (Click x15)",
+          multiplier: 15,
+          endTime: Date.now() + 15000,
+        });
+        setPalas((prev) => prev + Math.max(100, Math.floor(palasPerSecond * 60)));
+        triggerFlashMessage("¡Correcto! Recibís x15 de Clicks por 15s y palas extra.");
+      }
     } else {
       playSound("click");
-      triggerFlashMessage("¡Incorrecto! No ganás ningún bono.");
+      if (trivia.isUnion) {
+        const loss = Math.floor(palas * 0.25);
+        setPalas((prev) => Math.max(0, prev - loss));
+        triggerFlashMessage(`¡Asamblea fallida! Perdiste ${formatVal(loss)} palas por desidia.`);
+      } else {
+        triggerFlashMessage("¡Incorrecto! No ganás ningún bono.");
+      }
     }
 
     setTrivia(null);
@@ -775,7 +847,7 @@ export default function ClickerPage() {
       playSound("buy");
       setBrillo((prev) => prev + gainedBrillo);
       setPalas(0);
-      setUpgrades({ madera: 0, acero: 0, pasante: 0, pela_ai: 0, minoxidil: 0, clonacion: 0, sonda: 0, agujero: 0 });
+      setUpgrades({ madera: 0, acero: 0, pasante: 0, union_delegate: 0, pela_ai: 0, minoxidil: 0, clonacion: 0, sonda: 0, agujero: 0 });
       setTools({ afilador: 0, mango: 0, guantes: 0, locion: 0, gravitacional: 0 });
       setInventory({ gorra: 0, minoxidil_viejito: 0, secador_roto: 0, pala_jefe: 0, peluca_cotillon: 0 });
       setCombo(0);
@@ -791,6 +863,310 @@ export default function ClickerPage() {
       setPalas((prev) => prev - EXCHANGE_COST);
       addCredit(EXCHANGE_CREDIT);
       triggerFlashMessage(`¡Canjeaste ${EXCHANGE_COST} palas por +${EXCHANGE_CREDIT}% de Reserva de Pala!`);
+    }
+  };
+
+  // 1. Stock Market pricing loop (every 10s)
+  useEffect(() => {
+    if (!isClientLoaded) return;
+    const interval = setInterval(() => {
+      setStockPrices((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((key) => {
+          const change = 1 + (Math.random() * 0.28 - 0.13); // random walk from -13% to +15%
+          next[key] = Math.max(1, Math.floor(next[key] * change));
+        });
+
+        // Track trend history
+        setStockHistory((history) => {
+          const nextHistory = { ...history };
+          Object.keys(next).forEach((key) => {
+            const arr = nextHistory[key] || [];
+            const nextArr = [...arr, next[key]];
+            if (nextArr.length > 10) nextArr.shift();
+            nextHistory[key] = nextArr;
+          });
+          return nextHistory;
+        });
+
+        return next;
+      });
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [isClientLoaded]);
+
+  // 2. Buy and Sell shares logic
+  const buyStock = (stockId) => {
+    const cost = stockPrices[stockId];
+    if (palas >= cost) {
+      setPalas((prev) => prev - cost);
+      setShares((prev) => ({
+        ...prev,
+        [stockId]: prev[stockId] + 1,
+      }));
+      playSound("buy");
+      triggerFlashMessage(`¡Compraste 1 acción de ${STOCKS_CONFIG.find(s=>s.id===stockId).ticker}!`);
+    } else {
+      triggerFlashMessage("No tenés suficientes palas para comprar.");
+    }
+  };
+
+  const sellStock = (stockId) => {
+    if (shares[stockId] > 0) {
+      const price = stockPrices[stockId];
+      setPalas((prev) => prev + price);
+      setShares((prev) => ({
+        ...prev,
+        [stockId]: prev[stockId] - 1,
+      }));
+      playSound("buy");
+      triggerFlashMessage(`¡Vendiste 1 acción de ${STOCKS_CONFIG.find(s=>s.id===stockId).ticker} por ${formatVal(price)} palas!`);
+    } else {
+      triggerFlashMessage("No tenés acciones para vender.");
+    }
+  };
+
+  // 3. Union Strike triggering loop
+  useEffect(() => {
+    if (!isClientLoaded || !upgrades.union_delegate || strikeActive) return;
+
+    const interval = setInterval(() => {
+      // 5% chance of strike every 45s
+      if (Math.random() < 0.05) {
+        setStrikeActive(true);
+        playSound("click");
+        triggerFlashMessage("⚠️ ¡HUELGA LABORAL! El Sindicato de la Pala congeló la producción pasiva.");
+      }
+    }, 45000);
+
+    return () => clearInterval(interval);
+  }, [upgrades.union_delegate, strikeActive, isClientLoaded]);
+
+  const bribeUnion = () => {
+    const cost = Math.max(1000, Math.floor(basePPS * prestigeMultiplier * 15));
+    if (palas >= cost) {
+      setPalas((prev) => prev - cost);
+      setStrikeActive(false);
+      playSound("buy");
+      triggerFlashMessage("Convenio colectivo firmado bajo la mesa. ¡A laburar!");
+    } else {
+      triggerFlashMessage("No tenés suficientes palas para la coima.");
+    }
+  };
+
+  const startNegotiation = () => {
+    const questionData = TRIVIA_POOL[Math.floor(Math.random() * TRIVIA_POOL.length)];
+    setTrivia({
+      q: questionData.q,
+      o: questionData.o,
+      c: questionData.c,
+      timer: 10,
+      isUnion: true
+    });
+  };
+
+  // 4. Loan debt timer and click garnishment
+  useEffect(() => {
+    if (!isClientLoaded || loan.amount === 0) return;
+
+    const interval = setInterval(() => {
+      if (Date.now() > loan.dueTime && !isGarnished) {
+        setIsGarnished(true);
+        playSound("crit");
+        triggerFlashMessage("🚨 ¡EMBARGO MP! Deuda impaga. Se confiscó el 50% de tu poder de click.");
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [loan, isGarnished, isClientLoaded]);
+
+  const takeLoan = () => {
+    if (loan.amount > 0) return;
+    const grant = Math.max(100000, Math.floor(palasPerSecond * 300));
+    setPalas((prev) => prev + grant);
+    setLoan({
+      amount: grant,
+      dueTime: Date.now() + 90000, // 90s to pay back
+    });
+    setIsGarnished(false);
+    playSound("buy");
+    triggerFlashMessage(`¡Préstamo Aprobado! Recibiste +${formatVal(grant)} palas.`);
+  };
+
+  const payLoan = () => {
+    if (loan.amount === 0) return;
+    const cost = isGarnished ? Math.floor(loan.amount * 2.4) : loan.amount * 2;
+    if (palas >= cost) {
+      setPalas((prev) => prev - cost);
+      setLoan({ amount: 0, dueTime: 0 });
+      setIsGarnished(false);
+      playSound("buy");
+      triggerFlashMessage("¡Deuda saldada! Tu historial financiero vuelve a estar limpio.");
+    } else {
+      triggerFlashMessage("No tenés suficientes palas para pagar la deuda.");
+    }
+  };
+
+  // 5. Boss Battle (Peine Asesino) timer logic
+  useEffect(() => {
+    if (!isClientLoaded || !boss) return;
+
+    const interval = setInterval(() => {
+      setBoss((prev) => {
+        if (!prev) return null;
+        if (prev.timeLeft <= 1) {
+          playSound("click");
+          setPalas((p) => Math.max(0, Math.floor(p * 0.7))); // penalize 30%
+          triggerFlashMessage("☠️ ¡TIEMPO AGOTADO! El Peine Asesino te despojó de 30% de tus palas.");
+          return null;
+        }
+        return { ...prev, timeLeft: prev.timeLeft - 1 };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [boss, isClientLoaded]);
+
+  const damageBoss = () => {
+    if (!boss) return;
+    const damage = 1 + Object.values(tools).reduce((sum, val) => sum + val, 0);
+    playSound("crit");
+    setBoss((prev) => {
+      if (!prev) return null;
+      const nextHp = prev.hp - damage;
+      if (nextHp <= 0) {
+        const itemIds = ["secador_roto", "pala_jefe", "peluca_cotillon"];
+        const chosenId = itemIds[Math.floor(Math.random() * itemIds.length)];
+        setInventory((inv) => ({
+          ...inv,
+          [chosenId]: (inv[chosenId] || 0) + 1,
+        }));
+        setTimeout(() => {
+          playSound("buy");
+          triggerFlashMessage(`🏆 ¡Peine Derrotado! Obtuviste: ${GACHA_ITEMS.find(i=>i.id===chosenId).name}`);
+        }, 10);
+        return null;
+      }
+      return { ...prev, hp: nextHp };
+    });
+  };
+
+  // 6. Mate rhythm game timing loops
+  useEffect(() => {
+    if (!isClientLoaded || !mateGame) return;
+
+    const handleKeyDown = (e) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        brewMateAction();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    const interval = setInterval(() => {
+      setMateGame((prev) => {
+        if (!prev) return null;
+        let nextPos = prev.pointerPos + prev.direction * 3.5;
+        let nextDir = prev.direction;
+        
+        if (nextPos >= 90) {
+          nextPos = 90;
+          nextDir = -1;
+        } else if (nextPos <= 10) {
+          nextPos = 10;
+          nextDir = 1;
+        }
+        
+        return { ...prev, pointerPos: nextPos, direction: nextDir };
+      });
+    }, 35);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [mateGame, isClientLoaded]);
+
+  // Spawn mate icon loop
+  useEffect(() => {
+    if (!isClientLoaded) return;
+
+    const interval = setInterval(() => {
+      if (mateSpawning || mateGame) return;
+      
+      const randomTop = Math.floor(Math.random() * 50 + 25) + "%";
+      const randomLeft = Math.floor(Math.random() * 60 + 20) + "%";
+      setMateCoords({ top: randomTop, left: randomLeft });
+      setMateSpawning(true);
+      
+      setTimeout(() => {
+        setMateSpawning(false);
+      }, 12000);
+      
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [mateSpawning, mateGame, isClientLoaded]);
+
+  const handleMateIconClick = (e) => {
+    e.stopPropagation();
+    setMateSpawning(false);
+    setMateGame({
+      progress: 0,
+      pointerPos: 20,
+      direction: 1,
+      attempts: 5
+    });
+  };
+
+  const brewMateAction = () => {
+    if (!mateGame) return;
+    
+    const isPerfect = mateGame.pointerPos >= 44 && mateGame.pointerPos <= 56;
+    
+    if (isPerfect) {
+      playSound("crit");
+      const nextProgress = mateGame.progress + 1;
+      const nextAttempts = mateGame.attempts - 1;
+      
+      if (nextProgress >= 3) {
+        setBuff({
+          type: "fever",
+          name: "Mateína Extrema (Click x4)",
+          multiplier: 4,
+          endTime: Date.now() + 25000
+        });
+        setMateGame(null);
+        setTimeout(() => {
+          playSound("buy");
+          triggerFlashMessage("🧉 ¡Mate perfecto! Multiplicador de click x4 por 25s.");
+        }, 10);
+      } else if (nextAttempts <= 0) {
+        setMateGame(null);
+        triggerFlashMessage("Se te lavó el mate, te quedaste sin yerba.");
+      } else {
+        setMateGame((prev) => ({
+          ...prev,
+          progress: nextProgress,
+          attempts: nextAttempts
+        }));
+        triggerFlashMessage(`¡Perfecto! (${nextProgress}/3)`);
+      }
+    } else {
+      playSound("click");
+      const nextAttempts = mateGame.attempts - 1;
+      if (nextAttempts <= 0) {
+        setMateGame(null);
+        triggerFlashMessage("Se te lavó el mate, te quedaste sin yerba.");
+      } else {
+        setMateGame((prev) => ({
+          ...prev,
+          progress: 0, // reset progress on miss
+          attempts: nextAttempts
+        }));
+        triggerFlashMessage("¡Lavado! Se reinicia la cebada.");
+      }
     }
   };
 
@@ -1721,6 +2097,335 @@ export default function ClickerPage() {
         .menu-back-link:hover {
           color: var(--gold);
         }
+
+        /* 6 Tabs display configuration */
+        .shop-tabs {
+          grid-template-columns: repeat(6, 1fr) !important;
+        }
+
+        /* Stock Market tab layout */
+        .stocks-container {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        
+        .stock-card {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          background: rgba(255,255,255,0.02);
+          border: 1px solid rgba(255,255,255,0.05);
+          border-radius: 16px;
+          padding: 12px;
+          gap: 12px;
+        }
+
+        .stock-details {
+          text-align: left;
+          flex: 1;
+        }
+
+        .stock-trend-indicator {
+          font-weight: 700;
+          font-size: 0.75rem;
+          margin-left: 6px;
+          padding: 2px 6px;
+          border-radius: 4px;
+        }
+        .stock-trend-up {
+          color: #4caf50;
+          background: rgba(76, 175, 80, 0.1);
+        }
+        .stock-trend-down {
+          color: #f44336;
+          background: rgba(244, 67, 54, 0.1);
+        }
+
+        .stock-actions {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          min-width: 100px;
+        }
+
+        .stock-action-btn {
+          background: transparent;
+          border: 1px solid rgba(255,255,255,0.15);
+          color: #fff;
+          border-radius: 8px;
+          padding: 4px 8px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .stock-action-btn.buy:hover {
+          background: var(--gold-dim);
+          border-color: var(--gold);
+          color: var(--gold);
+        }
+
+        .stock-action-btn.sell:hover {
+          background: rgba(244, 67, 54, 0.1);
+          border-color: #f44336;
+          color: #f44336;
+        }
+
+        /* Strike Overlay Banner styling */
+        .strike-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.85);
+          z-index: 1000000;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(8px);
+          animation: popIn 0.3s ease;
+        }
+
+        .strike-card {
+          max-width: 480px;
+          width: 90%;
+          background: radial-gradient(circle at top left, #2b0b0b 0%, #120303 100%);
+          border: 2px solid #ff3b3b;
+          border-radius: 24px;
+          padding: 32px;
+          text-align: center;
+          box-shadow: 0 0 40px rgba(255, 59, 59, 0.3);
+        }
+
+        .strike-card h2 {
+          color: #ff3b3b;
+          margin-top: 0;
+          font-size: 1.8rem;
+          font-weight: 900;
+        }
+
+        .strike-options {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin-top: 24px;
+        }
+
+        .strike-btn {
+          padding: 12px;
+          font-weight: 800;
+          border-radius: 12px;
+          cursor: pointer;
+          transition: transform 0.1s;
+        }
+        .strike-btn:active {
+          transform: scale(0.97);
+        }
+        .strike-btn.bribe {
+          background: #ff3b3b;
+          border: none;
+          color: #fff;
+        }
+        .strike-btn.negotiate {
+          background: transparent;
+          border: 1px solid rgba(255,255,255,0.2);
+          color: #fff;
+        }
+
+        /* Boss Fight Overlay styling */
+        .boss-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.8);
+          z-index: 999999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(6px);
+          animation: popIn 0.2s ease;
+        }
+
+        .boss-card {
+          width: 90%;
+          max-width: 600px;
+          background: #111;
+          border: 2px solid #ffd700;
+          border-radius: 28px;
+          padding: 24px;
+          text-align: center;
+          box-shadow: 0 0 50px rgba(255, 215, 0, 0.25);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .boss-timer {
+          font-size: 1.1rem;
+          font-weight: 900;
+          color: #ff3b3b;
+          background: rgba(255, 59, 59, 0.1);
+          padding: 4px 12px;
+          border-radius: 8px;
+          border: 1px solid rgba(255, 59, 59, 0.2);
+        }
+
+        .boss-hp-bar-bg {
+          width: 100%;
+          height: 24px;
+          background: #222;
+          border-radius: 12px;
+          border: 1px solid rgba(255,255,255,0.1);
+          overflow: hidden;
+          position: relative;
+        }
+
+        .boss-hp-bar-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #ff3b3b, #ff8c3b);
+          transition: width 0.1s ease;
+        }
+
+        .boss-hp-text {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          top: 0;
+          left: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 0.8rem;
+          font-weight: 900;
+          color: #fff;
+        }
+
+        .boss-avatar-btn {
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          padding: 0;
+          transition: transform 0.05s;
+          outline: none;
+        }
+
+        .boss-avatar-btn:active {
+          transform: scale(0.9);
+        }
+
+        .boss-avatar-emoji {
+          font-size: 6rem;
+          display: inline-block;
+          animation: wobble-anim-frame 1s infinite alternate;
+        }
+
+        @keyframes wobble-anim-frame {
+          0% { transform: rotate(-5deg) scale(1); }
+          100% { transform: rotate(5deg) scale(1.08); }
+        }
+
+        /* Mate Rhythm Game Overlay */
+        .mate-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.8);
+          z-index: 999998;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          backdrop-filter: blur(5px);
+          animation: popIn 0.2s ease;
+        }
+
+        .mate-card {
+          width: 90%;
+          max-width: 440px;
+          background: radial-gradient(circle at bottom center, #0f2b0f 0%, #031203 100%);
+          border: 2px solid #4caf50;
+          border-radius: 28px;
+          padding: 24px;
+          text-align: center;
+          box-shadow: 0 0 50px rgba(76, 175, 80, 0.25);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 16px;
+        }
+
+        .mate-spawn-btn {
+          position: fixed;
+          z-index: 9999;
+          font-size: 2.2rem;
+          background: rgba(0,0,0,0.5);
+          border: 1px solid var(--gold);
+          border-radius: 50%;
+          width: 60px;
+          height: 60px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          box-shadow: 0 0 20px var(--gold);
+          animation: bounce-float 1.5s infinite alternate;
+        }
+
+        @keyframes bounce-float {
+          0% { transform: translateY(0); }
+          100% { transform: translateY(-8px); }
+        }
+
+        .mate-gauge-container {
+          width: 100%;
+          height: 40px;
+          background: #222;
+          border-radius: 20px;
+          border: 1px solid rgba(255,255,255,0.1);
+          position: relative;
+          overflow: hidden;
+          margin-top: 10px;
+        }
+
+        .mate-green-zone {
+          position: absolute;
+          left: 44%;
+          width: 12%;
+          height: 100%;
+          background: #4caf50;
+          border-left: 2px solid #fff;
+          border-right: 2px solid #fff;
+          opacity: 0.75;
+        }
+
+        .mate-pointer {
+          position: absolute;
+          width: 6px;
+          height: 100%;
+          background: #fff;
+          box-shadow: 0 0 10px #fff;
+          top: 0;
+          transition: left 0.03s linear;
+        }
+
+        .loan-details-box {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          background: rgba(255, 59, 59, 0.03);
+          border: 1px solid rgba(255, 59, 59, 0.15);
+          border-radius: 16px;
+          padding: 12px;
+          text-align: center;
+          margin-top: 10px;
+        }
       `}</style>
 
       {/* Floating notification banner */}
@@ -1776,6 +2481,108 @@ export default function ClickerPage() {
               objectFit: "cover",
             }}
           />
+        </div>
+      )}
+
+      {/* Union Strike Modal Overlay */}
+      {strikeActive && !trivia && (
+        <div className="strike-overlay">
+          <div className="strike-card">
+            <h2>⚠️ HUELGA SINDICAL ⚠️</h2>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.9rem", margin: "10px 0" }}>
+              El Sindicato de la Pala ha decretado un paro total de actividades. La producción pasiva está completamente congelada (0 palas/s).
+            </p>
+            <div className="strike-options">
+              <button
+                className="strike-btn bribe"
+                onClick={bribeUnion}
+                type="button"
+              >
+                Pagar Coima ({formatVal(Math.max(1000, Math.floor(basePPS * prestigeMultiplier * 15)))} palas)
+              </button>
+              <button
+                className="strike-btn negotiate"
+                onClick={startNegotiation}
+                type="button"
+              >
+                Negociar Convenio (Trivia)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Boss Fight Overlay */}
+      {boss && (
+        <div className="boss-overlay">
+          <div className="boss-card">
+            <h2 style={{ color: "#ffd700", margin: 0, fontSize: "1.8rem", fontWeight: 900 }}>🚨 ¡PEINE ASESINO ATACA! 🚨</h2>
+            <div className="boss-timer">Tiempo restante: {boss.timeLeft}s</div>
+            
+            <button className="boss-avatar-btn" onClick={damageBoss} type="button">
+              <span className="boss-avatar-emoji">🪮</span>
+            </button>
+            
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: "4px 0" }}>
+              ¡Hacé click rápido sobre el Peine Asesino antes de que destruya tu cabellera!
+            </p>
+
+            <div className="boss-hp-bar-bg">
+              <div 
+                className="boss-hp-bar-fill" 
+                style={{ width: `${Math.max(0, (boss.hp / boss.maxHp) * 100)}%` }} 
+              />
+              <div className="boss-hp-text">HP: {boss.hp} / {boss.maxHp}</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mate Spawning Icon */}
+      {mateSpawning && (
+        <button
+          className="mate-spawn-btn"
+          style={{ top: mateCoords.top, left: mateCoords.left }}
+          onClick={handleMateIconClick}
+          type="button"
+        >
+          🧉
+        </button>
+      )}
+
+      {/* Mate Rhythm Game Overlay */}
+      {mateGame && (
+        <div className="mate-overlay" onClick={brewMateAction}>
+          <div className="mate-card" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ color: "#4caf50", margin: 0, fontSize: "1.6rem", fontWeight: 900 }}>🧉 Cebando el Mate Perfecto 🧉</h2>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", margin: "4px 0" }}>
+              Presioná <strong style={{ color: "#fff" }}>ESPACIO</strong> o haz <strong style={{ color: "#fff" }}>CLICK</strong> cuando el indicador esté en la zona verde (44% - 56%).
+            </p>
+            
+            <div style={{ fontSize: "0.9rem", margin: "8px 0" }}>
+              Cebadas logradas: <strong style={{ color: "#4caf50", fontSize: "1.2rem" }}>{mateGame.progress} / 3</strong>
+            </div>
+            <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+              Intentos restantes: <strong>{mateGame.attempts}</strong>
+            </div>
+
+            <div className="mate-gauge-container">
+              <div className="mate-green-zone" />
+              <div 
+                className="mate-pointer" 
+                style={{ left: `${mateGame.pointerPos}%` }} 
+              />
+            </div>
+
+            <button
+              className="action-btn"
+              style={{ background: "#4caf50", color: "#fff", border: "none", marginTop: "12px", width: "100%" }}
+              onClick={brewMateAction}
+              type="button"
+            >
+              ¡Cebar!
+            </button>
+          </div>
         </div>
       )}
 
@@ -1897,6 +2704,7 @@ export default function ClickerPage() {
             <button className={`shop-tab-btn ${shopTab === "active" ? "active" : ""}`} onClick={() => setShopTab("active")} type="button">Clicks</button>
             <button className={`shop-tab-btn ${shopTab === "collection" ? "active" : ""}`} onClick={() => setShopTab("collection")} type="button">Loot</button>
             <button className={`shop-tab-btn ${shopTab === "casino" ? "active" : ""}`} onClick={() => setShopTab("casino")} type="button">Casino</button>
+            <button className={`shop-tab-btn ${shopTab === "stocks" ? "active" : ""}`} onClick={() => setShopTab("stocks")} type="button">Bolsa</button>
             <button className={`shop-tab-btn ${shopTab === "prestige" ? "active" : ""}`} onClick={() => setShopTab("prestige")} type="button">Brillo</button>
           </div>
 
@@ -1997,45 +2805,152 @@ export default function ClickerPage() {
             )}
 
             {shopTab === "casino" && (
-              /* Gambling Doble o Nada */
-              <div className="casino-panel">
-                <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>Doble o Nada</div>
-                <p className="upgrade-desc">Apostá un porcentaje de tus palas a cara o ceca de cabeza de pelado.</p>
-                <div style={{ fontSize: "0.75rem", color: "#ffc107", fontWeight: 700 }}>⚠️ Retención AFIP del 30% en premios ganados</div>
-                
-                <div className={`casino-coin ${flipping ? "flipping" : ""}`}>
-                  {flipping ? "🪙" : "🥚"}
-                </div>
-
-                <div className="casino-bet-selector">
-                  {[10, 25, 50].map((pct) => (
-                    <button
-                      key={pct}
-                      className={`casino-bet-btn ${betPercent === pct ? "active" : ""}`}
-                      onClick={() => setBetPercent(pct)}
-                      disabled={flipping}
-                      type="button"
-                    >
-                      {pct}%
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  className="action-btn gold-fill"
-                  disabled={palas <= 10 || flipping}
-                  onClick={gambleFlip}
-                  type="button"
-                  title={Math.floor(palas * (betPercent / 100)).toLocaleString()}
-                >
-                  {flipping ? "Girando..." : `Apostar ${formatVal(Math.floor(palas * (betPercent / 100)))} palas`}
-                </button>
-
-                {flipResult && !flipping && (
-                  <div style={{ fontWeight: 800, fontSize: "0.9rem", color: flipResult === "win" ? "#4caf50" : "#f44336" }}>
-                    {flipResult === "win" ? "¡Ganaste!" : "¡Perdiste!"}
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                {/* Gambling Doble o Nada */}
+                <div className="casino-panel">
+                  <div style={{ fontWeight: 800, fontSize: "0.95rem" }}>Doble o Nada</div>
+                  <p className="upgrade-desc">Apostá un porcentaje de tus palas a cara o ceca de cabeza de pelado.</p>
+                  <div style={{ fontSize: "0.75rem", color: "#ffc107", fontWeight: 700 }}>⚠️ Retención AFIP del 30% en premios ganados</div>
+                  
+                  <div className={`casino-coin ${flipping ? "flipping" : ""}`}>
+                    {flipping ? "🪙" : "🥚"}
                   </div>
-                )}
+
+                  <div className="casino-bet-selector">
+                    {[10, 25, 50].map((pct) => (
+                      <button
+                        key={pct}
+                        className={`casino-bet-btn ${betPercent === pct ? "active" : ""}`}
+                        onClick={() => setBetPercent(pct)}
+                        disabled={flipping}
+                        type="button"
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    className="action-btn gold-fill"
+                    disabled={palas <= 10 || flipping}
+                    onClick={gambleFlip}
+                    type="button"
+                    title={Math.floor(palas * (betPercent / 100)).toLocaleString()}
+                  >
+                    {flipping ? "Girando..." : `Apostar ${formatVal(Math.floor(palas * (betPercent / 100)))} palas`}
+                  </button>
+
+                  {flipResult && !flipping && (
+                    <div style={{ fontWeight: 800, fontSize: "0.9rem", color: flipResult === "win" ? "#4caf50" : "#f44336" }}>
+                      {flipResult === "win" ? "¡Ganaste!" : "¡Perdiste!"}
+                    </div>
+                  )}
+                </div>
+
+                {/* Mercado Pago Loans */}
+                <div className="casino-panel" style={{ border: loan.amount > 0 ? "1px solid #ff3b3b" : "1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ fontWeight: 800, fontSize: "0.95rem", color: loan.amount > 0 ? "#ff3b3b" : "#fff" }}>
+                    {loan.amount > 0 ? "🚨 Embargo de Mercado Pago" : "💸 Crédito Folicular Expreso"}
+                  </div>
+                  <p className="upgrade-desc">
+                    {loan.amount > 0 
+                      ? `Tenés un préstamo activo de ${formatVal(loan.amount)} palas.` 
+                      : "Obtené un préstamo rápido para acelerar tu producción. Se devuelve el doble en 90 segundos."}
+                  </p>
+                  
+                  {loan.amount > 0 ? (
+                    <div className="loan-details-box" style={{ width: "100%", boxSizing: "border-box" }}>
+                      <div style={{ fontSize: "0.8rem", color: isGarnished ? "#ff3b3b" : "#ffeb3b", fontWeight: 700 }}>
+                        {isGarnished 
+                          ? "⚠️ ¡CUENTA EMBARGADA! Clicks producen 50% menos." 
+                          : `Tiempo restante: ${Math.max(0, Math.ceil((loan.dueTime - Date.now()) / 1000))}s`}
+                      </div>
+                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+                        Total a pagar: {formatVal(isGarnished ? Math.floor(loan.amount * 2.4) : loan.amount * 2)} palas
+                      </div>
+                      <button
+                        className="action-btn"
+                        style={{ background: "#ff3b3b", color: "#fff", border: "none", marginTop: "8px", width: "100%" }}
+                        disabled={palas < (isGarnished ? Math.floor(loan.amount * 2.4) : loan.amount * 2)}
+                        onClick={payLoan}
+                        type="button"
+                      >
+                        Liquidar Deuda
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      className="action-btn gold-outline"
+                      onClick={takeLoan}
+                      type="button"
+                      style={{ width: "100%" }}
+                    >
+                      Solicitar Préstamo ({formatVal(Math.max(100000, Math.floor(palasPerSecond * 300)))} Palas)
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {shopTab === "stocks" && (
+              /* Stock Market Trading */
+              <div className="stocks-container">
+                <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "16px", padding: "12px", textAlign: "center", marginBottom: "8px" }}>
+                  <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--gold)" }}>📈 BOLSA FOLICULAR NACIONAL</div>
+                  <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: "4px 0 0 0" }}>Los precios fluctúan cada 10s. ¡Especulá y ganá!</p>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {STOCKS_CONFIG.map((stock) => {
+                    const price = stockPrices[stock.id] || stock.basePrice;
+                    const owned = shares[stock.id] || 0;
+                    const history = stockHistory[stock.id] || [price];
+                    const prevPrice = history.length > 1 ? history[history.length - 2] : price;
+                    const isUp = price >= prevPrice;
+                    const pctChange = prevPrice > 0 ? ((price - prevPrice) / prevPrice * 100).toFixed(1) : "0.0";
+                    const displayChange = isUp ? `+${pctChange}%` : `${pctChange}%`;
+
+                    return (
+                      <div key={stock.id} className="stock-card">
+                        <div style={{ fontSize: "1.6rem" }}>{stock.emoji}</div>
+                        <div className="stock-details">
+                          <div style={{ display: "flex", alignItems: "center" }}>
+                            <span style={{ fontSize: "0.85rem", fontWeight: 700 }}>{stock.name}</span>
+                            <span style={{ fontSize: "0.65rem", background: "rgba(255,255,255,0.08)", padding: "2px 4px", borderRadius: "4px", marginLeft: "6px", fontFamily: "monospace" }}>{stock.ticker}</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", marginTop: "4px" }}>
+                            <span style={{ fontSize: "1.1rem", fontWeight: 900, fontFamily: "monospace" }}>{formatVal(price)}</span>
+                            <span className={`stock-trend-indicator ${isUp ? "stock-trend-up" : "stock-trend-down"}`}>
+                              {isUp ? "▲" : "▼"} {displayChange}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                            Tenés: <strong style={{ color: "#fff" }}>{owned}</strong> ({formatVal(owned * price)} palas en valor)
+                          </div>
+                        </div>
+
+                        <div className="stock-actions">
+                          <button
+                            className="stock-action-btn buy"
+                            disabled={palas < price}
+                            onClick={() => buyStock(stock.id)}
+                            type="button"
+                          >
+                            Comprar
+                          </button>
+                          <button
+                            className="stock-action-btn sell"
+                            disabled={owned === 0}
+                            onClick={() => sellStock(stock.id)}
+                            type="button"
+                          >
+                            Vender
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
