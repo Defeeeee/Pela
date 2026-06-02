@@ -19,6 +19,13 @@ const TOOLS_CONFIG = [
   { id: "gravitacional", name: "Pala Gravitacional", baseCost: 100000, increase: 1000, critIncrease: 0.1, desc: "+1000 por click y +10% de Prob. Crítica.", emoji: "🌌" },
 ];
 
+const PRESTIGE_UPGRADES_CONFIG = [
+  { id: "cegador", name: "Brillo Cegador", cost: 1, desc: "Clicks ganan +5% de tus PPS actuales.", emoji: "☀️" },
+  { id: "contratos", name: "Contratos Ficticios", cost: 2, desc: "Los Upgrades (PPS) cuestan 15% menos.", emoji: "📃" },
+  { id: "buff_double", name: "Licencia de Pela-AI", cost: 3, desc: "Doble efectividad (x2) en Buffs activos.", emoji: "🎖️" },
+  { id: "iman", name: "Imán de Pelados", cost: 4, desc: "Pelados voladores aparecen 50% más seguido.", emoji: "🧲" },
+];
+
 const GACHA_ITEMS = [
   { id: "gorra", name: "Gorra de Lana", desc: "+5% Fuerza de Click.", emoji: "🧢", weight: 35 },
   { id: "minoxidil_viejito", name: "Minoxidil Viejito", desc: "+5% Multiplicador de PPS.", emoji: "🧪", weight: 35 },
@@ -65,8 +72,12 @@ export default function ClickerPage() {
   const [tools, setTools] = useState({ afilador: 0, mango: 0, guantes: 0, locion: 0, gravitacional: 0 });
   const [inventory, setInventory] = useState({ gorra: 0, minoxidil_viejito: 0, secador_roto: 0, pala_jefe: 0, peluca_cotillon: 0 });
   
-  // Prestige state
-  const [brillo, setBrillo] = useState(0);
+  // Prestige states
+  const [brillo, setBrillo] = useState(0); // prestige currency owned
+  const [prestigeUpgrades, setPrestigeUpgrades] = useState({ cegador: 0, contratos: 0, buff_double: 0, iman: 0 });
+
+  // Sound settings
+  const [muted, setMuted] = useState(false);
 
   // Floating text particles
   const [floatingTexts, setFloatingTexts] = useState([]);
@@ -75,7 +86,7 @@ export default function ClickerPage() {
   // Shovel shake state on critical click
   const [shake, setShake] = useState(false);
 
-  // Shop Tab System: "passive" | "active" | "collection" | "casino"
+  // Shop Tab System: "passive" | "active" | "collection" | "casino" | "prestige"
   const [shopTab, setShopTab] = useState("passive");
 
   // Combo multiplier states
@@ -109,18 +120,90 @@ export default function ClickerPage() {
     first_prestige: false,
   });
 
+  // Synthesized Sound Triggers (Web Audio API)
+  const playSound = (type) => {
+    if (muted) return;
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      if (type === "click") {
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(150, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.12);
+      } else if (type === "crit") {
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(120, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(320, ctx.currentTime + 0.18);
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.18);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.18);
+      } else if (type === "buy") {
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(320, ctx.currentTime);
+        osc.frequency.setValueAtTime(440, ctx.currentTime + 0.08);
+        osc.frequency.setValueAtTime(580, ctx.currentTime + 0.16);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.24);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.24);
+      } else if (type === "gacha") {
+        let time = ctx.currentTime;
+        for (let i = 0; i < 5; i++) {
+          const subOsc = ctx.createOscillator();
+          const subGain = ctx.createGain();
+          subOsc.frequency.setValueAtTime(200 + i * 90, time);
+          subGain.gain.setValueAtTime(0.06, time);
+          subGain.gain.exponentialRampToValueAtTime(0.001, time + 0.07);
+          subOsc.connect(subGain);
+          subGain.connect(ctx.destination);
+          subOsc.start(time);
+          subOsc.stop(time + 0.07);
+          time += 0.09;
+        }
+      } else if (type === "flip") {
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(440, ctx.currentTime);
+        osc.frequency.linearRampToValueAtTime(220, ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      }
+    } catch (e) {}
+  };
+
   // Load game from local storage on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const savedPalas = localStorage.getItem("clicker_palas_v4");
-      const savedUpgrades = localStorage.getItem("clicker_upgrades_v4");
-      const savedTools = localStorage.getItem("clicker_tools_v4");
-      const savedInventory = localStorage.getItem("clicker_inventory_v4");
-      const savedBrillo = localStorage.getItem("clicker_brillo_v4");
-      const savedAchievements = localStorage.getItem("clicker_achievements_v4");
+      const savedPalas = localStorage.getItem("clicker_palas_v5");
+      const savedUpgrades = localStorage.getItem("clicker_upgrades_v5");
+      const savedTools = localStorage.getItem("clicker_tools_v5");
+      const savedInventory = localStorage.getItem("clicker_inventory_v5");
+      const savedBrillo = localStorage.getItem("clicker_brillo_v5");
+      const savedPrestigeUpgrades = localStorage.getItem("clicker_prestige_upgrades_v5");
+      const savedAchievements = localStorage.getItem("clicker_achievements_v5");
+      const savedMuted = localStorage.getItem("clicker_muted");
 
       if (savedPalas !== null) setPalas(parseFloat(savedPalas));
       if (savedBrillo !== null) setBrillo(parseInt(savedBrillo, 10));
+      if (savedMuted !== null) setMuted(savedMuted === "true");
       
       if (savedUpgrades !== null) {
         try {
@@ -137,6 +220,11 @@ export default function ClickerPage() {
           setInventory(JSON.parse(savedInventory));
         } catch (e) {}
       }
+      if (savedPrestigeUpgrades !== null) {
+        try {
+          setPrestigeUpgrades(JSON.parse(savedPrestigeUpgrades));
+        } catch (e) {}
+      }
       if (savedAchievements !== null) {
         try {
           setAchievements(JSON.parse(savedAchievements));
@@ -150,14 +238,16 @@ export default function ClickerPage() {
   // Save game to local storage
   useEffect(() => {
     if (isClientLoaded) {
-      localStorage.setItem("clicker_palas_v4", palas.toString());
-      localStorage.setItem("clicker_upgrades_v4", JSON.stringify(upgrades));
-      localStorage.setItem("clicker_tools_v4", JSON.stringify(tools));
-      localStorage.setItem("clicker_inventory_v4", JSON.stringify(inventory));
-      localStorage.setItem("clicker_brillo_v4", brillo.toString());
-      localStorage.setItem("clicker_achievements_v4", JSON.stringify(achievements));
+      localStorage.setItem("clicker_palas_v5", palas.toString());
+      localStorage.setItem("clicker_upgrades_v5", JSON.stringify(upgrades));
+      localStorage.setItem("clicker_tools_v5", JSON.stringify(tools));
+      localStorage.setItem("clicker_inventory_v5", JSON.stringify(inventory));
+      localStorage.setItem("clicker_brillo_v5", brillo.toString());
+      localStorage.setItem("clicker_prestige_upgrades_v5", JSON.stringify(prestigeUpgrades));
+      localStorage.setItem("clicker_achievements_v5", JSON.stringify(achievements));
+      localStorage.setItem("clicker_muted", muted.toString());
     }
-  }, [palas, upgrades, tools, inventory, brillo, achievements, isClientLoaded]);
+  }, [palas, upgrades, tools, inventory, brillo, prestigeUpgrades, achievements, muted, isClientLoaded]);
 
   // Compute passive modifiers from Gacha inventory
   const inventoryClickMultiplier = 1 + (inventory.gorra || 0) * 0.05 + (inventory.pala_jefe || 0) * 0.15;
@@ -170,9 +260,12 @@ export default function ClickerPage() {
     return total + (upgrades[id] || 0) * (config ? config.increase : 0);
   }, 0);
 
-  // Apply Prestige, Buff, and Inventory multipliers to PPS
+  // Apply Prestige and Buff multipliers to PPS
   const prestigeMultiplier = 1 + brillo * 0.12; // +12% per prestige point
-  const buffPPSMultiplier = buff && buff.type === "hype" ? buff.multiplier : 1;
+  
+  // Prestige Shop Buff double effect
+  const buffDbl = prestigeUpgrades.buff_double ? 2 : 1;
+  const buffPPSMultiplier = buff && buff.type === "hype" ? buff.multiplier * buffDbl : 1;
   const palasPerSecond = basePPS * prestigeMultiplier * buffPPSMultiplier * inventoryPPSMultiplier;
 
   // Auto-generation loop (updates 10 times per second)
@@ -261,6 +354,9 @@ export default function ClickerPage() {
   useEffect(() => {
     if (!isClientLoaded) return;
 
+    // Prestige Shop Magnet item increases spawn frequency (+50% spawn rate)
+    const frequencyFactor = prestigeUpgrades.iman ? 6500 : 10000;
+
     const spawnInterval = setInterval(() => {
       if (flyingPelado || trivia) return;
 
@@ -280,10 +376,10 @@ export default function ClickerPage() {
           size: 75,
         });
       }
-    }, 10000);
+    }, frequencyFactor);
 
     return () => clearInterval(spawnInterval);
-  }, [flyingPelado, trivia, isClientLoaded]);
+  }, [flyingPelado, trivia, prestigeUpgrades.iman, isClientLoaded]);
 
   // Flying Pelado physics loop
   useEffect(() => {
@@ -343,9 +439,12 @@ export default function ClickerPage() {
 
   const totalCritChance = 0.05 + activeCritChance + inventoryCritChance;
 
-  // Click power calculation (increases with prestige, combo, buffs, active tools and inventory)
-  const baseClickPower = 1 + activeClickPower;
-  const buffClickMultiplier = buff && buff.type === "fever" ? buff.multiplier : 1;
+  // Prestige Shop cegador effect: clicks gain +5% of current PPS
+  const ppsClickBonus = prestigeUpgrades.cegador ? palasPerSecond * 0.05 : 0;
+
+  // Click power calculation
+  const baseClickPower = 1 + activeClickPower + ppsClickBonus;
+  const buffClickMultiplier = buff && buff.type === "fever" ? buff.multiplier * buffDbl : 1;
   const clickPower = baseClickPower * prestigeMultiplier * comboMultiplier * buffClickMultiplier * inventoryClickMultiplier;
 
   // Handle clicking the flying pelado
@@ -353,13 +452,13 @@ export default function ClickerPage() {
     e.stopPropagation();
     if (!flyingPelado) return;
 
+    playSound("buy");
     if (!achievements.gold_click) {
       setAchievements((prev) => ({ ...prev, gold_click: true }));
     }
 
     setFlyingPelado(null);
 
-    // 40% chance of trivia
     if (Math.random() < 0.40) {
       const questionData = TRIVIA_POOL[Math.floor(Math.random() * TRIVIA_POOL.length)];
       setTrivia({
@@ -402,6 +501,7 @@ export default function ClickerPage() {
     if (!trivia) return;
 
     if (index === trivia.c) {
+      playSound("buy");
       setBuff({
         type: "fever",
         name: "Fiebre Extrema (Click x15)",
@@ -411,6 +511,7 @@ export default function ClickerPage() {
       setPalas((prev) => prev + Math.max(100, Math.floor(palasPerSecond * 60)));
       triggerFlashMessage("¡Correcto! Recibís x15 de Clicks por 15s y palas extra.");
     } else {
+      playSound("click");
       triggerFlashMessage("¡Incorrecto! No ganás ningún bono.");
     }
 
@@ -445,8 +546,11 @@ export default function ClickerPage() {
     const finalPower = isCrit ? clickPower * 10 : clickPower;
 
     if (isCrit) {
+      playSound("crit");
       setShake(true);
       setTimeout(() => setShake(false), 150);
+    } else {
+      playSound("click");
     }
 
     setPalas((prev) => prev + finalPower);
@@ -468,19 +572,26 @@ export default function ClickerPage() {
     }, 900);
   };
 
-  // Get current cost of upgrade
+  // Get current cost of upgrade (passive, active, prestige)
   const getCost = (id, isTool = false) => {
     const list = isTool ? TOOLS_CONFIG : UPGRADES_CONFIG;
     const config = list.find((u) => u.id === id);
     if (!config) return 999999;
     const count = isTool ? (tools[id] || 0) : (upgrades[id] || 0);
-    return Math.floor(config.baseCost * Math.pow(1.15, count));
+    const rawCost = Math.floor(config.baseCost * Math.pow(1.15, count));
+
+    // Prestige Shop contratos discount: 15% off per level
+    if (!isTool && prestigeUpgrades.contratos > 0) {
+      return Math.max(1, Math.floor(rawCost * (1 - 0.15 * prestigeUpgrades.contratos)));
+    }
+    return rawCost;
   };
 
   // Buy passive upgrade
   const buyUpgrade = (id) => {
     const cost = getCost(id, false);
     if (palas >= cost) {
+      playSound("buy");
       setPalas((prev) => prev - cost);
       setUpgrades((prev) => ({
         ...prev,
@@ -493,6 +604,7 @@ export default function ClickerPage() {
   const buyTool = (id) => {
     const cost = getCost(id, true);
     if (palas >= cost) {
+      playSound("buy");
       setPalas((prev) => prev - cost);
       setTools((prev) => ({
         ...prev,
@@ -501,10 +613,25 @@ export default function ClickerPage() {
     }
   };
 
+  // Buy prestige shop upgrade
+  const buyPrestigeUpgrade = (id) => {
+    const config = PRESTIGE_UPGRADES_CONFIG.find((u) => u.id === id);
+    if (config && brillo >= config.cost && !prestigeUpgrades[id]) {
+      playSound("buy");
+      setBrillo((prev) => prev - config.cost);
+      setPrestigeUpgrades((prev) => ({
+        ...prev,
+        [id]: 1,
+      }));
+      triggerFlashMessage(`¡Compraste permanentemente: ${config.name}! ✨`);
+    }
+  };
+
   // Lotería Folicular (Gacha Spin)
   const spinGacha = () => {
     if (palas < GACHA_COST || spinning) return;
     
+    playSound("gacha");
     setPalas((prev) => prev - GACHA_COST);
     setSpinning(true);
     setSpinResult(null);
@@ -536,6 +663,7 @@ export default function ClickerPage() {
   const gambleFlip = () => {
     if (palas <= 10 || flipping) return;
     
+    playSound("flip");
     const betAmount = Math.floor(palas * (betPercent / 100));
     setFlipping(true);
     setFlipResult(null);
@@ -558,6 +686,7 @@ export default function ClickerPage() {
   // Execute Prestige
   const executePrestige = () => {
     if (palas >= PRESTIGE_THRESHOLD) {
+      playSound("buy");
       const earnedShine = Math.floor(palas / PRESTIGE_THRESHOLD);
       setBrillo((prev) => prev + earnedShine);
       setPalas(0);
@@ -573,6 +702,7 @@ export default function ClickerPage() {
   // Canjear Palas
   const handleExchange = () => {
     if (palas >= EXCHANGE_COST) {
+      playSound("buy");
       setPalas((prev) => prev - EXCHANGE_COST);
       addCredit(EXCHANGE_CREDIT);
     }
@@ -652,6 +782,30 @@ export default function ClickerPage() {
 
         .clicker-title-area {
           margin-bottom: 18px;
+          position: relative;
+          width: 100%;
+        }
+
+        .mute-toggle-btn {
+          position: absolute;
+          right: 0;
+          top: 10px;
+          background: rgba(255,255,255,0.03);
+          border: 1px solid rgba(255,255,255,0.08);
+          color: var(--gold);
+          border-radius: 50%;
+          width: 32px;
+          height: 32px;
+          cursor: pointer;
+          font-size: 0.9rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: background 0.2s;
+        }
+
+        .mute-toggle-btn:hover {
+          background: rgba(255, 235, 59, 0.1);
         }
 
         .clicker-title {
@@ -1123,26 +1277,26 @@ export default function ClickerPage() {
         /* Tabs styling */
         .shop-tabs {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: repeat(5, 1fr);
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid rgba(255, 255, 255, 0.06);
           border-radius: 14px;
           padding: 4px;
-          gap: 4px;
+          gap: 2px;
         }
 
         .shop-tab-btn {
           background: transparent;
           border: none;
           color: var(--text-muted);
-          padding: 8px 4px;
+          padding: 8px 2px;
           border-radius: 10px;
-          font-size: 0.72rem;
+          font-size: 0.65rem;
           font-weight: 700;
           cursor: pointer;
           transition: all 0.2s ease;
           text-transform: uppercase;
-          letter-spacing: 0.02em;
+          letter-spacing: 0.01em;
           text-align: center;
           overflow: hidden;
           text-overflow: ellipsis;
@@ -1314,12 +1468,12 @@ export default function ClickerPage() {
         }
 
         .gacha-wheel.spinning {
-          animation: spin-fast 0.15s linear infinite;
+          animation: spin-fast-anim 0.15s linear infinite;
           border-color: #ff3b3b;
           box-shadow: 0 0 25px rgba(255, 59, 59, 0.2);
         }
 
-        @keyframes spin-fast {
+        @keyframes spin-fast-anim {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
@@ -1548,6 +1702,16 @@ export default function ClickerPage() {
                 <span>✨</span> Brillo Capilar +{brillo}
               </div>
             )}
+            
+            {/* Audio Mute/Unmute Toggle */}
+            <button
+              className="mute-toggle-btn"
+              onClick={() => setMuted((prev) => !prev)}
+              title={muted ? "Activar Sonido" : "Silenciar"}
+              type="button"
+            >
+              {muted ? "🔇" : "🔊"}
+            </button>
           </div>
 
           <div className="counter-box">
@@ -1646,6 +1810,7 @@ export default function ClickerPage() {
             <button className={`shop-tab-btn ${shopTab === "active" ? "active" : ""}`} onClick={() => setShopTab("active")} type="button">Clicks</button>
             <button className={`shop-tab-btn ${shopTab === "collection" ? "active" : ""}`} onClick={() => setShopTab("collection")} type="button">Loot</button>
             <button className={`shop-tab-btn ${shopTab === "casino" ? "active" : ""}`} onClick={() => setShopTab("casino")} type="button">Casino</button>
+            <button className={`shop-tab-btn ${shopTab === "prestige" ? "active" : ""}`} onClick={() => setShopTab("prestige")} type="button">Brillo</button>
           </div>
 
           <div className="upgrades-container">
@@ -1782,6 +1947,52 @@ export default function ClickerPage() {
                     {flipResult === "win" ? "¡Ganaste!" : "¡Perdiste!"}
                   </div>
                 )}
+              </div>
+            )}
+
+            {shopTab === "prestige" && (
+              /* Prestige Upgrades Shop (spending Brillo Capilar) */
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={{ background: "rgba(255, 235, 59, 0.03)", border: "1px solid rgba(255, 235, 59, 0.15)", borderRadius: "16px", padding: "12px", textAlign: "center" }}>
+                  <div style={{ fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase", color: "var(--gold)", marginBottom: "4px" }}>Tus Brillo Capilar</div>
+                  <div style={{ fontSize: "2rem", fontWeight: 900, fontFamily: "monospace", color: "#fff" }}>{brillo} ✨</div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {PRESTIGE_UPGRADES_CONFIG.map((upgrade) => {
+                    const owned = prestigeUpgrades[upgrade.id] > 0;
+                    const canAfford = brillo >= upgrade.cost;
+
+                    return (
+                      <div key={upgrade.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.02)", border: owned ? "1px solid rgba(255, 235, 59, 0.2)" : "1px solid rgba(255,255,255,0.05)", borderRadius: "14px", padding: "10px 12px", gap: "10px" }}>
+                        <div style={{ display: "flex", gap: "10px", alignItems: "center", flex: 1 }}>
+                          <span style={{ fontSize: "1.4rem" }}>{upgrade.emoji}</span>
+                          <div style={{ display: "flex", flexDirection: "column", textAlign: "left" }}>
+                            <span style={{ fontSize: "0.85rem", fontWeight: 700, color: owned ? "var(--gold)" : "#fff" }}>{upgrade.name}</span>
+                            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.25 }}>{upgrade.desc}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          className="upgrade-buy-btn"
+                          disabled={owned || !canAfford}
+                          onClick={() => buyPrestigeUpgrade(upgrade.id)}
+                          type="button"
+                          style={{ minWidth: "70px", padding: "6px" }}
+                        >
+                          {owned ? (
+                            <span style={{ color: "var(--gold)" }}>Comprado</span>
+                          ) : (
+                            <>
+                              <span>{upgrade.cost}</span>
+                              <span style={{ fontSize: "0.6rem" }}>Brillo</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
