@@ -55,6 +55,14 @@ const SUFFIXES = [
   { value: 1e33, symbol: "Dc" },
   { value: 1e36, symbol: "Ud" },
   { value: 1e39, symbol: "Dd" },
+  { value: 1e42, symbol: "Td" },
+  { value: 1e45, symbol: "Qad" },
+  { value: 1e48, symbol: "Qid" },
+  { value: 1e51, symbol: "Sxd" },
+  { value: 1e54, symbol: "Spd" },
+  { value: 1e57, symbol: "Ocd" },
+  { value: 1e60, symbol: "Nod" },
+  { value: 1e63, symbol: "Vg" },
 ];
 
 const formatVal = (num, decimals = 1) => {
@@ -64,6 +72,10 @@ const formatVal = (num, decimals = 1) => {
   const absNum = Math.abs(num);
   if (absNum < 1e6) {
     return num.toLocaleString(undefined, { maximumFractionDigits: decimals });
+  }
+  
+  if (absNum >= 1e66) {
+    return num.toExponential(2).replace("e+", "e");
   }
   
   for (let i = SUFFIXES.length - 1; i >= 0; i--) {
