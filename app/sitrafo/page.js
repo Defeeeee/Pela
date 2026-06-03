@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 
 export default function SitrafoPage() {
@@ -15,7 +15,10 @@ export default function SitrafoPage() {
   const [nombre, setNombre] = useState("");
   const [norwood, setNorwood] = useState(3);
   const [photoName, setPhotoName] = useState("");
+  const [photoUrl, setPhotoUrl] = useState("");
   const [isDragging, setIsDragging] = useState(false);
+
+  const fileInputRef = useRef(null);
 
   const fetchTurno = async (answerIndex = null) => {
     try {
@@ -47,6 +50,19 @@ export default function SitrafoPage() {
     fetchTurno(idx);
   };
 
+  const handleFile = (file) => {
+    if (file) {
+      setPhotoName(file.name);
+      setPhotoUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      handleFile(e.target.files[0]);
+    }
+  };
+
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -62,12 +78,14 @@ export default function SitrafoPage() {
     e.stopPropagation();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      setPhotoName(e.dataTransfer.files[0].name);
+      handleFile(e.dataTransfer.files[0]);
     }
   };
 
-  const simulatePhotoUpload = () => {
-    setPhotoName("foto_scalp_reflejo_" + Math.floor(Math.random() * 1000) + ".jpg");
+  const simulatePhotoUpload = (e) => {
+    e.stopPropagation(); // Avoid triggering file pick click
+    setPhotoName("foto_scalp_reflejo_feliz.jpg");
+    setPhotoUrl("/imgs/goat/Pelado Feliz.jpeg");
   };
 
   const submitTramite = async (e) => {
@@ -133,6 +151,7 @@ export default function SitrafoPage() {
     setNombre("");
     setNorwood(3);
     setPhotoName("");
+    setPhotoUrl("");
     setApprovedData(null);
     setRejectionError("");
   };
@@ -336,6 +355,9 @@ export default function SitrafoPage() {
           padding: 6px 12px;
           border-radius: 6px;
           font-weight: 700;
+          border: none;
+          color: #fff;
+          cursor: pointer;
         }
         .upload-btn-simulate:hover {
           background: rgba(255,255,255,0.15);
@@ -361,77 +383,130 @@ export default function SitrafoPage() {
           color: #ffffff;
           font-weight: 600;
         }
+        
+        /* Premium DNI Card Redesign */
         .dni-card {
           width: 100%;
-          background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-          border-radius: 18px;
-          padding: 20px;
-          border: 1px solid rgba(255, 255, 255, 0.25);
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+          background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 50%, #7dd3fc 100%);
+          color: #0f172a;
+          border-radius: 20px;
+          padding: 24px;
+          border: 1px solid #bae6fd;
+          box-shadow: 0 15px 35px rgba(0, 0, 0, 0.35);
           text-align: left;
           position: relative;
           overflow: hidden;
           margin: 20px 0;
-          color: #fff;
-          font-family: "Courier New", Courier, monospace;
+          font-family: system-ui, -apple-system, sans-serif;
+          box-sizing: border-box;
         }
         .dni-card::before {
-          content: "REPÚBLICA ARGENTINA";
+          content: "";
           position: absolute;
-          top: 10px;
-          right: 15px;
-          font-size: 0.55rem;
-          opacity: 0.6;
-          font-weight: 900;
-          letter-spacing: 0.05em;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.4) 40%, rgba(255, 255, 255, 0.4) 45%, transparent 55%);
+          background-size: 200% 200%;
+          animation: shine 5s infinite linear;
+          pointer-events: none;
+        }
+        @keyframes shine {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
         }
         .dni-logo {
-          font-size: 1.4rem;
-          margin-bottom: 12px;
-          opacity: 0.9;
+          font-size: 1.1rem;
+          font-weight: 900;
+          color: #0369a1;
+          margin-bottom: 16px;
+          border-bottom: 2px solid #0284c7;
+          padding-bottom: 8px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        .dni-logo-text {
+          font-size: 0.65rem;
+          color: #0369a1;
+          font-weight: 800;
         }
         .dni-content {
           display: flex;
-          gap: 16px;
+          gap: 20px;
         }
-        .dni-photo {
-          width: 100px;
-          height: 120px;
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.3);
-          border-radius: 8px;
+        .dni-photo-box {
           display: flex;
           flex-direction: column;
           align-items: center;
+          gap: 8px;
+        }
+        .dni-photo {
+          width: 110px;
+          height: 140px;
+          border: 2px solid #0284c7;
+          border-radius: 10px;
+          background: #f1f5f9;
+          overflow: hidden;
+          display: flex;
+          align-items: center;
           justify-content: center;
-          font-size: 2.2rem;
-          color: #fff;
+          box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        .dni-photo-img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .dni-signature {
+          font-family: "Georgia", serif;
+          font-style: italic;
+          font-size: 0.75rem;
+          color: rgba(15, 23, 42, 0.65);
+          border-bottom: 1px solid rgba(15, 23, 42, 0.25);
+          width: 100%;
+          text-align: center;
+          padding-bottom: 2px;
+          margin-top: 4px;
         }
         .dni-details {
           flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 8px 12px;
         }
         .dni-field {
-          font-size: 0.65rem;
+          display: flex;
+          flex-direction: column;
+        }
+        .dni-label {
+          font-size: 0.55rem;
+          font-weight: 700;
+          color: #0369a1;
           text-transform: uppercase;
-          color: rgba(255, 255, 255, 0.7);
+          margin-bottom: 1px;
+          letter-spacing: 0.02em;
         }
         .dni-value {
           font-size: 0.75rem;
-          font-weight: bold;
-          margin-bottom: 4px;
-          color: #fff;
+          font-weight: 800;
+          color: #0f172a;
+          line-height: 1.2;
+          margin: 0;
         }
         .dni-footer {
-          margin-top: 15px;
-          border-top: 1px dashed rgba(255,255,255,0.2);
-          padding-top: 8px;
+          margin-top: 16px;
+          border-top: 1px solid rgba(2, 132, 199, 0.25);
+          padding-top: 10px;
           font-size: 0.55rem;
-          color: rgba(255, 255, 255, 0.6);
+          color: #0369a1;
+          font-weight: 600;
           display: flex;
           justify-content: space-between;
+          align-items: center;
         }
         .menu-back {
           margin-top: 24px;
@@ -534,13 +609,20 @@ export default function SitrafoPage() {
 
             <div className="form-group">
               <label className="form-label">Adjuntar Captura de Cuero Cabelludo (Foto de Scalp)</label>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                style={{ display: "none" }}
+              />
               <div
                 className={`upload-zone ${isDragging ? "dragging" : ""}`}
                 onDragEnter={handleDrag}
                 onDragOver={handleDrag}
                 onDragLeave={handleDrag}
                 onDrop={handleDrop}
-                onClick={simulatePhotoUpload}
+                onClick={() => fileInputRef.current.click()}
               >
                 {photoName ? (
                   <div>
@@ -548,14 +630,26 @@ export default function SitrafoPage() {
                     <p style={{ margin: "4px 0", fontSize: "0.85rem", color: "#00bcd4", fontWeight: "bold" }}>
                       {photoName}
                     </p>
+                    {photoUrl && (
+                      <div style={{ width: "60px", height: "60px", margin: "8px auto", borderRadius: "6px", overflow: "hidden", border: "1px solid #00bcd4" }}>
+                        <img src={photoUrl} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      </div>
+                    )}
                     <span className="upload-text">Hacé click para cambiar</span>
                   </div>
                 ) : (
                   <div>
                     <span style={{ fontSize: "2rem" }}>📸</span>
                     <p className="upload-text" style={{ margin: "6px 0 0 0" }}>
-                      Arrastrá tu foto o hacé click aquí para simular captura de cámara frontal
+                      Arrastrá tu foto o hacé click aquí para seleccionar archivo
                     </p>
+                    <button
+                      type="button"
+                      className="upload-btn-simulate"
+                      onClick={simulatePhotoUpload}
+                    >
+                      Simular Captura (Pelado Feliz)
+                    </button>
                   </div>
                 )}
               </div>
@@ -581,30 +675,62 @@ export default function SitrafoPage() {
               <strong>🎉 TRÁMITE APROBADO:</strong> El Honorable Consejo Folicular ha homologado su expediente. Su credencial digital se encuentra lista.
             </div>
 
-            {/* DNI Folicular Card Display */}
+            {/* Premium DNI Folicular Card Display */}
             <div className="dni-card">
-              <div className="dni-logo">🦅 REGISTRO FOLICULAR</div>
+              <div className="dni-logo">
+                <span>🏛️ REGISTRO FOLICULAR ARGENTINO</span>
+                <span className="dni-logo-text">MINISTERIO DE LA PALA</span>
+              </div>
               <div className="dni-content">
-                <div className="dni-photo">
-                  {approvedData.norwood >= 6 ? "🥚" : approvedData.norwood >= 4 ? "👨‍🦲" : "👨"}
+                <div className="dni-photo-box">
+                  <div className="dni-photo">
+                    {photoUrl ? (
+                      <img src={photoUrl} className="dni-photo-img" alt="Foto DNI Folicular" />
+                    ) : (
+                      <span style={{ fontSize: "2.2rem" }}>
+                        {approvedData.norwood >= 6 ? "🥚" : approvedData.norwood >= 4 ? "👨‍🦲" : "👨"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="dni-signature">
+                    {approvedData.nombre.split(" ")[0]}
+                  </div>
                 </div>
                 <div className="dni-details">
-                  <div className="dni-field">Apellido y Nombre</div>
-                  <div className="dni-value">{approvedData.nombre}</div>
+                  <div className="dni-field">
+                    <span className="dni-label">Apellido y Nombre</span>
+                    <span className="dni-value">{approvedData.nombre}</span>
+                  </div>
                   
-                  <div className="dni-field">Nro. Trámite / DNI</div>
-                  <div className="dni-value">{approvedData.dniNumber}</div>
+                  <div className="dni-field">
+                    <span className="dni-label">Nro. Documento / DNI</span>
+                    <span className="dni-value">{approvedData.dniNumber.toLocaleString("es-AR")}</span>
+                  </div>
 
-                  <div className="dni-field">Rango Capilar</div>
-                  <div className="dni-value" style={{ color: "#ffeb3b" }}>{approvedData.rank}</div>
+                  <div className="dni-field">
+                    <span className="dni-label">Categoría Folicular</span>
+                    <span className="dni-value" style={{ color: "#0369a1" }}>{approvedData.rank}</span>
+                  </div>
                   
-                  <div className="dni-field">Expediente Nro</div>
-                  <div className="dni-value">{approvedData.fileNumber}</div>
+                  <div className="dni-field">
+                    <span className="dni-label">Expediente Nro</span>
+                    <span className="dni-value">{approvedData.fileNumber}</span>
+                  </div>
+
+                  <div className="dni-field">
+                    <span className="dni-label">Nacionalidad</span>
+                    <span className="dni-value">Argentino</span>
+                  </div>
+
+                  <div className="dni-field">
+                    <span className="dni-label">Vencimiento</span>
+                    <span className="dni-value">Indeterminado</span>
+                  </div>
                 </div>
               </div>
               <div className="dni-footer">
-                <span>FIRMA: Marta (Mesa de Entradas)</span>
-                <span>EMISIÓN: {approvedData.timestamp}</span>
+                <span>FIRMA AUTORIZADA: Marta (Mesa de Entradas)</span>
+                <span>FECHA: {approvedData.timestamp.split(" ")[0]}</span>
               </div>
             </div>
 
