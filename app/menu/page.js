@@ -16,6 +16,8 @@ const routesConfig = [
   { path: "/health", label: "Estado del Pela", desc: "Monitoreo en tiempo real de la salud del pelado.", icon: "🏥" },
   { path: "/instant", label: "Pelado Instantáneo", desc: "Visualizador directo e inmediato de imágenes.", icon: "📸" },
   { path: "/labura", label: "Ir a Laburar", desc: "Agarrá la pala y recargá tu crédito de folículos.", icon: "🛠️" },
+  { path: "/sitrafo", label: "SITRAFO", desc: "Sistema de Trámites Foliculares de la Nación.", icon: "🏛️" },
+  { path: "/afipela", label: "AFIP-ela", desc: "Liquidación y Declaración Jurada del Monotributo Folicular.", icon: "🦅" },
 ];
 
 export default function MenuPage() {
