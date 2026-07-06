@@ -18,6 +18,7 @@ const routesConfig = [
   { path: "/labura", label: "Ir a Laburar", desc: "Agarrá la pala y recargá tu crédito de folículos.", icon: "🛠️" },
   { path: "/sitrafo", label: "SITRAFO", desc: "Sistema de Trámites Foliculares de la Nación.", icon: "🏛️" },
   { path: "/afipela", label: "AFIP-ela", desc: "Liquidación y Declaración Jurada del Monotributo Folicular.", icon: "🦅" },
+  { path: "/marcha", label: "Marcha por la Pala", desc: "Generá tu cartel oficial para la próxima marcha folicular.", icon: "✊" },
 ];
 
 export default function MenuPage() {
