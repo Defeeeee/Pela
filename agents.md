@@ -46,7 +46,7 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
 
 ## 📝 Agent Changelog (Registro de Avances)
 
-### 2026-07-28 - Antigravity (Transición Fase 2 a 3)
+### 2026-07-27 - Antigravity (Transición Fase 2 a 3)
 - **Objetivo:** Redactar el documento `agents.md` con lineamientos de trabajo y establecer el nuevo protocolo de handover entre modelos, según lo solicitado por el usuario.
 - **Completado:**
   - Creación del archivo `agents.md` resumiendo la arquitectura actual.
@@ -65,4 +65,5 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
   - `/video` tiene un solo link hardcodeado en la constante `VIDEOS` y no está enlazado desde `/menu`: o se le cargan videos o se decide sacarlo.
   - La rama `feature/bureaucracy` ya está contenida en `origin/master` y se puede borrar (local y remota).
   - Sigue abierta la decisión del usuario sobre la próxima app (BOP, Paritómetro, INPI-ela, Foli-Token, o algo no burocrático).
-- **Notas:** No se implementaron features nuevas ni se pusheó nada; solo sincronización local y actualización del doc. Ojo con la fecha: esta entrada es anterior a la de Antigravity que figura arriba (2026-07-28), que estaba fechada un día adelante.
+- **Notas:** No se implementaron features nuevas ni se pusheó nada; solo sincronización local y actualización del doc. También se corrigió la fecha de la entrada de Antigravity, que estaba fechada 2026-07-28 cuando el trabajo se hizo el 2026-07-27.
+- **Recordatorio para próximos agentes:** verificar la fecha real del sistema (`date`) antes de firmar una entrada del changelog, en vez de asumirla.
