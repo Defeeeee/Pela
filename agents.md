@@ -9,6 +9,8 @@
   - 🏛️ **SITRAFO** (`/sitrafo` + `/api/sitrafo`): Portal interactivo para obtener el DNI de "Aptitud Capilar" (con subida de fotos reales y layout premium). El API devuelve rechazos aleatorios y niega turnos el 85% de las veces (se destraba con una trivia).
   - 🦅 **AFIP-ela** (`/afipela` + `/api/afipela`): Portal de impuestos que categoriza el "Monotributo Folicular" (categorías A a K según pelos restantes y reflectividad) y genera facturas imprimibles.
   - ✊ **Marcha por la Pala** (`/marcha` + `/api/marcha`): Generador de carteles de protesta. El POST arma un SVG y lo convierte a PNG con `sharp`; el GET devuelve convocatorias aleatorias (lugar, horario, motivo, cantito, gremio).
+- **Juegos diarios (Fase 3, PR #27 mergeado el 2026-07-28):**
+  - 🟩 **Pelardle** (`/pelardle` + `/api/pelardle`): Wordle diario con vocabulario capilar, burocrático y lunfardo. **Es el primer contenido diario real del proyecto** — ver la sección de Arquitectura para el patrón, que conviene reusar en futuras features con palabra/contenido del día.
 - **Otros agregados recientes:**
   - 📺 **`/video`:** Reproductor de video random con autoplay. **La lista `VIDEOS` tiene un solo link hardcodeado** — falta cargarle contenido. No está enlazado desde `/menu`.
 
@@ -17,6 +19,11 @@
 - **`app/SocialCreditContext.js`:** La "Reserva de Pala". Crédito de 100 guardado en localStorage que se descuenta al visitar páginas; al llegar a 0 tiñe toda la app de sepia y redirige forzado a `/labura`. Usa un registry global para evitar el doble descuento de React StrictMode.
 - **`app/WorkJumpscare.js`:** Montado en el layout raíz. En `/`, `/autista` y `/escapa` tira un CV a pantalla completa con 50% de probabilidad cada 5s (cada 1s en `/autista`).
 - **`app/customPages/pages.js`:** Mapa de rutas propio que usa `app/page.js` para elegir qué renderizar en `/`.
+- **Patrón de contenido diario (nuevo, ver `app/api/pelardle/route.js`):** El "día" **no** se calcula por fecha sino por un **contador de días hábiles** desde una época fija, salteando findes y feriados con la misma API de `argentinadatos.com` que usa `proxy.js`. Ese índice hace doble función: elige el contenido del día y permite que las rachas no se corten los días en que el sitio está cerrado. Tres trampas ya resueltas ahí que conviene no volver a pisar:
+  1. La fecha va en hora argentina (`Intl.DateTimeFormat("en-CA", { timeZone })`), nunca `toISOString()`, que haría cambiar el día a las 21:00.
+  2. El normalizador saca tildes pero blinda la Ñ antes de `normalize("NFD")`, que si no la descompone en N + tilde y se la come.
+  3. Ojo: `/today` **no** es diario a pesar del nombre, no tiene ninguna lógica de fecha. No sirve como referencia.
+- **Secretos del cliente:** Cuando una feature tenga una respuesta que el usuario no debe ver antes de tiempo, va en una API route y **nunca** en el bundle del cliente (Pelardle manda el intento y recibe solo el patrón de colores).
 - **Estilos:** No hay Tailwind ni librería de UI. Todo es estilo inline + bloques `<style>` embebidos en cada página. Las únicas dependencias son `next`, `react`, `react-dom` y `sharp`.
 - **Deploy:** Push a `master` dispara `.github/workflows/deploy.yml` → build standalone → scp al VPS → `pm2 startOrReload`. Puerto 9314.
 
@@ -67,3 +74,20 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
   - Sigue abierta la decisión del usuario sobre la próxima app (BOP, Paritómetro, INPI-ela, Foli-Token, o algo no burocrático).
 - **Notas:** No se implementaron features nuevas ni se pusheó nada; solo sincronización local y actualización del doc. También se corrigió la fecha de la entrada de Antigravity, que estaba fechada 2026-07-28 cuando el trabajo se hizo el 2026-07-27.
 - **Recordatorio para próximos agentes:** verificar la fecha real del sistema (`date`) antes de firmar una entrada del changelog, en vez de asumirla.
+
+### 2026-07-28 - Claude (Opus 5) — Fase 3: Pelardle
+- **Objetivo:** Proponer ideas de features nuevas y construir la elegida por el usuario (Pelardle, un Wordle diario), en una rama desprendida de `Development`.
+- **Completado:**
+  - **Pelardle** (`app/pelardle/page.js` + `app/api/pelardle/route.js`): Wordle diario de 5 letras y 6 intentos, con 55 palabras del universo capilar, burocrático y lunfardo. Teclado en pantalla con Ñ, flip por letra, estadísticas y racha en localStorage, y grilla de emojis para compartir. Al agotar los intentos la palabra se revela envuelta en una resolución administrativa.
+  - La palabra vive **solo en el server**: el cliente manda el intento y recibe únicamente el patrón de colores.
+  - Integración con la Reserva de Pala: acertar acredita 15, cada intento fallido descuenta 2.
+  - Entrada nueva en `/menu` y `.claude/launch.json` para levantar el dev server desde el tooling.
+  - Merge de `master` a `Development`, que estaba 3 commits atrás y sin `/marcha`. Se resolvió el conflicto de `app/menu/page.js` (marcha y pelardle agregaban una línea en el mismo lugar del array) conservando las dos rutas.
+  - PR #27 (`Development` → `master`), mergeada por el usuario el mismo día.
+- **Verificado contra el server corriendo:** letras repetidas (la segunda A de `AVIAR` queda gris, que es el bug clásico de los clones), normalización de Ñ y tildes (`ñoqui` → ÑOQUI, `fírma` → FIRMA), rechazo de intentos inválidos, revelación en el sexto intento, y `npm run build` limpio.
+- **Pendiente / Siguientes Pasos:**
+  - **Decidir qué pasa los sábados con Pelardle.** `proxy.js` bloquea la página los días no hábiles. La API ya devuelve `open: false` con el aviso de que el Comité de Redacción Folicular no sesiona, y la página lo muestra, pero para que se vea hay que agregar `/pelardle` a las excepciones del proxy. No se tocó porque cambia el comportamiento de todo el sitio.
+  - Las ramas `feature/bureaucracy` y `feat/pelardle` ya están contenidas en `master` y se pueden borrar.
+  - `/video` sigue con un solo link hardcodeado y sin entrada en `/menu`.
+  - Ideas propuestas y **no** implementadas, por si el usuario quiere seguir: VTV Capilar (oblea con vencimiento real), ANSES-ela (jubilación folicular), Censo Nacional Folicular, Mesa de Entradas (cola virtual donde el número retrocede), Multa capilar, `/peluqueria`, `/elecciones`, y sobre todo **`/legajo`**: un legajo único que junte lo que el usuario hizo en todas las apps (DNI de SITRAFO, categoría de AFIP-ela, cartel, resultado del Pelardle). Hoy hay ~19 rutas que no se conocen entre sí; el legajo es lo que las convertiría en un mismo mundo sin escribir features nuevas.
+- **Notas:** Si se suma otra feature con contenido del día (el BOP era la candidata más fuerte), reusar el contador de días hábiles de `app/api/pelardle/route.js` en vez de reimplementarlo: ver la sección de Arquitectura Clave.
