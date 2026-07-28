@@ -17,6 +17,13 @@ const DEFAULT_STATS = { played: 0, wins: 0, streak: 0, maxStreak: 0, lastPuzzle:
 const TILE_DELAY = 0.26;
 const REVEAL_MS = 4 * TILE_DELAY * 1000 + 650;
 
+// Economía de la Reserva de Pala: como el resto del sitio, jugar tiene que
+// salir plata. El premio queda por debajo del peaje a propósito, así ganar
+// amortigua la visita pero nunca la vuelve gratis.
+const ENTRY_COST = 15;
+const WIN_REWARD = 5;
+const FAIL_COST = 2;
+
 const ACCENTS = { "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U", "Ü": "U" };
 const EMOJI = { correct: "🟩", present: "🟨", absent: "⬛" };
 
@@ -37,7 +44,17 @@ export default function PelardlePage() {
   const [copied, setCopied] = useState(false);
 
   const toastTimer = useRef(null);
+  const hasCharged = useRef(false);
   const { addCredit, deductCredit } = useSocialCredit();
+
+  // Peaje de entrada, mismo patrón que /today, /escapa y /autista.
+  // El eventId evita que el StrictMode cobre dos veces.
+  useEffect(() => {
+    if (!hasCharged.current) {
+      deductCredit(ENTRY_COST, "visit-/pelardle");
+      hasCharged.current = true;
+    }
+  }, [deductCredit]);
 
   const maxAttempts = meta?.attempts || 6;
   const wordLength = meta?.length || 5;
@@ -124,8 +141,8 @@ export default function PelardlePage() {
       return next;
     });
 
-    if (outcome === "won") addCredit(15);
-    else deductCredit(2, `pelardle-${meta.puzzle}-fail-${played.length}`);
+    if (outcome === "won") addCredit(WIN_REWARD);
+    else deductCredit(FAIL_COST, `pelardle-${meta.puzzle}-fail-${played.length}`);
 
     setTimeout(() => setShowEnd(true), 450);
   }, [meta, addCredit, deductCredit]);
@@ -166,7 +183,7 @@ export default function PelardlePage() {
         setRevealRow(-1);
         if (data.solved) finish("won", next, data.answer, null);
         else if (data.answer) finish("lost", next, data.answer, data.resolucion);
-        else deductCredit(2, `pelardle-${meta.puzzle}-fail-${next.length}`);
+        else deductCredit(FAIL_COST, `pelardle-${meta.puzzle}-fail-${next.length}`);
         setBusy(false);
       }, REVEAL_MS);
     } catch (e) {
@@ -357,8 +374,8 @@ export default function PelardlePage() {
 
             <p className="pel-credit">
               {status === "won"
-                ? "+15 de Reserva de Pala acreditados por idoneidad capilar."
-                : "Se descontó Reserva de Pala por cada intento fallido."}
+                ? `+${WIN_REWARD} de Reserva de Pala acreditados por idoneidad capilar. El trámite igual se cobra.`
+                : "Se descontó Reserva de Pala por la visita y por cada intento fallido."}
             </p>
 
             <div className="pel-stats">
