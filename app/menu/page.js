@@ -19,6 +19,7 @@ const routesConfig = [
   { path: "/sitrafo", label: "SITRAFO", desc: "Sistema de Trámites Foliculares de la Nación.", icon: "🏛️" },
   { path: "/afipela", label: "AFIP-ela", desc: "Liquidación y Declaración Jurada del Monotributo Folicular.", icon: "🦅" },
   { path: "/marcha", label: "Marcha por la Pala", desc: "Generá tu cartel oficial para la próxima marcha folicular.", icon: "✊" },
+  { path: "/pelardle", label: "Pelardle", desc: "La palabra folicular del día. Seis intentos reglamentarios.", icon: "🟩" },
 ];
 
 export default function MenuPage() {
