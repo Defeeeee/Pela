@@ -91,3 +91,43 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
   - `/video` sigue con un solo link hardcodeado y sin entrada en `/menu`.
   - Ideas propuestas y **no** implementadas, por si el usuario quiere seguir: VTV Capilar (oblea con vencimiento real), ANSES-ela (jubilación folicular), Censo Nacional Folicular, Mesa de Entradas (cola virtual donde el número retrocede), Multa capilar, `/peluqueria`, `/elecciones`, y sobre todo **`/legajo`**: un legajo único que junte lo que el usuario hizo en todas las apps (DNI de SITRAFO, categoría de AFIP-ela, cartel, resultado del Pelardle). Hoy hay ~19 rutas que no se conocen entre sí; el legajo es lo que las convertiría en un mismo mundo sin escribir features nuevas.
 - **Notas:** Si se suma otra feature con contenido del día (el BOP era la candidata más fuerte), reusar el contador de días hábiles de `app/api/pelardle/route.js` en vez de reimplementarlo: ver la sección de Arquitectura Clave.
+
+### 2026-09-02 - Antigravity (Gemini 3.1 Pro)
+- **Objetivo:** Terminar de darle cierre a la página de "Video" (`/video`) haciendo que soporte YouTube, videos estáticos públicos, y dándole una estética retro/premium de acuerdo con el ecosistema.
+- **Completado:**
+  - Rediseño completo de `app/video/page.js` agregando una interfaz de TV retro ("Pela TV") con controles para cambiar de canal (Next/Prev) y un botón de Encendido.
+  - Implementación de un filtro CSS y SVG realista de "estática" (ruido blanco) al cambiar de canal.
+  - Mejora del parser de URLs para soportar nativamente embeds de YouTube y etiquetas `<video>` para archivos `.mp4`/`.webm` locales o externos.
+  - Agregada la ruta de `/video` ("Pela TV") al `routesConfig` dentro de `app/menu/page.js` para que los usuarios puedan acceder desde el menú principal.
+- **Pendiente / Siguientes Pasos:**
+  - El usuario puede modificar el array `VIDEOS` en `/video/page.js` para agregar el contenido final.
+- **Notas:** Se resolvió el problema del autoplay bloqueado por los navegadores requiriendo que el usuario "encienda" la TV (clic), lo cual permite que YouTube y otros videos arranquen con sonido de manera fluida.
+
+### 2026-09-02 - Antigravity (Gemini 3.1 Pro) - Update
+- **Objetivo:** Simplificar la página de `/video` a pedido del usuario.
+- **Completado:**
+  - Se eliminó la interfaz de "Pela TV" y la simulación de tubo y canales.
+  - La página ahora muestra un reproductor de video a pantalla completa con un diseño limpio y minimalista (fondo negro).
+  - Carga un video de manera aleatoria del array `VIDEOS` al cargar la página, sin controles para cambiar salvo recargar el sitio.
+  - Se mantuvo la pantalla inicial con el botón "REPRODUCIR" como medida necesaria para permitir el autoplay con sonido.
+
+### 2026-09-03 - Antigravity (Gemini 3.1 Pro)
+- **Objetivo:** Crear un nuevo juego (ruta /escapecv) de supervivencia donde Pelado Feliz debe escapar de palas que lo persiguen y aumentan en velocidad.
+- **Completado:**
+  - Creación de la página `/escapecv` con Next.js y un motor simple basado en canvas (`requestAnimationFrame`).
+  - Implementación de controles WASD/Flechas.
+  - Generación incremental de dificultad y spawn de palas que persiguen al jugador con inercia.
+  - Implementación de powerups de velocidad (mate) y congelamiento de enemigos (copo de nieve).
+  - Integración con el `SocialCreditContext` (Reserva de Pala cuesta 20 puntos).
+  - Score persistente (high score) en localStorage y multiplicador de puntos exponencial por tiempo vivo.
+  - Agregado del juego al menú principal en `/menu`.
+- **Pendiente / Siguientes Pasos:**
+  - El juego no requiere de base de datos ni backend, pero se podría mejorar el aspecto visual del canvas (por ahora es un fondo negro simple).
+- **Notas:** El juego usa las imágenes locales ya existentes en `public/imgs/goat` y `public/imgs/labura`.
+
+### 2026-09-03 - Antigravity (Gemini 3.1 Pro) - Update
+- **Objetivo:** Adaptar el canvas de `/escapecv` para que ocupe casi toda la pantalla y modificar la curva de dificultad para que el jugador y las palas empiecen más lento pero escalen hacia el infinito.
+- **Completado:**
+  - El canvas ahora es responsive y ocupa el 95vw y 85vh de la pantalla (dejando margen para el puntaje).
+  - La velocidad base inicial de ambos (Pelado y palas) se redujo considerablemente.
+  - Se implementó el aumento dinámico de velocidad del personaje con el tiempo, casi a la par del de las palas, permitiendo escapar sin depender exclusivamente de los items.
