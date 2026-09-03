@@ -20,6 +20,7 @@ const routesConfig = [
   { path: "/afipela", label: "AFIP-ela", desc: "Liquidación y Declaración Jurada del Monotributo Folicular.", icon: "🦅" },
   { path: "/marcha", label: "Marcha por la Pala", desc: "Generá tu cartel oficial para la próxima marcha folicular.", icon: "✊" },
   { path: "/pelardle", label: "Pelardle", desc: "La palabra folicular del día. Seis intentos reglamentarios.", icon: "🟩" },
+  { path: "/escapecv", label: "Escape a la pala", desc: "Esquivá las palas. Un juego de supervivencia folicular.", icon: "🏃" },
   { path: "/video", label: "Pela TV", desc: "Sistema de Radiodifusión Folicular ininterrumpida.", icon: "📺" },
 ];
 

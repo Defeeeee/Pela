@@ -10,6 +10,7 @@ const globalDeductionRegistry = new Set();
 
 export function SocialCreditProvider({ children }) {
   const [credit, setCredit] = useState(() => {
+    if (process.env.NODE_ENV === 'development') return 100;
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('pela_credit');
       return saved !== null ? parseInt(saved, 10) : 100;
@@ -48,6 +49,8 @@ export function SocialCreditProvider({ children }) {
    *                           If provided, prevents deducting for the same ID twice.
    */
   const deductCredit = (amount, eventId = null) => {
+    if (process.env.NODE_ENV === 'development') return;
+    
     if (eventId) {
       if (globalDeductionRegistry.has(eventId)) {
         console.log(`[PalaReserve] Blocked duplicate deduction for: ${eventId}`);
