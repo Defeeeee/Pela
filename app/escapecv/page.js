@@ -24,7 +24,8 @@ export default function EscapeCVPage() {
     enemyBaseSpeed: 1.5,
     enemySpawnRate: 3500,
     frozenTime: 0,
-    keys: {}
+    keys: {},
+    deviceOrientation: { beta: 0, gamma: 0, initialBeta: null, initialGamma: null }
   });
 
   const { deductCredit, addCredit } = useSocialCredit();
@@ -42,10 +43,33 @@ export default function EscapeCVPage() {
     };
     updateDimensions();
     window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+
+    const handleOrientation = (e) => {
+      if (e.beta !== null && e.gamma !== null) {
+        stateRef.current.deviceOrientation.beta = e.beta;
+        stateRef.current.deviceOrientation.gamma = e.gamma;
+      }
+    };
+    window.addEventListener('deviceorientation', handleOrientation);
+
+    return () => {
+      window.removeEventListener('resize', updateDimensions);
+      window.removeEventListener('deviceorientation', handleOrientation);
+    };
   }, []);
 
-  const startGame = () => {
+  const startGame = async () => {
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try {
+        const permissionState = await DeviceOrientationEvent.requestPermission();
+        if (permissionState !== 'granted') {
+          console.warn('Permiso de giroscopio denegado');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
     if (!gameStarted) {
       deductCredit(20, 'jugar-/escapecv');
     }
@@ -61,7 +85,13 @@ export default function EscapeCVPage() {
       enemyBaseSpeed: 1.5,
       enemySpawnRate: 3500,
       frozenTime: 0,
-      keys: stateRef.current.keys
+      keys: stateRef.current.keys,
+      deviceOrientation: { 
+        beta: stateRef.current.deviceOrientation.beta, 
+        gamma: stateRef.current.deviceOrientation.gamma, 
+        initialBeta: stateRef.current.deviceOrientation.beta, 
+        initialGamma: stateRef.current.deviceOrientation.gamma 
+      }
     };
     setGameOver(false);
     setGameStarted(true);
@@ -93,7 +123,6 @@ export default function EscapeCVPage() {
 
     const now = Date.now();
 
-    // Reward survival points exactly every 15s using the game loop
     if (now - state.lastRewardTime >= 15000) {
       state.lastRewardTime = now;
       if (addCreditRef.current) addCreditRef.current(5);
@@ -115,11 +144,29 @@ export default function EscapeCVPage() {
     }
 
     let dx = 0, dy = 0;
+    // Keyboard controls
     if (state.keys['w'] || state.keys['arrowup']) dy -= 1;
     if (state.keys['s'] || state.keys['arrowdown']) dy += 1;
     if (state.keys['a'] || state.keys['arrowleft']) dx -= 1;
     if (state.keys['d'] || state.keys['arrowright']) dx += 1;
     
+    // Gyroscope controls (if no keyboard is pressed and gyro is available)
+    if (dx === 0 && dy === 0 && state.deviceOrientation.initialBeta !== null && state.deviceOrientation.initialGamma !== null) {
+      const betaDiff = state.deviceOrientation.beta - state.deviceOrientation.initialBeta;
+      const gammaDiff = state.deviceOrientation.gamma - state.deviceOrientation.initialGamma;
+      const threshold = 5; // degrees
+
+      // Map tilt to movement. 
+      // Tilting top of phone forward (beta decreases if held flat, or increases if held vertically depending on axis)
+      // Usually, tilting top of phone up towards you decreases beta. We'll map:
+      // Beta diff < -threshold -> Tilting UP -> dy < 0
+      // Beta diff > threshold -> Tilting DOWN -> dy > 0
+      if (betaDiff < -threshold) dy -= 1;
+      if (betaDiff > threshold) dy += 1;
+      if (gammaDiff > threshold) dx += 1; // right
+      if (gammaDiff < -threshold) dx -= 1; // left
+    }
+
     if (dx !== 0 && dy !== 0) {
       const length = Math.sqrt(dx*dx + dy*dy);
       dx /= length; dy /= length;
@@ -162,7 +209,8 @@ export default function EscapeCVPage() {
     for (let i = state.warnings.length - 1; i >= 0; i--) {
       const w = state.warnings[i];
       if (now >= w.spawnAt) {
-        state.enemies.push({ x: w.x, y: w.y, size: 36, vx: 0, vy: 0 });
+        const type = Math.random() < 0.5 ? 'chaser' : 'random';
+        state.enemies.push({ x: w.x, y: w.y, size: 36, vx: 0, vy: 0, type });
         state.warnings.splice(i, 1);
       }
     }
@@ -199,19 +247,44 @@ export default function EscapeCVPage() {
 
     const isFrozen = state.frozenTime > now;
 
-    // Move enemies (with some inertia/smoothing so they don't instaturn perfectly)
+    // Move enemies
     for (const e of state.enemies) {
       if (!isFrozen) {
-        let edx = state.player.x - e.x;
-        let edy = state.player.y - e.y;
-        const dist = Math.sqrt(edx*edx + edy*edy);
-        if (dist > 0) {
-          const targetVx = (edx / dist) * state.enemyBaseSpeed;
-          const targetVy = (edy / dist) * state.enemyBaseSpeed;
-          // Interpolate velocity for a tiny bit of drift/inertia
-          e.vx += (targetVx - e.vx) * 0.1;
-          e.vy += (targetVy - e.vy) * 0.1;
+        if (e.type === 'random') {
+          // Random erratic pattern
+          if (!e.nextTurn || now > e.nextTurn) {
+             if (Math.random() < 0.4) {
+                // target player directly
+                e.targetAngle = Math.atan2(state.player.y - e.y, state.player.x - e.x);
+             } else {
+                // completely random direction
+                e.targetAngle = Math.random() * Math.PI * 2;
+             }
+             e.nextTurn = now + 500 + Math.random() * 1500; // change mind every 0.5 - 2s
+          }
+          const targetVx = Math.cos(e.targetAngle) * state.enemyBaseSpeed * 1.3;
+          const targetVy = Math.sin(e.targetAngle) * state.enemyBaseSpeed * 1.3;
+          e.vx += (targetVx - e.vx) * 0.05;
+          e.vy += (targetVy - e.vy) * 0.05;
+
+          // Keep within bounds gently
+          if (e.x < 30) e.vx += 0.5;
+          if (e.x > canvas.width - 30) e.vx -= 0.5;
+          if (e.y < 30) e.vy += 0.5;
+          if (e.y > canvas.height - 30) e.vy -= 0.5;
+        } else {
+          // Direct chaser
+          let edx = state.player.x - e.x;
+          let edy = state.player.y - e.y;
+          const dist = Math.sqrt(edx*edx + edy*edy);
+          if (dist > 0) {
+            const targetVx = (edx / dist) * state.enemyBaseSpeed;
+            const targetVy = (edy / dist) * state.enemyBaseSpeed;
+            e.vx += (targetVx - e.vx) * 0.1;
+            e.vy += (targetVy - e.vy) * 0.1;
+          }
         }
+        
         e.x += e.vx;
         e.y += e.vy;
       }
@@ -455,8 +528,8 @@ export default function EscapeCVPage() {
               {gameOver ? 'REINTENTAR (-20 Reserva)' : 'JUGAR (-20 Reserva)'}
             </button>
             <div className="instructions">
-              <strong>Mecánica:</strong> Esquivá las palas con <b>WASD</b> o <b>Flechas</b>.<br/>
-              La velocidad de ambos aumenta con el tiempo.<br/><br/>
+              <strong>Mecánica:</strong> Esquivá las palas con <b>WASD</b> / <b>Flechas</b> o inclinando tu celular.<br/>
+              La velocidad aumenta con el tiempo.<br/><br/>
               🧉 Velocidad extra por 1.5s<br/>
               ❄️ Congelar palas por 0.5s
             </div>
