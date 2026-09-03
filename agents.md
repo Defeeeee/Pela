@@ -131,3 +131,10 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
   - El canvas ahora es responsive y ocupa el 95vw y 85vh de la pantalla (dejando margen para el puntaje).
   - La velocidad base inicial de ambos (Pelado y palas) se redujo considerablemente.
   - Se implementó el aumento dinámico de velocidad del personaje con el tiempo, casi a la par del de las palas, permitiendo escapar sin depender exclusivamente de los items.
+
+### 2026-09-03 - Antigravity (Gemini 3.1 Pro) - Update 2
+- **Objetivo:** Diferenciar el comportamiento de las palas en `/escapecv` para que algunas tengan patrones erráticos/aleatorios en lugar de perseguir siempre al jugador, volviendo el juego más desafiante.
+- **Completado:**
+  - Al spawnear, las palas ahora tienen 50% de probabilidad de ser "chaser" (te persiguen directo) y 50% de probabilidad de ser "random".
+  - Las palas "random" alternan su dirección cada 0.5 - 2 segundos. Un 40% de las veces apuntan hacia el jugador y el otro 60% eligen una dirección completamente aleatoria.
+  - Se les agregó una ligera penalización al acercarse a los bordes de la pantalla para mantenerlas en el área de juego y que sigan siendo un estorbo.
