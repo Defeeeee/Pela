@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSocialCredit } from '../SocialCreditContext';
 import Link from 'next/link';
+import MultiplayerGame from './MultiplayerGame';
 
 export default function EscapeCVPage() {
   const [gameOver, setGameOver] = useState(false);
@@ -11,6 +12,7 @@ export default function EscapeCVPage() {
   const [gameStarted, setGameStarted] = useState(false);
   const [currentMode, setCurrentMode] = useState('chase');
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
+  const [showMultiplayer, setShowMultiplayer] = useState(false);
 
   const requestRef = useRef();
   const canvasRef = useRef(null);
@@ -516,6 +518,14 @@ export default function EscapeCVPage() {
     }
   }, [gameStarted, dimensions]);
 
+  if (showMultiplayer) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#080808', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <MultiplayerGame onExit={() => setShowMultiplayer(false)} />
+      </div>
+    );
+  }
+
   return (
     <div className="game-container">
       <style>{`
@@ -654,11 +664,20 @@ export default function EscapeCVPage() {
                 {gameOver && currentMode === 'dodge' ? 'REINTENTAR DODGE (-20)' : 'JUGAR DODGE (-20)'}
               </button>
             </div>
-            
+
+            <button
+              className="btn"
+              style={{ background: '#2196f3', color: '#fff', marginTop: '4px' }}
+              onClick={() => setShowMultiplayer(true)}
+            >
+              🎮 MULTIJUGADOR
+            </button>
+
             <div className="instructions">
               <strong>Mecánica:</strong> Esquivá con <b>WASD</b> / <b>Flechas</b> o inclinando tu celular.<br/>
               <b>Chase:</b> Las palas te persiguen en campo abierto. Hay powerups.<br/>
               <b>Dodge:</b> Estás encerrado en el corral y tenés que esquivar oleadas variadas de palas.<br/>
+              <b>Multijugador:</b> lobby público o sala privada con código, cooperativo o battle royale.
             </div>
           </div>
         )}
