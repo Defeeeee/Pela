@@ -12,6 +12,8 @@ const KEY_ROWS = [
 
 const STATE_KEY = "pelardle_state_v1";
 const STATS_KEY = "pelardle_stats_v1";
+const PLAYER_ID_KEY = "pela_player_id";
+const PLAYER_NAME_KEY = "pela_player_name";
 const DEFAULT_STATS = { played: 0, wins: 0, streak: 0, maxStreak: 0, lastPuzzle: null, dist: [0, 0, 0, 0, 0, 0] };
 
 const TILE_DELAY = 0.26;
@@ -43,6 +45,13 @@ export default function PelardlePage() {
   const [showEnd, setShowEnd] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Leaderboard & Identidad
+  const [playerId, setPlayerId] = useState("");
+  const [playerName, setPlayerName] = useState("");
+  const [activeTab, setActiveTab] = useState("stats"); // 'stats' | 'daily' | 'history'
+  const [boardData, setBoardData] = useState({ daily: [], history: [] });
+  const [loadingBoard, setLoadingBoard] = useState(false);
+
   const toastTimer = useRef(null);
   const hasCharged = useRef(false);
   const { addCredit, deductCredit } = useSocialCredit();
@@ -58,6 +67,43 @@ export default function PelardlePage() {
 
   const maxAttempts = meta?.attempts || 6;
   const wordLength = meta?.length || 5;
+
+  useEffect(() => {
+    let pid = localStorage.getItem(PLAYER_ID_KEY);
+    if (!pid) {
+      pid = typeof crypto !== "undefined" && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `pela_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+      localStorage.setItem(PLAYER_ID_KEY, pid);
+    }
+    setPlayerId(pid);
+
+    const pname = localStorage.getItem(PLAYER_NAME_KEY) || "";
+    setPlayerName(pname);
+  }, []);
+
+  const fetchBoard = useCallback(async (pz) => {
+    const targetPz = pz !== undefined ? pz : meta?.puzzle;
+    if (targetPz === undefined || targetPz === null) return;
+    setLoadingBoard(true);
+    try {
+      const res = await fetch(`/api/pelardle/leaderboard?puzzle=${targetPz}`);
+      const data = await res.json();
+      if (data) {
+        setBoardData({ daily: data.daily || [], history: data.history || [] });
+      }
+    } catch (_e) {
+      // Offline fallback
+    } finally {
+      setLoadingBoard(false);
+    }
+  }, [meta?.puzzle]);
+
+  useEffect(() => {
+    if (showEnd && (activeTab === "daily" || activeTab === "history")) {
+      fetchBoard();
+    }
+  }, [showEnd, activeTab, fetchBoard]);
 
   useEffect(() => {
     let alive = true;
@@ -162,7 +208,12 @@ export default function PelardlePage() {
       const res = await fetch("/api/pelardle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guess: current, attempt })
+        body: JSON.stringify({
+          guess: current,
+          attempt,
+          playerId,
+          playerName: (playerName || "").trim() || "Pelado Anónimo",
+        })
       });
       const data = await res.json();
 
@@ -181,16 +232,22 @@ export default function PelardlePage() {
       // Esperamos a que termine el flip antes de cantar el resultado.
       setTimeout(() => {
         setRevealRow(-1);
-        if (data.solved) finish("won", next, data.answer, null);
-        else if (data.answer) finish("lost", next, data.answer, data.resolucion);
-        else deductCredit(FAIL_COST, `pelardle-${meta.puzzle}-fail-${next.length}`);
+        if (data.solved) {
+          finish("won", next, data.answer, null);
+          fetchBoard(meta.puzzle);
+        } else if (data.answer) {
+          finish("lost", next, data.answer, data.resolucion);
+          fetchBoard(meta.puzzle);
+        } else {
+          deductCredit(FAIL_COST, `pelardle-${meta.puzzle}-fail-${next.length}`);
+        }
         setBusy(false);
       }, REVEAL_MS);
     } catch (e) {
       showToast("Mesa de entradas no responde. Reintente.");
       setBusy(false);
     }
-  }, [busy, status, meta, current, wordLength, guesses, showToast, doShake, finish, deductCredit]);
+  }, [busy, status, meta, current, wordLength, guesses, playerId, playerName, showToast, doShake, finish, deductCredit, fetchBoard]);
 
   const onKey = useCallback((key) => {
     if (status !== "playing" || busy) return;
@@ -347,8 +404,26 @@ export default function PelardlePage() {
 
         <footer className="pel-footer">
           <Link href="/menu" className="pel-back">← Volver al menú</Link>
+          <button
+            type="button"
+            className="pel-linkbtn"
+            onClick={() => {
+              setActiveTab("daily");
+              setShowEnd(true);
+              fetchBoard();
+            }}
+          >
+            🏆 Ver Ranking
+          </button>
           {status !== "playing" && (
-            <button type="button" className="pel-linkbtn" onClick={() => setShowEnd(true)}>
+            <button
+              type="button"
+              className="pel-linkbtn"
+              onClick={() => {
+                setActiveTab("stats");
+                setShowEnd(true);
+              }}
+            >
               Ver resultado
             </button>
           )}
@@ -357,55 +432,182 @@ export default function PelardlePage() {
 
       {toast && <div className="pel-toast">{toast}</div>}
 
-      {showEnd && status !== "playing" && (
+      {showEnd && (
         <div className="pel-overlay" onClick={() => setShowEnd(false)}>
           <div className="pel-modal" onClick={(e) => e.stopPropagation()}>
             <button type="button" className="pel-close" onClick={() => setShowEnd(false)}>✕</button>
 
-            <h2 className={`pel-outcome ${status}`}>
-              {status === "won" ? "TRÁMITE APROBADO" : "EXPEDIENTE ARCHIVADO"}
-            </h2>
-
-            <div className="pel-answer">
-              La palabra era <strong>{answer}</strong>
+            {/* Pestañas del Modal */}
+            <div className="pel-tabs">
+              <button
+                type="button"
+                className={`pel-tab ${activeTab === "stats" ? "active" : ""}`}
+                onClick={() => setActiveTab("stats")}
+              >
+                📊 Mis Estadísticas
+              </button>
+              <button
+                type="button"
+                className={`pel-tab ${activeTab === "daily" ? "active" : ""}`}
+                onClick={() => {
+                  setActiveTab("daily");
+                  fetchBoard();
+                }}
+              >
+                🏆 Hoy
+              </button>
+              <button
+                type="button"
+                className={`pel-tab ${activeTab === "history" ? "active" : ""}`}
+                onClick={() => {
+                  setActiveTab("history");
+                  fetchBoard();
+                }}
+              >
+                🎖️ Histórico
+              </button>
             </div>
 
-            {resolucion && <p className="pel-resolucion">{resolucion}</p>}
-
-            <p className="pel-credit">
-              {status === "won"
-                ? `+${WIN_REWARD} de Reserva de Pala acreditados por idoneidad capilar. El trámite igual se cobra.`
-                : "Se descontó Reserva de Pala por la visita y por cada intento fallido."}
-            </p>
-
-            <div className="pel-stats">
-              <Stat label="Jugadas" value={stats.played} />
-              <Stat label="% Éxito" value={winRate} />
-              <Stat label="Racha" value={stats.streak} />
-              <Stat label="Mejor" value={stats.maxStreak} />
+            {/* Configuración de Nombre de Jugador */}
+            <div className="pel-name-box">
+              <label className="pel-namelabel" htmlFor="pnameInput">Tu nombre de legajo:</label>
+              <input
+                id="pnameInput"
+                type="text"
+                className="pel-nameinput"
+                maxLength={16}
+                value={playerName}
+                placeholder="Pelado Anónimo"
+                onChange={(e) => {
+                  setPlayerName(e.target.value);
+                  localStorage.setItem(PLAYER_NAME_KEY, e.target.value.trim());
+                }}
+              />
             </div>
 
-            <p className="pel-streaknote">
-              La racha tiene tolerancia sindical: los días que el sitio está cerrado no la cortan.
-            </p>
+            {/* Pestaña 1: Estadísticas Personales */}
+            {activeTab === "stats" && (
+              <div className="pel-tab-content">
+                {status !== "playing" ? (
+                  <>
+                    <h2 className={`pel-outcome ${status}`}>
+                      {status === "won" ? "TRÁMITE APROBADO" : "EXPEDIENTE ARCHIVADO"}
+                    </h2>
 
-            <div className="pel-dist">
-              {stats.dist.map((n, i) => (
-                <div key={i} className="pel-distrow">
-                  <span className="pel-distlabel">{i + 1}</span>
-                  <div
-                    className={`pel-distbar ${status === "won" && guesses.length === i + 1 ? "hot" : ""}`}
-                    style={{ width: `${Math.max(8, (n / maxDist) * 100)}%` }}
-                  >
-                    {n}
-                  </div>
+                    <div className="pel-answer">
+                      La palabra era <strong>{answer}</strong>
+                    </div>
+
+                    {resolucion && <p className="pel-resolucion">{resolucion}</p>}
+
+                    <p className="pel-credit">
+                      {status === "won"
+                        ? `+${WIN_REWARD} de Reserva de Pala acreditados por idoneidad capilar. El trámite igual se cobra.`
+                        : "Se descontó Reserva de Pala por la visita y por cada intento fallido."}
+                    </p>
+                  </>
+                ) : (
+                  <p className="pel-ongoing-hint">
+                    Estás jugando el expediente de hoy. ¡Adiviná la palabra para registrar tu marca!
+                  </p>
+                )}
+
+                <div className="pel-stats">
+                  <Stat label="Jugadas" value={stats.played} />
+                  <Stat label="% Éxito" value={winRate} />
+                  <Stat label="Racha" value={stats.streak} />
+                  <Stat label="Mejor" value={stats.maxStreak} />
                 </div>
-              ))}
-            </div>
 
-            <button type="button" className="pel-share" onClick={share}>
-              {copied ? "¡Copiado!" : "Compartir resultado"}
-            </button>
+                <p className="pel-streaknote">
+                  La racha tiene tolerancia sindical: los días que el sitio está cerrado no la cortan.
+                </p>
+
+                <div className="pel-dist">
+                  {stats.dist.map((n, i) => (
+                    <div key={i} className="pel-distrow">
+                      <span className="pel-distlabel">{i + 1}</span>
+                      <div
+                        className={`pel-distbar ${status === "won" && guesses.length === i + 1 ? "hot" : ""}`}
+                        style={{ width: `${Math.max(8, (n / maxDist) * 100)}%` }}
+                      >
+                        {n}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {status !== "playing" && (
+                  <button type="button" className="pel-share" onClick={share}>
+                    {copied ? "¡Copiado!" : "Compartir resultado"}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Pestaña 2: Ranking de Hoy */}
+            {activeTab === "daily" && (
+              <div className="pel-tab-content">
+                <h3 className="pel-board-title">Expediente #{meta?.puzzle || ""} — Día {meta?.fecha || ""}</h3>
+                {loadingBoard ? (
+                  <div className="pel-board-loading">Consultando legajos...</div>
+                ) : boardData.daily.length === 0 ? (
+                  <div className="pel-board-empty">Todavía no hay trámites completados hoy. ¡Sé el primero!</div>
+                ) : (
+                  <div className="pel-board-table">
+                    <div className="pel-board-head">
+                      <span className="col-rank">#</span>
+                      <span className="col-name">Pelado</span>
+                      <span className="col-att">Intentos</span>
+                      <span className="col-status">Resultado</span>
+                    </div>
+                    {boardData.daily.map((row) => {
+                      const isMe = row.playerId === playerId;
+                      return (
+                        <div key={row.playerId} className={`pel-board-row ${isMe ? "me" : ""}`}>
+                          <span className="col-rank">{row.rank}</span>
+                          <span className="col-name">{row.playerName}</span>
+                          <span className="col-att">{row.solved ? `${row.attempts}/6` : "X/6"}</span>
+                          <span className="col-status">{row.solved ? "✅ Aprobado" : "❌ Archivado"}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Pestaña 3: Histórico General */}
+            {activeTab === "history" && (
+              <div className="pel-tab-content">
+                <h3 className="pel-board-title">Cuadro de Honor Folicular</h3>
+                {loadingBoard ? (
+                  <div className="pel-board-loading">Consultando legajos...</div>
+                ) : boardData.history.length === 0 ? (
+                  <div className="pel-board-empty">Sin expedientes históricos aún.</div>
+                ) : (
+                  <div className="pel-board-table">
+                    <div className="pel-board-head">
+                      <span className="col-rank">#</span>
+                      <span className="col-name">Pelado</span>
+                      <span className="col-att">Victorias</span>
+                      <span className="col-status">Mejor Racha</span>
+                    </div>
+                    {boardData.history.map((row) => {
+                      const isMe = row.playerId === playerId;
+                      return (
+                        <div key={row.playerId} className={`pel-board-row ${isMe ? "me" : ""}`}>
+                          <span className="col-rank">{row.rank}</span>
+                          <span className="col-name">{row.playerName}</span>
+                          <span className="col-att">{row.gamesWon}</span>
+                          <span className="col-status">🔥 {row.maxStreak}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -644,6 +846,103 @@ function PelardleStyles() {
         transition: background 0.15s ease;
       }
       .pel-share:hover { background: #4caf50; }
+
+      /* Tabs & Leaderboard */
+      .pel-tabs {
+        display: flex;
+        gap: 6px;
+        background: rgba(0,0,0,0.35);
+        padding: 4px;
+        border-radius: 10px;
+        margin-bottom: 16px;
+      }
+      .pel-tab {
+        flex: 1;
+        background: none;
+        border: none;
+        color: rgba(255,255,255,0.6);
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 8px 4px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.2s, color 0.2s;
+      }
+      .pel-tab.active {
+        background: rgba(255,255,255,0.12);
+        color: #ffeb3b;
+      }
+      .pel-name-box {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 8px;
+        padding: 6px 10px;
+        margin-bottom: 16px;
+        text-align: left;
+      }
+      .pel-namelabel {
+        font-size: 0.7rem;
+        color: rgba(255,255,255,0.5);
+        white-space: nowrap;
+      }
+      .pel-nameinput {
+        flex: 1;
+        background: none;
+        border: none;
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 700;
+        outline: none;
+      }
+      .pel-board-title {
+        font-size: 0.85rem;
+        color: rgba(255,255,255,0.7);
+        margin: 0 0 12px;
+        font-weight: 800;
+      }
+      .pel-board-loading, .pel-board-empty, .pel-ongoing-hint {
+        font-size: 0.78rem;
+        color: rgba(255,255,255,0.5);
+        padding: 16px 0;
+        line-height: 1.4;
+      }
+      .pel-board-table {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        text-align: left;
+      }
+      .pel-board-head {
+        display: flex;
+        font-size: 0.65rem;
+        color: rgba(255,255,255,0.4);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 4px 6px;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+      }
+      .pel-board-row {
+        display: flex;
+        align-items: center;
+        font-size: 0.78rem;
+        padding: 6px;
+        border-radius: 6px;
+        background: rgba(255,255,255,0.02);
+      }
+      .pel-board-row.me {
+        background: rgba(255,235,59,0.12);
+        color: #ffeb3b;
+        font-weight: 800;
+      }
+      .col-rank { width: 24px; color: rgba(255,255,255,0.4); font-weight: 800; }
+      .pel-board-row.me .col-rank { color: #ffeb3b; }
+      .col-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 6px; }
+      .col-att { width: 55px; text-align: center; }
+      .col-status { width: 80px; text-align: right; }
 
       @keyframes pel-flip {
         0%   { transform: rotateX(0deg);  background: transparent; border-color: rgba(255,255,255,0.4); }

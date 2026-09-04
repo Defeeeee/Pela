@@ -148,7 +148,6 @@ export async function GET() {
 export async function POST(request) {
   try {
     const body = await request.json();
-    const attempt = parseInt(body.attempt, 10) || 1;
     const guess = norm(body.guess);
 
     if (guess.length !== WORD_LENGTH || !/^[A-ZÑ]+$/.test(guess)) {
@@ -164,9 +163,39 @@ export async function POST(request) {
 
     const result = scoreGuess(guess, answer);
     const solved = guess === answer;
+
+    // Registrar intento contra el servicio multijugador (autoridad central anti-trampa)
+    let attempt = parseInt(body.attempt, 10) || 1;
+    const playerId = body.playerId || "anon";
+    const playerName = body.playerName || "Pelado Anónimo";
+
+    try {
+      const mpRes = await fetch("http://127.0.0.1:9315/pelardle/attempt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          puzzle: index,
+          playerId,
+          playerName,
+          guess,
+          solved,
+        }),
+        signal: AbortSignal.timeout(1500),
+      });
+
+      if (mpRes.ok) {
+        const mpData = await mpRes.json();
+        if (mpData && typeof mpData.attempt === "number") {
+          attempt = mpData.attempt;
+        }
+      }
+    } catch (_svcErr) {
+      // Tolerancia a fallos: degradar al attempt del cliente si el servicio está caído
+    }
+
     const exhausted = !solved && attempt >= MAX_ATTEMPTS;
 
-    const payload = { status: "ok", puzzle: index, guess, result, solved };
+    const payload = { status: "ok", puzzle: index, guess, result, solved, attempt };
 
     if (solved || exhausted) {
       payload.answer = answer;

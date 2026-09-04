@@ -12,10 +12,66 @@ import {
   WORLD_WIDTH as AGARRA_WORLD_W,
   WORLD_HEIGHT as AGARRA_WORLD_H,
 } from "./agarra.js";
+import { LeaderboardStore } from "./leaderboard.js";
 
 const PORT = process.env.MP_PORT || 9315;
+const leaderboardStore = new LeaderboardStore();
+leaderboardStore.init().catch((err) => {
+  console.error("[pela-multiplayer] Error iniciando LeaderboardStore:", err);
+});
 
-const httpServer = createServer((req, res) => {
+// Guardar a disco de inmediato al recibir señales de apagado
+const gracefulShutdown = async () => {
+  console.log("[pela-multiplayer] Guardando leaderboard antes de apagar...");
+  await leaderboardStore.flushToDisk().catch(() => {});
+  process.exit(0);
+};
+process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", gracefulShutdown);
+
+const httpServer = createServer(async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+
+  // Endpoints REST de Leaderboard de Pelardle
+  if (url.pathname === "/pelardle/board" && req.method === "GET") {
+    const puzzle = url.searchParams.get("puzzle") || "";
+    const board = leaderboardStore.getBoard(puzzle);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, ...board }));
+    return;
+  }
+
+  if (url.pathname === "/pelardle/attempt" && req.method === "POST") {
+    let bodyStr = "";
+    req.on("data", (chunk) => {
+      bodyStr += chunk;
+      // Seguridad: limitar a 64KB
+      if (bodyStr.length > 65536) req.destroy();
+    });
+    req.on("end", () => {
+      try {
+        const body = JSON.parse(bodyStr || "{}");
+        const result = leaderboardStore.registerAttempt(body);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "JSON inválido" }));
+      }
+    });
+    return;
+  }
+
   // Traefik hace un healthcheck HTTP plano antes de rutear WebSockets; sin
   // esta respuesta, cualquier GET normal a / se cuelga sin contestar.
   res.writeHead(200, { "Content-Type": "text/plain" });
