@@ -138,3 +138,12 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
   - Al spawnear, las palas ahora tienen 50% de probabilidad de ser "chaser" (te persiguen directo) y 50% de probabilidad de ser "random".
   - Las palas "random" alternan su dirección cada 0.5 - 2 segundos. Un 40% de las veces apuntan hacia el jugador y el otro 60% eligen una dirección completamente aleatoria.
   - Se les agregó una ligera penalización al acercarse a los bordes de la pantalla para mantenerlas en el área de juego y que sigan siendo un estorbo.
+
+### 2026-09-03 - Antigravity (Gemini 3.1 Pro) - Update 3
+- **Objetivo:** Dividir el juego `/escapecv` en dos modos (Chase y Dodge) con mecánicas, highscores e interfaces independientes, usando los nuevos sprites de corral.
+- **Completado:**
+  - Separación del estado y UI principal para elegir entre el modo `Chase` clásico o el nuevo `Dodge` antes de jugar. Ambos cuestan 20 de reserva.
+  - Generación del corral responsivo con sprites randomizados en modo Dodge (50% del área de pantalla) que limita el movimiento del jugador.
+  - Creación del sistema de oleadas en modo Dodge: spawnean desde afuera apuntando a la zona de juego de forma lineal, atravesando el mapa.
+  - Implementación de escala variable: a medida que pasa el tiempo, spawnean en mayor cantidad por oleada y se mezclan palas "gigantes y rápidas" con "chicas y lentas" a la vez.
+  - Se dividió el localStorage de high scores en `escapecv_highscore_chase` y `escapecv_highscore_dodge` mostrando ambos tops en el menú.
