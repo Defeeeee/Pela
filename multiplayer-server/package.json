@@ -1,0 +1,14 @@
+{
+  "name": "pela-multiplayer-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Servidor de sockets para el modo multijugador de /escapecv. Proceso separado del sitio Next.js a propósito: necesita estado en memoria compartido entre todos los jugadores de una sala, y el sitio corre en PM2 cluster mode (múltiples procesos), donde cada uno tiene su propia memoria.",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.1"
+  }
+}
