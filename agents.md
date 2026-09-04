@@ -181,3 +181,17 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
 - **Pendiente / Siguientes Pasos:**
   - Proceder con la Feature 2 del plan: Leaderboard persistente de Pelardle (store en disco atómico en `pela-multiplayer`, anti-cheat en `/api/pelardle`, tabs de ranking en la UI).
 
+### 2026-09-04 - Antigravity (Gemini 3.8 Flash) — Feature 2: Leaderboard de Pelardle
+- **Objetivo:** Implementar la segunda parte del plan: Leaderboard global persistente para Pelardle con anti-cheat (autoridad del servidor sobre conteo de intentos), persistencia atómica tolerante a fallos, endpoints REST en `pela-multiplayer` y pestañas de ranking en el cliente.
+- **Completado:**
+  - **`multiplayer-server/leaderboard.js`**: `LeaderboardStore` con persistencia atómica en disco (`../data/leaderboard.json`, configurable por `MP_DATA_DIR`). Guardado debounced de 2 segundos con flush inmediato ante `SIGTERM`/`SIGINT`. Tolerancia total a fallos en arranque: creación recursiva de directorios y recuperación automática con respaldo (`.corrupto.*`) ante JSON dañado. Poda automática acotada para respetar el disco ajustado del VPS: últimos 30 días de ranking diario y top 500 jugadores históricos.
+  - **`multiplayer-server/server.js`**: Endpoints HTTP `POST /pelardle/attempt` (autoridad de intentos por jugador y puzzle) y `GET /pelardle/board` (ranking diario ordenado por aciertos/intentos/tiempo + cuadro de honor histórico).
+  - **`app/api/pelardle/route.js`**: Conexión con el servicio multijugador para registrar y validar el conteo de intentos del servidor, degradando con gracia al conteo local si el servicio no responde.
+  - **`app/api/pelardle/leaderboard/route.js`**: Endpoint proxy de Next.js hacia `127.0.0.1:9315` para consulta de rankings sin tocar Traefik.
+  - **`app/pelardle/page.js`**: Generación y persistencia de `pela_player_id` y reutilización de `pela_player_name`. Modal renovado con pestañas ("Mis Estadísticas", "Hoy", "Histórico") y botón en footer para consultar el ranking en cualquier momento.
+  - **`multiplayer-server/test-leaderboard.js`**: Suite de tests deterministas verificando autoridad de intentos, ordenamiento por aciertos, poda a 30 días y recuperación ante archivos corruptos.
+  - **`.gitignore`**: Agregado `/data` para evitar commitear la base de datos local.
+- **Pendiente / Siguientes Pasos:**
+  - Ambas features del plan (Agarrá.io y Leaderboard de Pelardle) están terminadas y verificadas con tests unitarios y build limpio. Merge a `Development` y posterior PR a `master`.
+
+
