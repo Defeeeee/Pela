@@ -21,6 +21,7 @@ const routesConfig = [
   { path: "/marcha", label: "Marcha por la Pala", desc: "Generá tu cartel oficial para la próxima marcha folicular.", icon: "✊" },
   { path: "/pelardle", label: "Pelardle", desc: "La palabra folicular del día. Seis intentos reglamentarios.", icon: "🟩" },
   { path: "/escapecv", label: "Escape a la pala", desc: "Esquivá las palas. Un juego de supervivencia folicular.", icon: "🏃" },
+  { path: "/agarra", label: "Agarrá.io", desc: "Comé palas, crecé de tamaño y morfate a otros pelados en vivo.", icon: "🦠" },
   { path: "/video", label: "Pela TV", desc: "Sistema de Radiodifusión Folicular ininterrumpida.", icon: "📺" },
 ];
 

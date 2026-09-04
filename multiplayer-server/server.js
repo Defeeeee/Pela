@@ -7,6 +7,11 @@ import {
   PUBLIC_LOBBY_MIN_PLAYERS,
   RESULTS_DISPLAY_MS,
 } from "./rooms.js";
+import {
+  Arena,
+  WORLD_WIDTH as AGARRA_WORLD_W,
+  WORLD_HEIGHT as AGARRA_WORLD_H,
+} from "./agarra.js";
 
 const PORT = process.env.MP_PORT || 9315;
 
@@ -139,6 +144,51 @@ setInterval(() => {
     }
   }
 }, TICK_MS);
+
+// ==========================================
+// Agarrá.io Namespace (/agarra)
+// ==========================================
+const agarraIo = io.of("/agarra");
+const agarraArena = new Arena();
+
+agarraIo.on("connection", (socket) => {
+  socket.on("join", ({ name } = {}, ack) => {
+    const player = agarraArena.addPlayer(socket.id, name);
+    ack?.({
+      ok: true,
+      playerId: socket.id,
+      player,
+      world: { width: AGARRA_WORLD_W, height: AGARRA_WORLD_H },
+      palas: agarraArena.allPalas(),
+    });
+  });
+
+  socket.on("respawn", (_payload, ack) => {
+    const player = agarraArena.respawnPlayer(socket.id);
+    ack?.({ ok: true, player });
+  });
+
+  socket.on("input", ({ dx, dy } = {}) => {
+    agarraArena.setInput(socket.id, dx, dy);
+  });
+
+  socket.on("disconnect", () => {
+    agarraArena.removePlayer(socket.id);
+  });
+});
+
+let agarraTickCount = 0;
+const AGARRA_TICK_MS = 1000 / 30; // 30 Hz simulación
+setInterval(() => {
+  agarraArena.tick(AGARRA_TICK_MS);
+  agarraTickCount++;
+
+  // Difusión a 15 Hz (cada 2 ticks) para optimizar ancho de banda
+  if (agarraTickCount % 2 === 0) {
+    const delta = agarraArena.deltaSnapshot();
+    agarraIo.emit("tick", delta);
+  }
+}, AGARRA_TICK_MS);
 
 httpServer.listen(PORT, () => {
   console.log(`[pela-multiplayer] escuchando en :${PORT}`);

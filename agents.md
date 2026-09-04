@@ -169,3 +169,15 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
   - No hay reconexión con preservación de estado: si a alguien se le corta la conexión a mitad de partida, su jugador se remueve de la sala y tiene que volver a unirse manualmente. Aceptable para un juego casual, pero es la limitación más notoria si se quiere pulir después.
   - El modo multijugador no tiene el "límite de días hábiles" ni ningún patrón de contenido diario — no aplica, es tiempo real puro.
 - **Notas:** Si se agrega otro juego con estado en tiempo real compartido entre usuarios, reusar el patrón acá (proceso PM2 aparte sin clusterizar + router de Traefik por `PathPrefix`) en vez de intentar meter WebSockets dentro del proceso `pela` en cluster mode.
+
+### 2026-09-04 - Antigravity (Gemini 3.8 Flash) — Feature 1: Agarrá.io (/agarra)
+- **Objetivo:** Implementar la primera parte del plan: Agarrá.io (`/agarra`), un multijugador masivo en tiempo real estilo Agar.io de pelados comiendo palas y absorbiendo a los demás.
+- **Completado:**
+  - **`multiplayer-server/agarra.js`**: Simulación determinista de `Arena`. Mundo 4000x4000, 600 palas con respawn continuo, crecimiento con radio proporcional a raíz cuadrada de masa, velocidad castigada con exponente 0.32, umbral estricto del 25% de ventaja de masa para comer rivales con absorción completa de masa, decaimiento de masa para valores > 200, bots con IA reactiva (amenaza, caza, recolección de palas) para mantener población base en 12 jugadores.
+  - **`multiplayer-server/server.js`**: Namespace `/agarra` en el servidor Socket.IO existente (`pela-multiplayer`). Loop de simulación a 30 Hz y difusión a 15 Hz con deltas optimizados (las palas solo se envían al unirse y luego únicamente deltas de palas comidas y nuevas, payload < 2.5 KB).
+  - **`multiplayer-server/test-agarra.js`**: Suite de tests deterministas validando física, crecimiento, umbral de comida, límites de mapa, decaimiento y tamaño de payload de red.
+  - **`app/agarra/page.js`**: Cliente completo en Canvas con seguimiento de cámara suave, zoom dinámico según masa, interpolación entre snapshots a 60 fps, HUD con Leaderboard Top 10 en vivo, controles intuitivos por mouse/touch y cobro único de 20 de Reserva de Pala con respawns gratuitos.
+  - **`app/menu/page.js`**: Agregada la tarjeta de Agarrá.io al menú principal.
+- **Pendiente / Siguientes Pasos:**
+  - Proceder con la Feature 2 del plan: Leaderboard persistente de Pelardle (store en disco atómico en `pela-multiplayer`, anti-cheat en `/api/pelardle`, tabs de ranking en la UI).
+
