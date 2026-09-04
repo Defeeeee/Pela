@@ -100,6 +100,12 @@ export class LeaderboardStore {
         }
       }
 
+      // 1b. Podar los intentos en curso con el mismo criterio de retención.
+      // inProgress no se persiste, pero vive en un proceso que corre meses:
+      // sin esto acumula un registro por cada par (puzzle, jugador) para
+      // siempre, con el array de intentos adentro.
+      this.podarEnCurso();
+
       // 2. Podar historial general (máximo 500 jugadores destacados)
       const historyEntries = Object.entries(this.history);
       if (historyEntries.length > MAX_HISTORY_PLAYERS) {
@@ -129,6 +135,27 @@ export class LeaderboardStore {
     }
   }
 
+  /**
+   * Descarta los intentos en curso de puzzles más viejos que la ventana de
+   * retención. La clave es `${puzzle}_${playerId}` y el puzzle es numérico,
+   * así que el primer guión bajo siempre separa bien aunque el id traiga otros.
+   */
+  podarEnCurso() {
+    let puzzleMax = 0;
+    for (const key of this.inProgress.keys()) {
+      const n = Number(key.slice(0, key.indexOf("_")));
+      if (Number.isFinite(n) && n > puzzleMax) puzzleMax = n;
+    }
+
+    const corte = puzzleMax - MAX_SAVED_PUZZLES;
+    if (corte <= 0) return;
+
+    for (const key of [...this.inProgress.keys()]) {
+      const n = Number(key.slice(0, key.indexOf("_")));
+      if (Number.isFinite(n) && n < corte) this.inProgress.delete(key);
+    }
+  }
+
   registerAttempt({ puzzle, playerId, playerName, guess, solved }) {
     if (!puzzle || !playerId) {
       return { error: "Faltan puzzle o playerId", attempt: 1 };
@@ -147,6 +174,18 @@ export class LeaderboardStore {
         solved: false,
         finished: false,
       };
+
+      // El guard de "ya terminaste" vive en memoria, pero este proceso se
+      // reinicia en cada deploy. Sin reconstruirlo desde el ranking ya
+      // persistido, quien resolvió hoy podía volver a jugar sabiendo la
+      // palabra y pisar su propio 5/6 con un 1/6.
+      const yaRegistrado = (this.daily[pz] || []).find((e) => e.playerId === pId);
+      if (yaRegistrado) {
+        record.attemptsCount = yaRegistrado.attempts;
+        record.solved = yaRegistrado.solved;
+        record.finished = true;
+      }
+
       this.inProgress.set(key, record);
     }
 
@@ -230,20 +269,30 @@ export class LeaderboardStore {
     const h = this.history[playerId];
     h.playerName = playerName; // actualizar nombre en caso de que lo haya cambiado
 
+    // El puzzle llega como string desde la ruta HTTP; se normaliza a número
+    // porque abajo hace falta compararlo con el día hábil anterior.
+    const puzzleNum = Number(puzzle);
+    const ultimoNum = h.lastPuzzle === null || h.lastPuzzle === undefined ? null : Number(h.lastPuzzle);
+
     // Solo actualizar racha si no habíamos registrado ya este mismo puzzle
-    if (h.lastPuzzle !== puzzle) {
+    if (ultimoNum !== puzzleNum) {
       h.gamesPlayed += 1;
-      h.lastPuzzle = puzzle;
 
       if (solved) {
         h.gamesWon += 1;
-        h.currentStreak += 1;
+        // La racha se corta si te salteaste algún día hábil. Sin esta
+        // comparación sería simplemente el total de victorias, y mostraría
+        // un número distinto al que calcula el cliente en el mismo modal.
+        const consecutivo = ultimoNum === puzzleNum - 1;
+        h.currentStreak = consecutivo ? h.currentStreak + 1 : 1;
         if (h.currentStreak > h.maxStreak) {
           h.maxStreak = h.currentStreak;
         }
       } else {
         h.currentStreak = 0;
       }
+
+      h.lastPuzzle = puzzleNum;
     }
   }
 

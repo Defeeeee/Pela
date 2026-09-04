@@ -165,9 +165,15 @@ export async function POST(request) {
     const solved = guess === answer;
 
     // Registrar intento contra el servicio multijugador (autoridad central anti-trampa)
-    let attempt = parseInt(body.attempt, 10) || 1;
     const playerId = body.playerId || "anon";
     const playerName = body.playerName || "Pelado Anónimo";
+
+    // El número de intento SIEMPRE lo decide el servicio; el cliente no vota.
+    // Queda en null si el servicio no contesta, y más abajo eso se trata como
+    // "no puedo probar que agotó los intentos", que es el lado seguro: si
+    // acá cayéramos al valor del cliente, un attempt:6 inventado revelaría
+    // la palabra en el primer intento, que es justo lo que esto viene a evitar.
+    let attempt = null;
 
     try {
       const mpRes = await fetch("http://127.0.0.1:9315/pelardle/attempt", {
@@ -190,10 +196,11 @@ export async function POST(request) {
         }
       }
     } catch (_svcErr) {
-      // Tolerancia a fallos: degradar al attempt del cliente si el servicio está caído
+      // Servicio caído: se sigue jugando, pero sin revelar la palabra por
+      // agotamiento. El jugador pierde la pantalla de derrota, no la partida.
     }
 
-    const exhausted = !solved && attempt >= MAX_ATTEMPTS;
+    const exhausted = !solved && attempt !== null && attempt >= MAX_ATTEMPTS;
 
     const payload = { status: "ok", puzzle: index, guess, result, solved, attempt };
 

@@ -15,6 +15,9 @@ import {
 import { LeaderboardStore } from "./leaderboard.js";
 
 const PORT = process.env.MP_PORT || 9315;
+// Override por si hace falta probar desde otro dispositivo de la LAN (por
+// ejemplo el celular, para los controles táctiles del Agarrá).
+const MP_HOST = process.env.MP_HOST || "127.0.0.1";
 const leaderboardStore = new LeaderboardStore();
 leaderboardStore.init().catch((err) => {
   console.error("[pela-multiplayer] Error iniciando LeaderboardStore:", err);
@@ -228,6 +231,10 @@ agarraIo.on("connection", (socket) => {
     agarraArena.setInput(socket.id, dx, dy);
   });
 
+  socket.on("split", () => {
+    agarraArena.splitPlayer(socket.id);
+  });
+
   socket.on("disconnect", () => {
     agarraArena.removePlayer(socket.id);
   });
@@ -246,6 +253,11 @@ setInterval(() => {
   }
 }, AGARRA_TICK_MS);
 
-httpServer.listen(PORT, () => {
-  console.log(`[pela-multiplayer] escuchando en :${PORT}`);
+// Sólo localhost: en producción quien entra es Traefik, que corre en el mismo
+// host. El endpoint /pelardle/attempt confía en el campo `solved` que le manda
+// quien lo llama, así que exponerlo a la red permitiría entrar primero al
+// ranking con un curl sin adivinar nada. Hoy lo tapa el firewall, pero esto
+// no depende de que esa regla siga estando.
+httpServer.listen(PORT, MP_HOST, () => {
+  console.log(`[pela-multiplayer] escuchando en ${MP_HOST}:${PORT}`);
 });

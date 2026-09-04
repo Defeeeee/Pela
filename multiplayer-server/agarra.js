@@ -4,10 +4,17 @@ export const PALAS_COUNT = 600;
 export const INITIAL_MASS = 20;
 export const PALA_MASS = 1;
 export const EAT_MASS_RATIO = 1.25;
-export const MASS_DECAY_THRESHOLD = 200;
-export const MASS_DECAY_RATE = 0.001; // 0.1% por segundo
 export const TARGET_POPULATION = 12;
 export const BASE_SPEED = 260; // px/segundo a masa 1
+
+// División (barra espaciadora). Un jugador deja de ser un círculo y pasa a ser
+// una lista de células; p.x/p.y/p.mass quedan como agregados derivados.
+export const MIN_SPLIT_MASS = 36;        // por debajo de esto no te podés dividir
+export const MAX_CELLS = 8;              // el Agar original usa 16; 8 acota el costo del tick
+export const SPLIT_IMPULSE = 520;        // px/s con los que sale disparado el pedazo
+export const MERGE_COOLDOWN_MS = 12000;  // cuánto tarda en poder volver a juntarse
+export const IMPULSE_DECAY = 4.5;        // 1/s: qué tan rápido se frena el impulso
+export const MERGE_PULL = 90;            // px/s con los que se buscan una vez que pueden fusionarse
 
 export const COLORS = [
   "#ffeb3b", "#4caf50", "#2196f3", "#ff5722",
@@ -36,6 +43,42 @@ export function radiusForMass(mass) {
 
 export function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
+}
+
+export function crearCelula(x, y, mass, mergeAt = 0) {
+  return { x, y, mass, radius: radiusForMass(mass), vx: 0, vy: 0, mergeAt };
+}
+
+/**
+ * Recalcula x/y/mass/radius del jugador a partir de sus células: el centroide
+ * pesado por masa y la masa total. Mantener estos agregados es lo que permite
+ * que los bots, el ranking en vivo y el snapshot sigan leyendo p.x y p.mass sin
+ * enterarse de que ahora un jugador puede estar partido en varios pedazos.
+ * El radio agregado es "equivalente" (el que tendría si estuviera entero) y se
+ * usa sólo para la cámara y las decisiones de los bots, nunca para colisiones:
+ * esas van célula por célula.
+ */
+export function sincronizarAgregados(p) {
+  if (!p.cells || p.cells.length === 0) {
+    p.alive = false;
+    p.mass = 0;
+    p.radius = 0;
+    return;
+  }
+
+  let masa = 0;
+  let sx = 0;
+  let sy = 0;
+  for (const c of p.cells) {
+    masa += c.mass;
+    sx += c.x * c.mass;
+    sy += c.y * c.mass;
+  }
+
+  p.mass = masa;
+  p.x = sx / masa;
+  p.y = sy / masa;
+  p.radius = radiusForMass(masa);
 }
 
 export function sanitizeName(name) {
@@ -104,6 +147,7 @@ export class Arena {
       id: socketId,
       name: sanitizeName(name),
       color,
+      cells: [crearCelula(x, y, mass)],
       x,
       y,
       mass,
@@ -125,14 +169,58 @@ export class Arena {
     const player = this.players.get(socketId);
     if (!player) return null;
 
-    player.mass = INITIAL_MASS;
-    player.radius = radiusForMass(player.mass);
-    player.x = Math.round(200 + Math.random() * (WORLD_WIDTH - 400));
-    player.y = Math.round(200 + Math.random() * (WORLD_HEIGHT - 400));
+    const x = Math.round(200 + Math.random() * (WORLD_WIDTH - 400));
+    const y = Math.round(200 + Math.random() * (WORLD_HEIGHT - 400));
+
+    player.cells = [crearCelula(x, y, INITIAL_MASS)];
     player.dx = 0;
     player.dy = 0;
     player.alive = true;
+    sincronizarAgregados(player);
     return player;
+  }
+
+  /**
+   * Divide cada célula suficientemente grande en dos, lanzando la mitad nueva
+   * hacia donde apunta el jugador. Es la mecánica que te deja alcanzar a alguien
+   * más rápido que vos, a cambio de quedar partido y vulnerable un rato.
+   */
+  splitPlayer(socketId) {
+    const p = this.players.get(socketId);
+    if (!p || !p.alive) return;
+
+    const now = Date.now();
+    const nuevas = [];
+
+    // Dirección del lanzamiento: hacia donde apunta el mouse. Si está quieto,
+    // se dispara a la derecha para que la tecla nunca quede sin efecto.
+    const len = Math.hypot(p.dx, p.dy);
+    const ux = len > 0 ? p.dx / len : 1;
+    const uy = len > 0 ? p.dy / len : 0;
+
+    for (const c of p.cells) {
+      if (p.cells.length + nuevas.length >= MAX_CELLS) break;
+      if (c.mass < MIN_SPLIT_MASS) continue;
+
+      const mitad = c.mass / 2;
+      c.mass = mitad;
+      c.radius = radiusForMass(mitad);
+      c.mergeAt = now + MERGE_COOLDOWN_MS;
+
+      const hija = crearCelula(
+        c.x + ux * c.radius,
+        c.y + uy * c.radius,
+        mitad,
+        now + MERGE_COOLDOWN_MS
+      );
+      hija.vx = ux * SPLIT_IMPULSE;
+      hija.vy = uy * SPLIT_IMPULSE;
+      nuevas.push(hija);
+    }
+
+    if (!nuevas.length) return;
+    p.cells.push(...nuevas);
+    sincronizarAgregados(p);
   }
 
   removePlayer(socketId) {
@@ -186,6 +274,7 @@ export class Arena {
       id,
       name,
       color,
+      cells: [crearCelula(x, y, mass)],
       x,
       y,
       mass,
@@ -289,76 +378,160 @@ export class Arena {
 
     this.updateBots(now);
 
-    // 1. Mover jugadores y bots vivos
+    // 1. Mover cada célula. La velocidad depende de la masa DE LA CÉLULA, no
+    //    del jugador: por eso al dividirte los pedazos corren más que el entero.
     for (const p of this.players.values()) {
       if (!p.alive) continue;
 
-      const speed = BASE_SPEED / Math.pow(p.mass, 0.32);
-      p.x += p.dx * speed * dtSeconds;
-      p.y += p.dy * speed * dtSeconds;
+      const frenado = Math.exp(-IMPULSE_DECAY * dtSeconds);
 
-      p.radius = radiusForMass(p.mass);
-      p.x = clamp(p.x, p.radius, WORLD_WIDTH - p.radius);
-      p.y = clamp(p.y, p.radius, WORLD_HEIGHT - p.radius);
+      for (const c of p.cells) {
+        const speed = BASE_SPEED / Math.pow(c.mass, 0.32);
+        c.x += (p.dx * speed + c.vx) * dtSeconds;
+        c.y += (p.dy * speed + c.vy) * dtSeconds;
 
-      if (p.mass > MASS_DECAY_THRESHOLD) {
-        p.mass = Math.max(MASS_DECAY_THRESHOLD, p.mass - p.mass * MASS_DECAY_RATE * dtSeconds);
-        p.radius = radiusForMass(p.mass);
+        // El envión de la división se va apagando solo.
+        c.vx *= frenado;
+        c.vy *= frenado;
+
+        c.radius = radiusForMass(c.mass);
+        c.x = clamp(c.x, c.radius, WORLD_WIDTH - c.radius);
+        c.y = clamp(c.y, c.radius, WORLD_HEIGHT - c.radius);
       }
     }
 
-    // 2. Colisión jugador con palas
+    // 1b. Células propias entre sí: o se vuelven a fusionar (si ya pasó el
+    //     enfriamiento) o se empujan para no quedar apiladas una encima de otra.
     for (const p of this.players.values()) {
-      if (!p.alive) continue;
-      const r = p.radius;
-      const rSq = r * r;
+      if (!p.alive || p.cells.length < 2) continue;
 
-      for (const pala of this.palas.values()) {
-        const dx = pala.x - p.x;
-        const dy = pala.y - p.y;
-        if (Math.abs(dx) > r || Math.abs(dy) > r) continue;
+      for (let i = 0; i < p.cells.length; i++) {
+        for (let j = i + 1; j < p.cells.length; j++) {
+          const a = p.cells[i];
+          const b = p.cells[j];
+          const dx = b.x - a.x;
+          const dy = b.y - a.y;
+          const dist = Math.hypot(dx, dy);
+          const minDist = a.radius + b.radius;
+          const puedenFusionarse = now >= a.mergeAt && now >= b.mergeAt;
 
-        if (dx * dx + dy * dy < rSq) {
-          this.palas.delete(pala.id);
-          this.eatenPalasSinceSnapshot.push(pala.id);
-          p.mass += PALA_MASS;
-          p.radius = radiusForMass(p.mass);
+          if (puedenFusionarse) {
+            if (dist < Math.max(a.radius, b.radius)) {
+              a.mass += b.mass;
+              a.radius = radiusForMass(a.mass);
+              a.vx = 0;
+              a.vy = 0;
+              p.cells.splice(j, 1);
+              j--;
+              continue;
+            }
+
+            // Ya venció el enfriamiento pero todavía no se tocan: se atraen
+            // despacio hasta juntarse. Sin esto quedan flotando en paralelo
+            // para siempre, porque todas siguen el mismo input y nunca se
+            // cruzan solas: te quedabas partido y débil de forma permanente.
+            const nx = dx / (dist || 1);
+            const ny = dy / (dist || 1);
+            const acercar = MERGE_PULL * dtSeconds;
+            a.x += nx * acercar;
+            a.y += ny * acercar;
+            b.x -= nx * acercar;
+            b.y -= ny * acercar;
+            continue;
+          }
+
+          // Todavía no pueden fusionarse: sólo se despegan si se solapan.
+          if (dist >= minDist) continue;
+
+          const nx = dist === 0 ? 1 : dx / dist;
+          const ny = dist === 0 ? 0 : dy / dist;
+          const solape = (minDist - (dist === 0 ? 0.0001 : dist)) / 2;
+          a.x -= nx * solape;
+          a.y -= ny * solape;
+          b.x += nx * solape;
+          b.y += ny * solape;
         }
       }
+
+      // El clamp de pared va DESPUÉS de separar, no antes: si no, empujar dos
+      // células contra un borde las deja fuera del mapa. Mismo error que ya
+      // apareció dos veces en este proyecto (/escapa y el battle de /escapecv).
+      for (const c of p.cells) {
+        c.x = clamp(c.x, c.radius, WORLD_WIDTH - c.radius);
+        c.y = clamp(c.y, c.radius, WORLD_HEIGHT - c.radius);
+      }
     }
 
-    // 3. Colisión jugador con jugador (comerse entre sí)
-    const aliveList = [...this.players.values()].filter((p) => p.alive);
-    for (let i = 0; i < aliveList.length; i++) {
-      const a = aliveList[i];
-      if (!a.alive) continue;
+    // 2. Colisión de cada célula con las palas
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
 
-      for (let j = 0; j < aliveList.length; j++) {
-        if (i === j) continue;
-        const b = aliveList[j];
-        if (!b.alive) continue;
+      for (const c of p.cells) {
+        const r = c.radius;
+        const rSq = r * r;
 
-        if (a.mass >= b.mass * EAT_MASS_RATIO) {
-          const dist = Math.hypot(a.x - b.x, a.y - b.y);
-          if (dist < a.radius) {
-            b.alive = false;
-            a.mass += b.mass;
-            a.radius = radiusForMass(a.mass);
-            a.kills = (a.kills || 0) + 1;
+        for (const pala of this.palas.values()) {
+          const dx = pala.x - c.x;
+          const dy = pala.y - c.y;
+          if (Math.abs(dx) > r || Math.abs(dy) > r) continue;
 
-            if (b.isBot) {
-              setTimeout(() => {
-                if (this.players.has(b.id)) {
-                  this.respawnPlayer(b.id);
-                }
-              }, 2000);
-            }
+          if (dx * dx + dy * dy < rSq) {
+            this.palas.delete(pala.id);
+            this.eatenPalasSinceSnapshot.push(pala.id);
+            c.mass += PALA_MASS;
+            c.radius = radiusForMass(c.mass);
           }
         }
       }
     }
 
-    // 4. Reponer palas si bajaron de PALAS_COUNT
+    // 3. Comerse entre jugadores, célula contra célula. Un jugador recién muere
+    //    cuando le comieron TODAS sus células.
+    const aliveList = [...this.players.values()].filter((p) => p.alive);
+    for (const a of aliveList) {
+      if (!a.alive) continue;
+
+      for (const b of aliveList) {
+        if (a === b || !b.alive) continue;
+
+        for (const ca of a.cells) {
+          for (let j = 0; j < b.cells.length; j++) {
+            const cb = b.cells[j];
+            if (ca.mass < cb.mass * EAT_MASS_RATIO) continue;
+
+            const dist = Math.hypot(ca.x - cb.x, ca.y - cb.y);
+            if (dist >= ca.radius) continue;
+
+            ca.mass += cb.mass;
+            ca.radius = radiusForMass(ca.mass);
+            b.cells.splice(j, 1);
+            j--;
+
+            if (b.cells.length === 0) {
+              b.alive = false;
+              a.kills = (a.kills || 0) + 1;
+
+              if (b.isBot) {
+                setTimeout(() => {
+                  if (this.players.has(b.id)) {
+                    this.respawnPlayer(b.id);
+                  }
+                }, 2000);
+              }
+              break;
+            }
+          }
+          if (!b.alive) break;
+        }
+      }
+    }
+
+    // 4. Recalcular los agregados una sola vez, ya con todo resuelto.
+    for (const p of this.players.values()) {
+      if (p.alive) sincronizarAgregados(p);
+    }
+
+    // 5. Reponer palas si bajaron de PALAS_COUNT
     const missingPalas = PALAS_COUNT - this.palas.size;
     if (missingPalas > 0) {
       const toSpawn = Math.min(10, missingPalas);
@@ -381,10 +554,18 @@ export class Arena {
         id: p.id,
         name: p.name,
         color: p.color,
+        // x/y/mass/radius son el agregado: los usa el ranking en vivo y la
+        // cámara. El dibujo real va por `cells`, que es lo que puede ser más
+        // de un círculo cuando el jugador se dividió.
         x: Math.round(p.x),
         y: Math.round(p.y),
         mass: Math.round(p.mass),
         radius: Math.round(p.radius),
+        cells: (p.cells || []).map((c) => ({
+          x: Math.round(c.x),
+          y: Math.round(c.y),
+          r: Math.round(c.radius),
+        })),
         alive: p.alive,
         isBot: p.isBot,
         kills: p.kills,

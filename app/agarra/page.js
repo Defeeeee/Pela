@@ -177,14 +177,19 @@ export default function AgarraGame() {
     return () => clearInterval(interval);
   }, [view]);
 
-  // Teclado para respawn rápido con Espacio
+  // Espacio hace las dos cosas según el estado: si estás muerto, respawnea;
+  // si estás vivo, te dividís (que es la tecla del Agar original).
   useEffect(() => {
     if (view !== "playing") return;
 
     const handleKeyDown = (e) => {
-      if (e.code === "Space" && !myPlayerInfo.alive) {
-        e.preventDefault();
+      if (e.code !== "Space") return;
+      e.preventDefault();
+
+      if (!myPlayerInfo.alive) {
         handleRespawn();
+      } else {
+        socketRef.current?.emit("split");
       }
     };
 
@@ -267,11 +272,26 @@ export default function AgarraGame() {
       const playersMap = new Map();
       for (const p1 of s1.players) {
         const p0 = s0.players.find((p) => p.id === p1.id) || p1;
+
+        // Las células se interpolan por índice. Si entre los dos snapshots
+        // cambió la cantidad (se dividió o se fusionó), se toma la nueva tal
+        // cual: interpolar contra otra célula daría un salto peor que el corte.
+        const c0 = p0.cells || [];
+        const cells = (p1.cells || []).map((c, i) => {
+          const prev = c0.length === (p1.cells || []).length ? c0[i] : c;
+          return {
+            x: prev.x + (c.x - prev.x) * alpha,
+            y: prev.y + (c.y - prev.y) * alpha,
+            r: prev.r + (c.r - prev.r) * alpha,
+          };
+        });
+
         playersMap.set(p1.id, {
           ...p1,
           x: p0.x + (p1.x - p0.x) * alpha,
           y: p0.y + (p1.y - p0.y) * alpha,
           radius: p0.radius + (p1.radius - p0.radius) * alpha,
+          cells,
         });
       }
 
@@ -355,59 +375,68 @@ export default function AgarraGame() {
 
       for (const p of sortedPlayers) {
         if (!p.alive) continue;
-        const r = p.radius;
 
-        if (p.x < viewLeft - r * 2 || p.x > viewRight + r * 2 || p.y < viewTop - r * 2 || p.y > viewBottom + r * 2) {
-          continue;
-        }
+        // Un jugador puede estar partido en varias células si se dividió. La
+        // más grande es la que lleva el nombre, para no repetirlo en cada pedazo.
+        const celulas = p.cells && p.cells.length ? p.cells : [{ x: p.x, y: p.y, r: p.radius }];
+        let mayor = celulas[0];
+        for (const c of celulas) if (c.r > mayor.r) mayor = c;
 
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        for (const c of celulas) {
+          const r = c.r;
+          if (c.x < viewLeft - r * 2 || c.x > viewRight + r * 2 || c.y < viewTop - r * 2 || c.y > viewBottom + r * 2) {
+            continue;
+          }
 
-        // Fondo del círculo con color
-        ctx.fillStyle = p.color || "#4caf50";
-        ctx.fill();
-
-        // Borde exterior
-        ctx.lineWidth = Math.max(2, r * 0.08);
-        ctx.strokeStyle = p.id === myIdRef.current ? "#ffffff" : "rgba(0, 0, 0, 0.4)";
-        ctx.stroke();
-
-        // Si tenemos la imagen de Pelado Feliz, recortarla dentro del círculo
-        if (peladoImg) {
-          ctx.clip();
-          ctx.drawImage(peladoImg, p.x - r, p.y - r, r * 2, r * 2);
-
-          // Lustre brillante en la calva
+          ctx.save();
           ctx.beginPath();
-          ctx.arc(p.x - r * 0.3, p.y - r * 0.35, r * 0.35, 0, Math.PI * 2);
-          ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+          ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+
+          // Fondo del círculo con color
+          ctx.fillStyle = p.color || "#4caf50";
           ctx.fill();
+
+          // Borde exterior
+          ctx.lineWidth = Math.max(2, r * 0.08);
+          ctx.strokeStyle = p.id === myIdRef.current ? "#ffffff" : "rgba(0, 0, 0, 0.4)";
+          ctx.stroke();
+
+          // Si tenemos la imagen de Pelado Feliz, recortarla dentro del círculo
+          if (peladoImg) {
+            ctx.clip();
+            ctx.drawImage(peladoImg, c.x - r, c.y - r, r * 2, r * 2);
+
+            // Lustre brillante en la calva
+            ctx.beginPath();
+            ctx.arc(c.x - r * 0.3, c.y - r * 0.35, r * 0.35, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.35)";
+            ctx.fill();
+          }
+
+          ctx.restore();
         }
 
-        ctx.restore();
-
-        // Nombre y masa del jugador
+        // Nombre y masa, una sola vez, sobre la célula más grande
+        const rl = mayor.r;
         ctx.save();
-        ctx.font = `bold ${Math.max(12, Math.round(r * 0.38))}px system-ui, sans-serif`;
+        ctx.font = `bold ${Math.max(12, Math.round(rl * 0.38))}px system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
         const label = p.name;
-        const sub = `${p.mass}`;
+        const sub = celulas.length > 1 ? `${p.mass} (${celulas.length})` : `${p.mass}`;
 
         // Sombra de texto para alta legibilidad
         ctx.strokeStyle = "#000000";
         ctx.lineWidth = 4;
-        ctx.strokeText(label, p.x, p.y - r * 0.1);
+        ctx.strokeText(label, mayor.x, mayor.y - rl * 0.1);
         ctx.fillStyle = "#ffffff";
-        ctx.fillText(label, p.x, p.y - r * 0.1);
+        ctx.fillText(label, mayor.x, mayor.y - rl * 0.1);
 
-        ctx.font = `bold ${Math.max(10, Math.round(r * 0.28))}px system-ui, sans-serif`;
-        ctx.strokeText(sub, p.x, p.y + r * 0.3);
+        ctx.font = `bold ${Math.max(10, Math.round(rl * 0.28))}px system-ui, sans-serif`;
+        ctx.strokeText(sub, mayor.x, mayor.y + rl * 0.3);
         ctx.fillStyle = "#ffeb3b";
-        ctx.fillText(sub, p.x, p.y + r * 0.3);
+        ctx.fillText(sub, mayor.x, mayor.y + rl * 0.3);
 
         ctx.restore();
       }
@@ -463,7 +492,8 @@ export default function AgarraGame() {
             </button>
 
             <p className="agarra-fee-hint">
-              Respawn gratis ilimitado una vez adentro. Movés al pelado con el cursor del mouse.
+              Respawn gratis ilimitado una vez adentro. Movés al pelado con el cursor del mouse
+              y te dividís con la barra espaciadora para alcanzar al que se te escapa.
             </p>
           </div>
 
@@ -536,7 +566,11 @@ export default function AgarraGame() {
         </>
       )}
 
-      <style jsx>{`
+      {/* <style> plano, sin el atributo jsx: con styled-jsx los selectores
+          quedan scopeados con un hash y el <a> que genera <Link> no lo recibe,
+          así que los links salían con el azul subrayado del navegador. El resto
+          del proyecto usa este mismo patrón, con clases prefijadas por feature. */}
+      <style>{`
         .agarra-container {
           position: fixed;
           inset: 0;
