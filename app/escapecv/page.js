@@ -6,14 +6,18 @@ import Link from 'next/link';
 export default function EscapeCVPage() {
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
+  const [highScoreChase, setHighScoreChase] = useState(0);
+  const [highScoreDodge, setHighScoreDodge] = useState(0);
   const [gameStarted, setGameStarted] = useState(false);
+  const [currentMode, setCurrentMode] = useState('chase');
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   const requestRef = useRef();
   const canvasRef = useRef(null);
   
   const stateRef = useRef({
+    mode: 'chase',
+    fenceIndex: 0,
     player: { x: 0, y: 0, size: 48, baseSpeed: 3.5, normalSpeed: 3.5, boostSpeed: 7.5, boostTime: 0, speed: 3.5 },
     enemies: [],
     warnings: [],
@@ -33,7 +37,8 @@ export default function EscapeCVPage() {
   useEffect(() => { addCreditRef.current = addCredit; }, [addCredit]);
 
   useEffect(() => {
-    setHighScore(parseInt(localStorage.getItem('escapecv_highscore') || '0'));
+    setHighScoreChase(parseInt(localStorage.getItem('escapecv_highscore_chase') || localStorage.getItem('escapecv_highscore') || '0'));
+    setHighScoreDodge(parseInt(localStorage.getItem('escapecv_highscore_dodge') || '0'));
     
     const updateDimensions = () => {
       setDimensions({
@@ -58,7 +63,7 @@ export default function EscapeCVPage() {
     };
   }, []);
 
-  const startGame = async () => {
+  const startGame = async (mode) => {
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
         const permissionState = await DeviceOrientationEvent.requestPermission();
@@ -71,19 +76,23 @@ export default function EscapeCVPage() {
     }
 
     if (!gameStarted) {
-      deductCredit(20, 'jugar-/escapecv');
+      deductCredit(20, `jugar-/escapecv-${mode}`);
     }
     const canvas = canvasRef.current;
+    setCurrentMode(mode);
+    
     stateRef.current = {
+      mode: mode,
+      fenceIndex: Math.floor(Math.random() * 4),
       player: { x: canvas.width / 2, y: canvas.height / 2, size: 48, baseSpeed: 3.5, normalSpeed: 3.5, boostSpeed: 7.5, boostTime: 0, speed: 3.5 },
-      enemies: [{ x: 50, y: 50, size: 36, vx: 0, vy: 0 }],
+      enemies: mode === 'chase' ? [{ x: 50, y: 50, size: 36, vx: 0, vy: 0, type: 'chaser' }] : [],
       warnings: [],
       powerups: [],
       startTime: Date.now(),
       lastEnemyTime: Date.now(),
       lastRewardTime: Date.now(),
       enemyBaseSpeed: 1.5,
-      enemySpawnRate: 3500,
+      enemySpawnRate: mode === 'chase' ? 3500 : 2000,
       frozenTime: 0,
       keys: stateRef.current.keys,
       deviceOrientation: { 
@@ -137,7 +146,7 @@ export default function EscapeCVPage() {
     state.player.boostSpeed = state.player.normalSpeed + 4;
     state.enemyBaseSpeed = 1.5 + (timeAlive * 0.055);
 
-    if (state.player.boostTime > now) {
+    if (state.player.boostTime > now && state.mode === 'chase') {
       state.player.speed = state.player.boostSpeed;
     } else {
       state.player.speed = state.player.normalSpeed;
@@ -150,21 +159,16 @@ export default function EscapeCVPage() {
     if (state.keys['a'] || state.keys['arrowleft']) dx -= 1;
     if (state.keys['d'] || state.keys['arrowright']) dx += 1;
     
-    // Gyroscope controls (if no keyboard is pressed and gyro is available)
+    // Gyroscope controls
     if (dx === 0 && dy === 0 && state.deviceOrientation.initialBeta !== null && state.deviceOrientation.initialGamma !== null) {
       const betaDiff = state.deviceOrientation.beta - state.deviceOrientation.initialBeta;
       const gammaDiff = state.deviceOrientation.gamma - state.deviceOrientation.initialGamma;
-      const threshold = 5; // degrees
+      const threshold = 5;
 
-      // Map tilt to movement. 
-      // Tilting top of phone forward (beta decreases if held flat, or increases if held vertically depending on axis)
-      // Usually, tilting top of phone up towards you decreases beta. We'll map:
-      // Beta diff < -threshold -> Tilting UP -> dy < 0
-      // Beta diff > threshold -> Tilting DOWN -> dy > 0
       if (betaDiff < -threshold) dy -= 1;
       if (betaDiff > threshold) dy += 1;
-      if (gammaDiff > threshold) dx += 1; // right
-      if (gammaDiff < -threshold) dx -= 1; // left
+      if (gammaDiff > threshold) dx += 1;
+      if (gammaDiff < -threshold) dx -= 1;
     }
 
     if (dx !== 0 && dy !== 0) {
@@ -175,33 +179,88 @@ export default function EscapeCVPage() {
     state.player.x += dx * state.player.speed;
     state.player.y += dy * state.player.speed;
     
-    state.player.x = Math.max(state.player.size/2, Math.min(canvas.width - state.player.size/2, state.player.x));
-    state.player.y = Math.max(state.player.size/2, Math.min(canvas.height - state.player.size/2, state.player.y));
+    // clamp player
+    if (state.mode === 'chase') {
+      state.player.x = Math.max(state.player.size/2, Math.min(canvas.width - state.player.size/2, state.player.x));
+      state.player.y = Math.max(state.player.size/2, Math.min(canvas.height - state.player.size/2, state.player.y));
+    } else {
+      const corralW = canvas.width * 0.707;
+      const corralH = canvas.height * 0.707;
+      const cx = (canvas.width - corralW) / 2;
+      const cy = (canvas.height - corralH) / 2;
+      state.player.x = Math.max(cx + state.player.size/2, Math.min(cx + corralW - state.player.size/2, state.player.x));
+      state.player.y = Math.max(cy + state.player.size/2, Math.min(cy + corralH - state.player.size/2, state.player.y));
+    }
 
     if (now - state.lastEnemyTime > state.enemySpawnRate) {
       state.lastEnemyTime = now;
-      if (Math.random() < 0.25) { 
-        // 25% chance to spawn new enemy, first schedule a warning
-        let ex, ey;
-        if (Math.random() < 0.5) {
-          ex = Math.random() < 0.5 ? -40 : canvas.width + 40;
-          ey = Math.random() * canvas.height;
+
+      if (state.mode === 'chase') {
+        if (Math.random() < 0.25) { 
+          let ex, ey;
+          if (Math.random() < 0.5) {
+            ex = Math.random() < 0.5 ? -40 : canvas.width + 40;
+            ey = Math.random() * canvas.height;
+          } else {
+            ex = Math.random() * canvas.width;
+            ey = Math.random() < 0.5 ? -40 : canvas.height + 40;
+          }
+          const clamp = (val, max) => Math.max(10, Math.min(val, max - 10));
+          state.warnings.push({ 
+            x: ex, y: ey, 
+            dotX: clamp(ex, canvas.width), dotY: clamp(ey, canvas.height), 
+            spawnAt: now + 1500,
+            type: Math.random() < 0.5 ? 'chaser' : 'random',
+            size: 36
+          });
         } else {
-          ex = Math.random() * canvas.width;
-          ey = Math.random() < 0.5 ? -40 : canvas.height + 40;
+           state.enemySpawnRate = Math.max(1000, state.enemySpawnRate - 150);
         }
-        
-        // Push warning. Clamp coordinates to edge of screen so dot is visible
-        const clamp = (val, max) => Math.max(10, Math.min(val, max - 10));
-        state.warnings.push({ 
-          x: ex, 
-          y: ey, 
-          dotX: clamp(ex, canvas.width), 
-          dotY: clamp(ey, canvas.height), 
-          spawnAt: now + 1500 
-        });
       } else {
-         state.enemySpawnRate = Math.max(1000, state.enemySpawnRate - 150);
+        // Dodge mode spawning
+        // Spawns N shovels at once, size and speed are mixed.
+        const numToSpawn = 1 + Math.floor(Math.random() * (1 + timeAlive / 15));
+        for (let i = 0; i < numToSpawn; i++) {
+          let ex, ey;
+          const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+          
+          if (side === 0) { ex = Math.random() * canvas.width; ey = -60; }
+          else if (side === 1) { ex = canvas.width + 60; ey = Math.random() * canvas.height; }
+          else if (side === 2) { ex = Math.random() * canvas.width; ey = canvas.height + 60; }
+          else { ex = -60; ey = Math.random() * canvas.height; }
+
+          // Target point across the screen (in the corral general area)
+          const corralW = canvas.width * 0.707;
+          const corralH = canvas.height * 0.707;
+          const cx = (canvas.width - corralW) / 2;
+          const cy = (canvas.height - corralH) / 2;
+          const tx = cx + Math.random() * corralW;
+          const ty = cy + Math.random() * corralH;
+
+          const dx = tx - ex;
+          const dy = ty - ey;
+          const dist = Math.hypot(dx, dy);
+          
+          // Speed variation (can have slow/small ones mixed with big/fast ones)
+          const isGiant = Math.random() < (0.1 + timeAlive / 200);
+          const size = isGiant ? 60 + Math.random() * 40 : 20 + Math.random() * 20;
+          const speedFactor = isGiant ? 0.8 + Math.random() * 0.5 : 1 + Math.random();
+          const speed = Math.max(2, state.enemyBaseSpeed * speedFactor);
+
+          const vx = (dx / dist) * speed;
+          const vy = (dy / dist) * speed;
+
+          const clamp = (val, max) => Math.max(10, Math.min(val, max - 10));
+          state.warnings.push({
+            x: ex, y: ey,
+            vx, vy,
+            dotX: clamp(ex, canvas.width), dotY: clamp(ey, canvas.height),
+            spawnAt: now + 1000 + Math.random() * 500,
+            type: 'bullet',
+            size: size
+          });
+        }
+        state.enemySpawnRate = Math.max(800, state.enemySpawnRate - 50);
       }
     }
 
@@ -209,71 +268,68 @@ export default function EscapeCVPage() {
     for (let i = state.warnings.length - 1; i >= 0; i--) {
       const w = state.warnings[i];
       if (now >= w.spawnAt) {
-        const type = Math.random() < 0.5 ? 'chaser' : 'random';
-        state.enemies.push({ x: w.x, y: w.y, size: 36, vx: 0, vy: 0, type });
+        state.enemies.push({ x: w.x, y: w.y, size: w.size, vx: w.vx || 0, vy: w.vy || 0, type: w.type });
         state.warnings.splice(i, 1);
       }
     }
 
-    // Powerups spawn randomly (~1% chance per frame if < 3 on screen)
-    if (Math.random() < 0.005 && state.powerups.length < 3) {
-      state.powerups.push({
-        x: Math.random() * (canvas.width - 60) + 30,
-        y: Math.random() * (canvas.height - 60) + 30,
-        type: Math.random() < 0.5 ? 'boost' : 'freeze',
-        size: 30,
-        createdAt: now
-      });
-    }
+    // Powerups only in Chase mode
+    if (state.mode === 'chase') {
+      if (Math.random() < 0.005 && state.powerups.length < 3) {
+        state.powerups.push({
+          x: Math.random() * (canvas.width - 60) + 30,
+          y: Math.random() * (canvas.height - 60) + 30,
+          type: Math.random() < 0.5 ? 'boost' : 'freeze',
+          size: 30,
+          createdAt: now
+        });
+      }
 
-    // Remove old powerups after 8s
-    state.powerups = state.powerups.filter(p => now - p.createdAt < 8000);
+      state.powerups = state.powerups.filter(p => now - p.createdAt < 8000);
 
-    const pr = { x: state.player.x, y: state.player.y, r: state.player.size / 2 };
+      const pr = { x: state.player.x, y: state.player.y, r: state.player.size / 2 };
 
-    // Check powerup collisions
-    for (let i = state.powerups.length - 1; i >= 0; i--) {
-      const p = state.powerups[i];
-      const dist = Math.hypot(p.x - pr.x, p.y - pr.y);
-      if (dist < pr.r + p.size/2) {
-        if (p.type === 'boost') {
-          state.player.boostTime = now + 1500;
-        } else if (p.type === 'freeze') {
-          state.frozenTime = now + 500; 
+      for (let i = state.powerups.length - 1; i >= 0; i--) {
+        const p = state.powerups[i];
+        const dist = Math.hypot(p.x - pr.x, p.y - pr.y);
+        if (dist < pr.r + p.size/2) {
+          if (p.type === 'boost') {
+            state.player.boostTime = now + 1500;
+          } else if (p.type === 'freeze') {
+            state.frozenTime = now + 500; 
+          }
+          state.powerups.splice(i, 1);
         }
-        state.powerups.splice(i, 1);
       }
     }
 
     const isFrozen = state.frozenTime > now;
+    const pr = { x: state.player.x, y: state.player.y, r: state.player.size / 2 };
 
     // Move enemies
-    for (const e of state.enemies) {
+    for (let i = state.enemies.length - 1; i >= 0; i--) {
+      const e = state.enemies[i];
+      
       if (!isFrozen) {
         if (e.type === 'random') {
-          // Random erratic pattern
           if (!e.nextTurn || now > e.nextTurn) {
              if (Math.random() < 0.4) {
-                // target player directly
                 e.targetAngle = Math.atan2(state.player.y - e.y, state.player.x - e.x);
              } else {
-                // completely random direction
                 e.targetAngle = Math.random() * Math.PI * 2;
              }
-             e.nextTurn = now + 500 + Math.random() * 1500; // change mind every 0.5 - 2s
+             e.nextTurn = now + 500 + Math.random() * 1500; 
           }
           const targetVx = Math.cos(e.targetAngle) * state.enemyBaseSpeed * 1.3;
           const targetVy = Math.sin(e.targetAngle) * state.enemyBaseSpeed * 1.3;
           e.vx += (targetVx - e.vx) * 0.05;
           e.vy += (targetVy - e.vy) * 0.05;
 
-          // Keep within bounds gently
           if (e.x < 30) e.vx += 0.5;
           if (e.x > canvas.width - 30) e.vx -= 0.5;
           if (e.y < 30) e.vy += 0.5;
           if (e.y > canvas.height - 30) e.vy -= 0.5;
-        } else {
-          // Direct chaser
+        } else if (e.type === 'chaser') {
           let edx = state.player.x - e.x;
           let edy = state.player.y - e.y;
           const dist = Math.sqrt(edx*edx + edy*edy);
@@ -284,41 +340,58 @@ export default function EscapeCVPage() {
             e.vy += (targetVy - e.vy) * 0.1;
           }
         }
+        // bullet type just moves with vx, vy
         
         e.x += e.vx;
         e.y += e.vy;
       }
 
       // Check collision
-      const hitboxR = 12; // Generous small hitbox for the shovel
+      const hitboxR = e.size * 0.35; // scales with enemy size
       const collisionDist = Math.hypot(state.player.x - e.x, state.player.y - e.y);
       if (collisionDist < pr.r + hitboxR) {
         setGameOver(true);
-        if (currentScore > highScore) {
-          setHighScore(currentScore);
-          localStorage.setItem('escapecv_highscore', currentScore);
+        if (state.mode === 'chase') {
+          if (currentScore > highScoreChase) {
+            setHighScoreChase(currentScore);
+            localStorage.setItem('escapecv_highscore_chase', currentScore);
+          }
+        } else {
+          if (currentScore > highScoreDodge) {
+            setHighScoreDodge(currentScore);
+            localStorage.setItem('escapecv_highscore_dodge', currentScore);
+          }
         }
         return; 
       }
+
+      // Remove bullet enemies if they go far off screen
+      if (e.type === 'bullet' && (e.x < -200 || e.x > canvas.width + 200 || e.y < -200 || e.y > canvas.height + 200)) {
+        state.enemies.splice(i, 1);
+      }
     }
 
-    // Enemies collision with each other so they don't overlap
-    for (let i = 0; i < state.enemies.length; i++) {
-      for (let j = i + 1; j < state.enemies.length; j++) {
-        const e1 = state.enemies[i];
-        const e2 = state.enemies[j];
-        const dx = e2.x - e1.x;
-        const dy = e2.y - e1.y;
-        const dist = Math.hypot(dx, dy);
-        const minDist = 28; // Enemy collision radius
-        if (dist > 0 && dist < minDist) {
-          const overlap = minDist - dist;
-          const nx = dx / dist;
-          const ny = dy / dist;
-          e1.x -= (nx * overlap) / 2;
-          e1.y -= (ny * overlap) / 2;
-          e2.x += (nx * overlap) / 2;
-          e2.y += (ny * overlap) / 2;
+    // Enemies collision with each other (only chaser and random, bullets don't collide)
+    if (state.mode === 'chase') {
+      for (let i = 0; i < state.enemies.length; i++) {
+        for (let j = i + 1; j < state.enemies.length; j++) {
+          const e1 = state.enemies[i];
+          const e2 = state.enemies[j];
+          if (e1.type === 'bullet' || e2.type === 'bullet') continue;
+          
+          const dx = e2.x - e1.x;
+          const dy = e2.y - e1.y;
+          const dist = Math.hypot(dx, dy);
+          const minDist = 28; 
+          if (dist > 0 && dist < minDist) {
+            const overlap = minDist - dist;
+            const nx = dx / dist;
+            const ny = dy / dist;
+            e1.x -= (nx * overlap) / 2;
+            e1.y -= (ny * overlap) / 2;
+            e2.x += (nx * overlap) / 2;
+            e2.y += (ny * overlap) / 2;
+          }
         }
       }
     }
@@ -344,16 +417,47 @@ export default function EscapeCVPage() {
       ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
     }
 
-    // Draw spawn warnings (Red dot pulsing)
+    // Draw Corral if Dodge mode
+    if (state.mode === 'dodge') {
+      const corralW = canvas.width * 0.707;
+      const corralH = canvas.height * 0.707;
+      const cx = (canvas.width - corralW) / 2;
+      const cy = (canvas.height - corralH) / 2;
+      
+      // Fill corral background slightly lighter
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+      ctx.fillRect(cx, cy, corralW, corralH);
+      
+      const fenceImg = document.getElementById(`fence-${state.fenceIndex}`);
+      if (fenceImg) {
+        const fSize = 32;
+        // Top and bottom edges
+        for (let x = cx; x < cx + corralW; x += fSize) {
+          ctx.drawImage(fenceImg, x, cy - fSize/2, fSize, fSize);
+          ctx.drawImage(fenceImg, x, cy + corralH - fSize/2, fSize, fSize);
+        }
+        // Left and right edges
+        for (let y = cy; y < cy + corralH; y += fSize) {
+          ctx.drawImage(fenceImg, cx - fSize/2, y, fSize, fSize);
+          ctx.drawImage(fenceImg, cx + corralW - fSize/2, y, fSize, fSize);
+        }
+      } else {
+        ctx.strokeStyle = '#555';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(cx, cy, corralW, corralH);
+      }
+    }
+
+    // Draw spawn warnings
     const now = Date.now();
     for (const w of state.warnings) {
       const remaining = w.spawnAt - now;
       if (remaining > 0) {
         ctx.save();
-        ctx.globalAlpha = 0.5 + Math.sin(now / 100) * 0.5; // Pulse alpha
+        ctx.globalAlpha = 0.5 + Math.sin(now / 100) * 0.5;
         ctx.fillStyle = 'red';
         ctx.beginPath();
-        ctx.arc(w.dotX, w.dotY, 8, 0, Math.PI * 2);
+        ctx.arc(w.dotX, w.dotY, w.size ? w.size * 0.35 : 8, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -364,8 +468,7 @@ export default function EscapeCVPage() {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const p of state.powerups) {
-      // Small floating animation
-      const floatY = Math.sin((Date.now() - p.createdAt) / 200) * 4;
+      const floatY = Math.sin((now - p.createdAt) / 200) * 4;
       ctx.fillText(p.type === 'boost' ? '🧉' : '❄️', p.x, p.y + floatY);
     }
 
@@ -378,7 +481,6 @@ export default function EscapeCVPage() {
       ctx.clip();
       ctx.drawImage(playerImg, state.player.x - state.player.size/2, state.player.y - state.player.size/2, state.player.size, state.player.size);
       
-      // Boost aura
       if (state.player.boostTime > Date.now()) {
         ctx.lineWidth = 3;
         ctx.strokeStyle = '#4caf50';
@@ -393,9 +495,7 @@ export default function EscapeCVPage() {
     for (const e of state.enemies) {
       ctx.save();
       ctx.translate(e.x, e.y);
-      // Face movement direction
       const angle = Math.atan2(e.vy, e.vx);
-      // Adding Math.PI to reverse the pointing direction (opposite corner)
       ctx.rotate(angle + Math.PI/4 + Math.PI); 
       
       if (enemyImg) {
@@ -444,7 +544,7 @@ export default function EscapeCVPage() {
           font-weight: 800;
         }
         .score { color: #fff; font-variant-numeric: tabular-nums; }
-        .highscore { color: #ffeb3b; font-variant-numeric: tabular-nums; }
+        .highscore { color: #ffeb3b; font-variant-numeric: tabular-nums; flex-direction: column; display: flex; font-size: 0.9rem;}
         .canvas-wrapper {
           position: relative; 
           width: 95vw; 
@@ -472,18 +572,30 @@ export default function EscapeCVPage() {
           background: #ffeb3b;
           color: #000;
           border: none;
-          padding: 14px 32px;
-          font-size: 1.2rem;
+          padding: 14px 24px;
+          font-size: 1.1rem;
           font-weight: 800;
           border-radius: 8px;
           cursor: pointer;
-          margin-top: 25px;
           transition: transform 0.2s, box-shadow 0.2s;
           box-shadow: 0 4px 15px rgba(255, 235, 59, 0.3);
         }
         .btn:hover {
           transform: translateY(-2px);
           box-shadow: 0 6px 20px rgba(255, 235, 59, 0.5);
+        }
+        .btn-dodge {
+          background: #ff5722;
+          box-shadow: 0 4px 15px rgba(255, 87, 34, 0.3);
+          color: white;
+        }
+        .btn-dodge:hover {
+          box-shadow: 0 6px 20px rgba(255, 87, 34, 0.5);
+        }
+        .btn-container {
+          display: flex;
+          gap: 20px;
+          margin-top: 25px;
         }
         .hidden { display: none; }
         .back-link {
@@ -506,12 +618,21 @@ export default function EscapeCVPage() {
       {/* Hidden images for canvas */}
       <img id="img-player" src="/imgs/goat/Pelado Feliz.jpeg" className="hidden" alt="Player" />
       <img id="img-enemy" src="/imgs/labura/shovel.jpeg" className="hidden" alt="Enemy" />
+      
+      {/* Fence Sprites */}
+      <img id="fence-0" src="/imgs/fence sprites/Sprite-0003.png" className="hidden" alt="Fence" />
+      <img id="fence-1" src="/imgs/fence sprites/Sprite-0004.png" className="hidden" alt="Fence" />
+      <img id="fence-2" src="/imgs/fence sprites/Sprite-0005.png" className="hidden" alt="Fence" />
+      <img id="fence-3" src="/imgs/fence sprites/Sprite-0008.png" className="hidden" alt="Fence" />
 
       <div className="header">
         <Link href="/menu" className="back-link">← Volver al menú</Link>
         <div className="score-board">
           <div className="score">PTS: {score}</div>
-          <div className="highscore">TOP: {highScore}</div>
+          <div className="highscore">
+            <span>TOP CHASE: {highScoreChase}</span>
+            <span>TOP DODGE: {highScoreDodge}</span>
+          </div>
         </div>
       </div>
 
@@ -524,14 +645,20 @@ export default function EscapeCVPage() {
               {gameOver ? 'TE AGARRÓ LA PALA' : 'ESCAPÁ A LA PALA'}
             </h1>
             {gameOver && <p style={{ fontSize: '1.8rem', margin: '0', color: '#ccc', fontWeight: 600 }}>Puntaje: {score}</p>}
-            <button className="btn" onClick={startGame}>
-              {gameOver ? 'REINTENTAR (-20 Reserva)' : 'JUGAR (-20 Reserva)'}
-            </button>
+            
+            <div className="btn-container">
+              <button className="btn" onClick={() => startGame('chase')}>
+                {gameOver && currentMode === 'chase' ? 'REINTENTAR CHASE (-20)' : 'JUGAR CHASE (-20)'}
+              </button>
+              <button className="btn btn-dodge" onClick={() => startGame('dodge')}>
+                {gameOver && currentMode === 'dodge' ? 'REINTENTAR DODGE (-20)' : 'JUGAR DODGE (-20)'}
+              </button>
+            </div>
+            
             <div className="instructions">
-              <strong>Mecánica:</strong> Esquivá las palas con <b>WASD</b> / <b>Flechas</b> o inclinando tu celular.<br/>
-              La velocidad aumenta con el tiempo.<br/><br/>
-              🧉 Velocidad extra por 1.5s<br/>
-              ❄️ Congelar palas por 0.5s
+              <strong>Mecánica:</strong> Esquivá con <b>WASD</b> / <b>Flechas</b> o inclinando tu celular.<br/>
+              <b>Chase:</b> Las palas te persiguen en campo abierto. Hay powerups.<br/>
+              <b>Dodge:</b> Estás encerrado en el corral y tenés que esquivar oleadas variadas de palas.<br/>
             </div>
           </div>
         )}
