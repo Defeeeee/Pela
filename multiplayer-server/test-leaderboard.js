@@ -137,6 +137,73 @@ const testDir = path.join(os.tmpdir(), `pela-test-leaderboard-${Date.now()}`);
   fs.rmSync(corruptDir, { recursive: true, force: true });
 }
 
+// La racha se corta si te salteaste un día hábil. Antes incrementaba con
+// cualquier victoria, así que era el total de victorias disfrazado de racha, y
+// contradecía al número que el cliente muestra en el mismo modal.
+{
+  const dir = `${testDir}-racha`;
+  fs.rmSync(dir, { recursive: true, force: true });
+  const store = new LeaderboardStore({ dataDir: dir });
+  await store.init();
+
+  const ganar = (puzzle) =>
+    store.registerAttempt({ puzzle, playerId: "p1", playerName: "Fede", guess: "FIRMA", solved: true });
+
+  ganar(100);
+  assert.strictEqual(store.history["p1"].currentStreak, 1, "Primera victoria arranca la racha en 1");
+
+  ganar(101);
+  assert.strictEqual(store.history["p1"].currentStreak, 2, "Día hábil consecutivo suma a la racha");
+
+  ganar(150);
+  assert.strictEqual(store.history["p1"].currentStreak, 1, "Saltearse días hábiles reinicia la racha");
+  assert.strictEqual(store.history["p1"].maxStreak, 2, "La mejor racha se conserva");
+  assert.strictEqual(store.history["p1"].gamesWon, 3, "Las victorias totales siguen sumando");
+
+  console.log("  ✓ La racha se corta al saltearse días hábiles");
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// Un reinicio del proceso (pasa en CADA deploy) no debe permitir re-jugar el
+// puzzle del día ya sabiendo la palabra y pisar el propio puntaje.
+{
+  const dir = `${testDir}-reinicio`;
+  fs.rmSync(dir, { recursive: true, force: true });
+
+  const s1 = new LeaderboardStore({ dataDir: dir });
+  await s1.init();
+  for (let i = 0; i < 4; i++) {
+    s1.registerAttempt({ puzzle: 137, playerId: "p1", playerName: "Fede", guess: "CALVO", solved: false });
+  }
+  s1.registerAttempt({ puzzle: 137, playerId: "p1", playerName: "Fede", guess: "FIRMA", solved: true });
+  assert.strictEqual(s1.daily["137"][0].attempts, 5, "Resolvió en 5 intentos");
+  await s1.flushToDisk();
+
+  // Proceso nuevo: inProgress arranca vacío, sólo se recupera lo persistido.
+  const s2 = new LeaderboardStore({ dataDir: dir });
+  await s2.init();
+  const reintento = s2.registerAttempt({ puzzle: 137, playerId: "p1", playerName: "Fede", guess: "FIRMA", solved: true });
+
+  assert.strictEqual(reintento.alreadyFinished, true, "Tras reiniciar debe seguir bloqueado");
+  assert.strictEqual(s2.daily["137"][0].attempts, 5, "No debe pisar el 5/6 original con un 1/6");
+
+  console.log("  ✓ Un reinicio no permite re-jugar ni mejorar el puntaje del día");
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+// Los intentos en curso se podan: el Map vive en un proceso que corre meses.
+{
+  const store = new LeaderboardStore({ dataDir: `${testDir}-poda` });
+  for (let p = 1; p <= 60; p++) {
+    store.registerAttempt({ puzzle: p, playerId: "p1", playerName: "Fede", guess: "CALVO", solved: false });
+  }
+  assert.strictEqual(store.inProgress.size, 60, "Antes de podar están los 60");
+  store.podarEnCurso();
+  assert.ok(store.inProgress.size <= 31, `Debe podar los viejos (quedaron ${store.inProgress.size})`);
+  console.log("  ✓ Los intentos en curso se podan y no crecen sin techo");
+  fs.rmSync(`${testDir}-poda`, { recursive: true, force: true });
+}
+
 // Limpieza de testDir
 try {
   fs.rmSync(testDir, { recursive: true, force: true });
