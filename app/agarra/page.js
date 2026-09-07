@@ -10,6 +10,14 @@ const WORLD_HEIGHT = 4000;
 const NAME_KEY = "pela_player_name";
 const ENTRY_COST = 20;
 
+// Cuánto atrás en el tiempo se dibuja, para tener siempre dos snapshots que
+// encierren ese instante. El servidor difunde a 15 Hz (uno cada ~66ms), así
+// que el buffer tiene que ser mayor a un intervalo: con menos, cualquier
+// demora deja al cliente sin datos y la imagen se congela. Medido contra
+// producción, el jitter llega a 160ms; 120ms cubre el caso normal sin agregar
+// un retraso perceptible al control.
+const INTERP_DELAY_MS = 120;
+
 function multiplayerUrl() {
   if (typeof window === "undefined") return undefined;
   return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
@@ -107,15 +115,21 @@ export default function AgarraGame() {
         }
       }
 
-      // 2. Guardar snapshot para interpolación
+      // 2. Guardar snapshot para interpolación.
+      //    Se sella con el reloj DEL CLIENTE, no con delta.t que viene del
+      //    servidor: abajo se compara contra Date.now() del navegador, y
+      //    mezclar dos relojes hacía que el desfase (medido en ~56ms contra
+      //    producción) se comiera casi todo el buffer de interpolación.
       const snap = {
-        t: delta.t || Date.now(),
+        t: Date.now(),
         players: delta.players || [],
         leaderboard: delta.leaderboard || [],
       };
 
       snapshotsRef.current.push(snap);
-      if (snapshotsRef.current.length > 5) {
+      // Se guardan más de los que se usan: si llegan varios seguidos por
+      // jitter, 5 podían no cubrir los INTERP_DELAY_MS hacia atrás.
+      if (snapshotsRef.current.length > 12) {
         snapshotsRef.current.shift();
       }
 
@@ -261,11 +275,27 @@ export default function AgarraGame() {
       const snaps = snapshotsRef.current;
       if (snaps.length === 0) return;
 
-      // Interpolación entre los dos últimos snapshots
-      const s1 = snaps[snaps.length - 1];
-      const s0 = snaps.length > 1 ? snaps[snaps.length - 2] : s1;
+      // Se dibuja INTERP_DELAY_MS en el pasado para tener siempre dos snapshots
+      // que encierren ese instante. El servidor difunde cada ~66ms pero medido
+      // contra producción el jitter llega a 160ms, así que un buffer más corto
+      // que el intervalo deja al cliente sin datos: alpha se clava en 1 y todo
+      // se congela hasta el snapshot siguiente. Eso era el tirón.
+      const renderTime = Date.now() - INTERP_DELAY_MS;
+
+      // Buscar el par que encierra renderTime, no siempre los dos últimos:
+      // con un buffer mayor al intervalo, el momento a dibujar suele caer más
+      // atrás que el anteúltimo snapshot.
+      let s0 = snaps[0];
+      let s1 = snaps[snaps.length - 1];
+      for (let i = snaps.length - 1; i > 0; i--) {
+        if (snaps[i - 1].t <= renderTime) {
+          s0 = snaps[i - 1];
+          s1 = snaps[i];
+          break;
+        }
+      }
+
       const dt = Math.max(1, s1.t - s0.t);
-      const renderTime = Date.now() - 60; // 60ms detrás para suavidad
       const alpha = Math.max(0, Math.min(1, (renderTime - s0.t) / dt));
 
       // Mapear jugadores interpolados
