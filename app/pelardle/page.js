@@ -48,6 +48,8 @@ export default function PelardlePage() {
   // Leaderboard & Identidad
   const [playerId, setPlayerId] = useState("");
   const [playerName, setPlayerName] = useState("");
+  const [nameDraft, setNameDraft] = useState("");
+  const [savingName, setSavingName] = useState(false);
   const [activeTab, setActiveTab] = useState("stats"); // 'stats' | 'daily' | 'history'
   const [boardData, setBoardData] = useState({ daily: [], history: [] });
   const [loadingBoard, setLoadingBoard] = useState(false);
@@ -80,6 +82,7 @@ export default function PelardlePage() {
 
     const pname = localStorage.getItem(PLAYER_NAME_KEY) || "";
     setPlayerName(pname);
+    setNameDraft(pname);
   }, []);
 
   const fetchBoard = useCallback(async (pz) => {
@@ -157,6 +160,42 @@ export default function PelardlePage() {
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(""), 2600);
   }, []);
+
+  const handleUpdateName = useCallback(async (e) => {
+    e?.preventDefault?.();
+    const clean = (nameDraft || "").trim().slice(0, 16);
+    const finalName = clean || "Pelado Anónimo";
+
+    setPlayerName(finalName);
+    setNameDraft(finalName);
+    try {
+      localStorage.setItem(PLAYER_NAME_KEY, finalName);
+      localStorage.setItem("pela_player_name", finalName);
+    } catch (_err) {}
+
+    setSavingName(true);
+    try {
+      const res = await fetch("/api/pelardle/leaderboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerId,
+          playerName: finalName,
+        }),
+      });
+      const data = await res.json();
+      if (data && data.ok) {
+        showToast("Nombre de legajo actualizado.");
+      } else {
+        showToast("Nombre guardado.");
+      }
+    } catch (_err) {
+      showToast("Nombre guardado localmente.");
+    } finally {
+      setSavingName(false);
+      fetchBoard();
+    }
+  }, [nameDraft, playerId, showToast, fetchBoard]);
 
   const doShake = useCallback(() => {
     setShake(true);
@@ -469,21 +508,25 @@ export default function PelardlePage() {
             </div>
 
             {/* Configuración de Nombre de Jugador */}
-            <div className="pel-name-box">
+            <form className="pel-name-box" onSubmit={handleUpdateName}>
               <label className="pel-namelabel" htmlFor="pnameInput">Tu nombre de legajo:</label>
               <input
                 id="pnameInput"
                 type="text"
                 className="pel-nameinput"
                 maxLength={16}
-                value={playerName}
+                value={nameDraft}
                 placeholder="Pelado Anónimo"
-                onChange={(e) => {
-                  setPlayerName(e.target.value);
-                  localStorage.setItem(PLAYER_NAME_KEY, e.target.value.trim());
-                }}
+                onChange={(e) => setNameDraft(e.target.value)}
               />
-            </div>
+              <button
+                type="submit"
+                className="pel-namebtn"
+                disabled={savingName}
+              >
+                {savingName ? "..." : "Actualizar"}
+              </button>
+            </form>
 
             {/* Pestaña 1: Estadísticas Personales */}
             {activeTab === "stats" && (
@@ -891,12 +934,36 @@ function PelardleStyles() {
       }
       .pel-nameinput {
         flex: 1;
+        min-width: 0;
         background: none;
         border: none;
         color: #fff;
         font-size: 0.8rem;
         font-weight: 700;
         outline: none;
+      }
+      .pel-namebtn {
+        background: #ffeb3b;
+        color: #000;
+        border: none;
+        border-radius: 6px;
+        padding: 5px 10px;
+        font-size: 0.72rem;
+        font-weight: 800;
+        cursor: pointer;
+        white-space: nowrap;
+        font-family: inherit;
+        transition: transform 0.1s ease, background 0.15s ease;
+      }
+      .pel-namebtn:hover:not(:disabled) {
+        background: #ffff72;
+      }
+      .pel-namebtn:active:not(:disabled) {
+        transform: scale(0.95);
+      }
+      .pel-namebtn:disabled {
+        opacity: 0.5;
+        cursor: default;
       }
       .pel-board-title {
         font-size: 0.85rem;

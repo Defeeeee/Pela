@@ -30,6 +30,19 @@ function fmtTime(ms) {
   return (ms / 1000).toFixed(1) + 's';
 }
 
+async function requestOrientationPermission() {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const res = await DeviceOrientationEvent.requestPermission();
+      return res === 'granted';
+    } catch (err) {
+      console.warn('Permiso de giroscopio error:', err);
+      return false;
+    }
+  }
+  return true;
+}
+
 export default function MultiplayerGame({ onExit }) {
   const [view, setView] = useState('menu'); // 'menu' | 'room'
   const [name, setName] = useState('');
@@ -47,9 +60,44 @@ export default function MultiplayerGame({ onExit }) {
   const deductRef = useRef(deductCredit);
   useEffect(() => { deductRef.current = deductCredit; }, [deductCredit]);
 
+  const gyroRef = useRef({
+    beta: 0,
+    gamma: 0,
+    initialBeta: null,
+    initialGamma: null,
+    hasOrientation: false,
+  });
+
   useEffect(() => {
     setName(localStorage.getItem(NAME_KEY) || '');
   }, []);
+
+  // Escucha cambios de orientación para controles por inclinación en celulares
+  useEffect(() => {
+    const handleOrientation = (e) => {
+      if (e.beta !== null && e.gamma !== null) {
+        gyroRef.current.beta = e.beta;
+        gyroRef.current.gamma = e.gamma;
+        gyroRef.current.hasOrientation = true;
+      }
+    };
+    window.addEventListener('deviceorientation', handleOrientation);
+    return () => {
+      window.removeEventListener('deviceorientation', handleOrientation);
+    };
+  }, []);
+
+  const calibrateGyro = useCallback(() => {
+    gyroRef.current.initialBeta = gyroRef.current.beta;
+    gyroRef.current.initialGamma = gyroRef.current.gamma;
+  }, []);
+
+  // Calibrar la posición neutra automáticamente al comenzar la ronda
+  useEffect(() => {
+    if (room?.state === 'playing') {
+      calibrateGyro();
+    }
+  }, [room?.state, room?.roundId, calibrateGyro]);
 
   const ensureSocket = useCallback(() => {
     if (socketRef.current) return socketRef.current;
@@ -79,7 +127,8 @@ export default function MultiplayerGame({ onExit }) {
     localStorage.setItem(NAME_KEY, value);
   };
 
-  const joinPublic = (mode) => {
+  const joinPublic = async (mode) => {
+    await requestOrientationPermission();
     setError('');
     setConnecting(true);
     const s = ensureSocket();
@@ -91,7 +140,8 @@ export default function MultiplayerGame({ onExit }) {
     });
   };
 
-  const createRoom = (mode) => {
+  const createRoom = async (mode) => {
+    await requestOrientationPermission();
     setError('');
     setConnecting(true);
     const s = ensureSocket();
@@ -103,8 +153,9 @@ export default function MultiplayerGame({ onExit }) {
     });
   };
 
-  const joinWithCode = () => {
+  const joinWithCode = async () => {
     if (joinCode.trim().length < 4) return setError('El código tiene 4 caracteres.');
+    await requestOrientationPermission();
     setError('');
     setConnecting(true);
     const s = ensureSocket();
@@ -116,7 +167,8 @@ export default function MultiplayerGame({ onExit }) {
     });
   };
 
-  const startPrivateGame = () => {
+  const startPrivateGame = async () => {
+    await requestOrientationPermission();
     socketRef.current?.emit('startGame', {}, (res) => {
       if (res?.error) setError(res.error);
     });
@@ -130,7 +182,7 @@ export default function MultiplayerGame({ onExit }) {
     setError('');
   };
 
-  // Input: se lee el teclado a intervalos fijos y se manda al server, sólo
+  // Input: se lee el teclado y giroscopio a intervalos fijos y se manda al server, sólo
   // mientras la partida está en curso.
   useEffect(() => {
     if (room?.state !== 'playing') return;
@@ -150,6 +202,53 @@ export default function MultiplayerGame({ onExit }) {
       if (k['s'] || k['arrowdown']) dy += 1;
       if (k['a'] || k['arrowleft']) dx -= 1;
       if (k['d'] || k['arrowright']) dx += 1;
+
+      // Si no hay teclas presionadas, usar el giroscopio del celular
+      if (dx === 0 && dy === 0 && gyroRef.current.hasOrientation) {
+        if (gyroRef.current.initialBeta === null || gyroRef.current.initialGamma === null) {
+          gyroRef.current.initialBeta = gyroRef.current.beta;
+          gyroRef.current.initialGamma = gyroRef.current.gamma;
+        }
+
+        const betaDiff = gyroRef.current.beta - gyroRef.current.initialBeta;
+        const gammaDiff = gyroRef.current.gamma - gyroRef.current.initialGamma;
+
+        // Detección de rotación de pantalla
+        const orientationAngle = typeof window !== 'undefined'
+          ? (window.screen?.orientation?.angle ?? (typeof window.orientation === 'number' ? window.orientation : 0))
+          : 0;
+
+        let rawX = 0;
+        let rawY = 0;
+
+        if (orientationAngle === 90) {
+          rawX = betaDiff;
+          rawY = -gammaDiff;
+        } else if (orientationAngle === -90 || orientationAngle === 270) {
+          rawX = -betaDiff;
+          rawY = gammaDiff;
+        } else if (orientationAngle === 180) {
+          rawX = -gammaDiff;
+          rawY = -betaDiff;
+        } else {
+          // Vertical normal (0)
+          rawX = gammaDiff;
+          rawY = betaDiff;
+        }
+
+        const threshold = 5;
+        if (rawY < -threshold) dy -= 1;
+        if (rawY > threshold) dy += 1;
+        if (rawX > threshold) dx += 1;
+        if (rawX < -threshold) dx -= 1;
+      }
+
+      if (dx !== 0 && dy !== 0) {
+        const length = Math.hypot(dx, dy);
+        dx /= length;
+        dy /= length;
+      }
+
       socketRef.current?.emit('input', { dx, dy });
     }, INPUT_INTERVAL_MS);
 
@@ -265,6 +364,8 @@ export default function MultiplayerGame({ onExit }) {
         .mp-countdown { font-size: 2.5rem; font-weight: 900; color: #ffeb3b; }
         .mp-canvas-wrap { width: 95vw; height: 82vh; position: relative; border-radius: 12px; overflow: hidden; }
         .mp-hud { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; font-size: 0.85rem; color: #ccc; z-index: 2; }
+        .mp-btn-calib { background: rgba(255, 235, 59, 0.2); border: 1px solid #ffeb3b; color: #ffeb3b; border-radius: 6px; padding: 4px 10px; font-size: 0.75rem; font-weight: 700; cursor: pointer; touch-action: manipulation; }
+        .mp-btn-calib:active { background: #ffeb3b; color: #000; }
         .mp-results-list { list-style: none; padding: 0; margin: 14px 0; text-align: left; }
         .mp-results-list li { display: flex; justify-content: space-between; padding: 8px 10px; border-radius: 6px; background: rgba(255,255,255,0.04); margin-bottom: 4px; }
         .mp-hidden { display: none; }
@@ -359,6 +460,8 @@ export default function MultiplayerGame({ onExit }) {
             <p style={{ color: '#999', fontSize: '0.85rem' }}>Esperando otro jugador para arrancar...</p>
           )}
 
+          <p style={{ color: '#aaa', fontSize: '0.8rem', margin: '8px 0 4px' }}>📱 En celular podés jugar inclinando la pantalla.</p>
+
           <button className="mp-btn secondary" style={{ marginTop: 10 }} onClick={leaveRoom}>Salir de la sala</button>
         </div>
       )}
@@ -367,7 +470,17 @@ export default function MultiplayerGame({ onExit }) {
         <>
           <div className="mp-hud">
             <span>{room.mode === 'battle' ? '⚔️ Battle Royale' : '🤝 Coop'} · {fmtTime(room.elapsedMs)}</span>
-            <span>{room.players.filter((p) => p.alive).length}/{room.players.length} vivos</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button
+                type="button"
+                className="mp-btn-calib"
+                onClick={calibrateGyro}
+                title="Centrar giroscopio en la posición actual"
+              >
+                🎯 Calibrar
+              </button>
+              <span>{room.players.filter((p) => p.alive).length}/{room.players.length} vivos</span>
+            </div>
           </div>
           <div className="mp-canvas-wrap">
             <canvas

@@ -204,6 +204,28 @@ const testDir = path.join(os.tmpdir(), `pela-test-leaderboard-${Date.now()}`);
   fs.rmSync(`${testDir}-poda`, { recursive: true, force: true });
 }
 
+// Actualización de nombre de legajo: sincroniza ranking diario e histórico
+{
+  const store = new LeaderboardStore({ dataDir: `${testDir}-name` });
+  await store.init();
+
+  store.registerAttempt({ puzzle: 10, playerId: "p_name_1", playerName: "Nombre Viejo", guess: "CALVO", solved: true });
+  const boardAntes = store.getBoard(10);
+  assert.strictEqual(boardAntes.daily[0].playerName, "Nombre Viejo");
+  assert.strictEqual(boardAntes.history[0].playerName, "Nombre Viejo");
+
+  const updateRes = store.updatePlayerName("p_name_1", "Nombre Nuevo");
+  assert.strictEqual(updateRes.ok, true);
+  assert.strictEqual(updateRes.playerName, "Nombre Nuevo");
+
+  const boardDespues = store.getBoard(10);
+  assert.strictEqual(boardDespues.daily[0].playerName, "Nombre Nuevo", "Debe actualizar nombre en daily");
+  assert.strictEqual(boardDespues.history[0].playerName, "Nombre Nuevo", "Debe actualizar nombre en history");
+
+  console.log("  ✓ updatePlayerName actualiza el nombre en ranking diario e histórico");
+  fs.rmSync(`${testDir}-name`, { recursive: true, force: true });
+}
+
 // Limpieza de testDir
 try {
   fs.rmSync(testDir, { recursive: true, force: true });

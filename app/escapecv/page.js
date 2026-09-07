@@ -668,7 +668,14 @@ export default function EscapeCVPage() {
             <button
               className="btn"
               style={{ background: '#2196f3', color: '#fff', marginTop: '4px' }}
-              onClick={() => setShowMultiplayer(true)}
+              onClick={async () => {
+                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                  try {
+                    await DeviceOrientationEvent.requestPermission();
+                  } catch (e) {}
+                }
+                setShowMultiplayer(true);
+              }}
             >
               🎮 MULTIJUGADOR
             </button>

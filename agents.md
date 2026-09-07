@@ -213,3 +213,28 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
   - **Se detectó jugando que las células nunca se reencontraban.** Sólo se fusionaban si se solapaban por casualidad, pero como todas siguen el mismo input se mueven en paralelo: quedabas partido y débil para siempre. Se agregó atracción entre células propias una vez vencido el enfriamiento. Verificado en vivo: se separan hasta 146px, aguantan los 12s sin fusionarse, y a los 13s se juntan conservando la masa.
 - **Verificación:** 14 tests deterministas del Arena (corridos 3 veces seguidas para descartar flakiness) y 7 del leaderboard, incluidos tests de regresión para cada bug corregido. En el navegador: división real mostrando `44 (2)`, ciclo completo de división y fusión medido con un cliente headless, y build limpio.
 - **Notas:** El disco del VPS está al **96%** (2.1 GB libres). No afecta al leaderboard, que es de kilobytes, pero conviene mirarlo por separado antes de que moleste.
+
+### 2026-09-07 - Antigravity (Gemini 3.8 Flash)
+- **Objetivo:** Sincronizar Development con origin, corregir la actualización de nombre de jugador en Pelardle (con botón "Actualizar" y sincronización al backend) y arreglar el soporte de giroscopio en celulares para el multijugador de Escape a la Pala (`/escapecv`).
+- **Completado:**
+  - **Git sync:** `git pull origin Development` integrando 12 commits remotos.
+  - **Pelardle (Nombre de legajo y Leaderboard):**
+    - Agregado método `updatePlayerName(playerId, newName)` en `multiplayer-server/leaderboard.js` para sincronizar el nombre en todas las listas diarias históricas y en el ranking acumulado con guardado a disco.
+    - Nuevo endpoint REST `POST /pelardle/name` en `multiplayer-server/server.js`.
+    - Endpoint `POST /api/pelardle/leaderboard` en App Router Next.js.
+    - Modificado `app/pelardle/page.js`: ahora cuenta con estado borrador `nameDraft`, botón **"Actualizar"** (`.pel-namebtn`), envío mediante click o tecla Enter, actualización en `localStorage` (`PLAYER_NAME_KEY` y `pela_player_name`), llamada a la API, recarga inmediata de tablas con `fetchBoard()` y toast de confirmación.
+    - Test unitario nuevo en `multiplayer-server/test-leaderboard.js` verificando la actualización del nombre en `daily` y `history`.
+  - **Escape a la Pala - Multijugador (Giroscopio):**
+    - En `app/escapecv/page.js`: solicitud anticipada de permisos de orientación (`DeviceOrientationEvent.requestPermission()`) al pulsar "🎮 MULTIJUGADOR".
+    - En `app/escapecv/MultiplayerGame.js`:
+      - Integrado listener de eventos `deviceorientation`.
+      - Solicitud de permisos en acciones del usuario (unirse a salas públicas, privadas, crear sala y empezar partida).
+      - Calibración automática del centro neutro al comenzar la ronda (`initialBeta`, `initialGamma`).
+      - Detección de la orientación de pantalla (`window.screen.orientation.angle`) compensando vertical y horizontal/landscape.
+      - En el loop de inputs (cada 50ms): cuando no hay teclas de teclado presionadas, calcula `dx` y `dy` a partir del desvío del giroscopio.
+      - Agregado botón `🎯 Calibrar` en el HUD de la partida para re-centrar el ángulo neutro en cualquier momento y nota informativa en el lobby para celulares.
+  - **Verificación:**
+    - `node multiplayer-server/test-leaderboard.js` (8 tests pasando exitosamente).
+    - `node multiplayer-server/test-agarra.js` (14 tests pasando).
+    - `npm run build` pasando al 100% y generando las 25 rutas sin errores.
+

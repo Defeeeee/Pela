@@ -296,6 +296,38 @@ export class LeaderboardStore {
     }
   }
 
+  updatePlayerName(playerId, newName) {
+    if (!playerId) {
+      return { ok: false, error: "Falta playerId" };
+    }
+    const clean = sanitizeName(newName);
+    const pId = String(playerId);
+
+    let updated = false;
+
+    // 1. Actualizar en historial
+    if (this.history[pId]) {
+      this.history[pId].playerName = clean;
+      updated = true;
+    }
+
+    // 2. Actualizar en todos los registros diarios almacenados
+    for (const pz of Object.keys(this.daily)) {
+      const entries = this.daily[pz];
+      if (Array.isArray(entries)) {
+        for (const entry of entries) {
+          if (entry.playerId === pId) {
+            entry.playerName = clean;
+            updated = true;
+          }
+        }
+      }
+    }
+
+    this.scheduleSave();
+    return { ok: true, playerName: clean, updated };
+  }
+
   getBoard(puzzle) {
     const pz = String(puzzle || "");
     const dailyRaw = this.daily[pz] || [];

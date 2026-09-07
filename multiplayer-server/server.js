@@ -75,6 +75,26 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
+  if (url.pathname === "/pelardle/name" && req.method === "POST") {
+    let bodyStr = "";
+    req.on("data", (chunk) => {
+      bodyStr += chunk;
+      if (bodyStr.length > 65536) req.destroy();
+    });
+    req.on("end", () => {
+      try {
+        const body = JSON.parse(bodyStr || "{}");
+        const result = leaderboardStore.updatePlayerName(body.playerId, body.playerName);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "JSON inválido" }));
+      }
+    });
+    return;
+  }
+
   // Traefik hace un healthcheck HTTP plano antes de rutear WebSockets; sin
   // esta respuesta, cualquier GET normal a / se cuelga sin contestar.
   res.writeHead(200, { "Content-Type": "text/plain" });
