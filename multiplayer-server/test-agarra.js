@@ -18,6 +18,16 @@ console.log("Iniciando tests deterministas de Arena (Agarrá.io)...");
 // Un jugador ahora es una lista de células y p.x/p.mass son agregados
 // derivados, así que escribirlos directo no cambia la simulación. Este helper
 // deja al jugador como un único pedazo en la posición y masa que pide el test.
+// addPlayer() dispara syncBots(), que vuelve a llenar la arena de bots aunque
+// se haya hecho players.clear() antes. Esos bots se mueven y comen, y hacen
+// fallar de forma intermitente los tests que arman una escena controlada.
+// Hay que sacarlos DESPUÉS de agregar los jugadores del test.
+function sinBots(arena) {
+  for (const [id, p] of [...arena.players]) {
+    if (p.isBot) arena.players.delete(id);
+  }
+}
+
 function ubicar(p, x, y, mass) {
   p.cells = [crearCelula(x, y, mass)];
   sincronizarAgregados(p);
@@ -45,6 +55,7 @@ function ubicar(p, x, y, mass) {
   const palaId = 99999;
   arena.palas.set(palaId, { id: palaId, x: 505, y: 505 });
 
+  sinBots(arena);
   arena.tick(33);
 
   assert.strictEqual(arena.palas.has(palaId), false, "La pala debió ser comida");
@@ -67,7 +78,12 @@ function ubicar(p, x, y, mass) {
   // Caso A: Masas iguales (20 vs 20) -> ninguno debe comerse al otro
   ubicar(pBig, 1000, 1000, 20);
   ubicar(pSmall, 1010, 1000, 20);
+  sinBots(arena);
 
+  // tick() repone palas al final de cada tick, así que hay que vaciarlas
+  // justo antes de cada uno: con una sola pala cerca, el grande cruza el
+  // umbral del 25% comiéndola y el test falla de forma intermitente.
+  arena.palas.clear();
   arena.tick(33);
   assert.strictEqual(pBig.alive, true, "Con masas iguales ninguno come al otro");
   assert.strictEqual(pSmall.alive, true, "Con masas iguales ninguno come al otro");
@@ -76,6 +92,7 @@ function ubicar(p, x, y, mass) {
   ubicar(pBig, 1000, 1000, 124);
   ubicar(pSmall, 1010, 1000, 100);
 
+  arena.palas.clear();
   arena.tick(33);
   assert.strictEqual(pSmall.alive, true, "Con 24% de ventaja NO se debe comer al rival");
 
@@ -83,6 +100,7 @@ function ubicar(p, x, y, mass) {
   ubicar(pBig, 1000, 1000, 125);
   ubicar(pSmall, 1010, 1000, 100); // distancia 10px < radio ~44px
 
+  arena.palas.clear();
   arena.tick(33);
   assert.strictEqual(pSmall.alive, false, "Con 25% de ventaja el rival debe ser comido");
   assert.strictEqual(pBig.mass, 125 + 100, "El cazador debe absorber toda la masa de la víctima");
@@ -94,6 +112,8 @@ function ubicar(p, x, y, mass) {
   const arena = new Arena();
   arena.players.clear();
   const p = arena.addPlayer("p1", "Borde");
+
+  sinBots(arena);
 
   // Tratar de salir por la izquierda (x < 0)
   ubicar(p, 5, 2000, 25);
@@ -121,6 +141,7 @@ function ubicar(p, x, y, mass) {
   arena.palas.clear();
   const p = arena.addPlayer("p1", "Gordo");
   ubicar(p, 2000, 2000, 1000);
+  sinBots(arena);
 
   // Se comprueba en cada tick, no sólo al final: el arena repone palas y el
   // gordo puede comer alguna, así que un chequeo final por igualdad exacta
@@ -181,6 +202,7 @@ function ubicar(p, x, y, mass) {
   p.cells[0].radius = radiusForMass(100);
   arena.setInput("p1", 1, 0); // apuntando a la derecha
   sincronizarAgregados(p);
+  sinBots(arena);
 
   const masaAntes = p.mass;
   arena.splitPlayer("p1");
@@ -207,6 +229,7 @@ function ubicar(p, x, y, mass) {
   const chico = arena.addPlayer("chico", "Chico");
   chico.cells[0].mass = MIN_SPLIT_MASS - 1;
   chico.cells[0].radius = radiusForMass(chico.cells[0].mass);
+  sinBots(arena);
   arena.splitPlayer("chico");
   assert.strictEqual(chico.cells.length, 1, "Por debajo del mínimo no se divide");
 
@@ -229,6 +252,7 @@ function ubicar(p, x, y, mass) {
   p.cells[0].y = 2000;
   p.cells[0].mass = 100;
   p.cells[0].radius = radiusForMass(100);
+  sinBots(arena);
   arena.setInput("p1", 0, 0);
   arena.splitPlayer("p1");
   assert.strictEqual(p.cells.length, 2, "Arranca dividido");
@@ -248,7 +272,9 @@ function ubicar(p, x, y, mass) {
   let ticks = 0;
   while (p.cells.length > 1 && ticks < 300) { arena.tick(33); ticks++; }
   assert.strictEqual(p.cells.length, 1, `Separadas y sin enfriamiento deben reencontrarse solas (quedaron ${p.cells.length} tras ${ticks} ticks)`);
-  assert.ok(Math.abs(p.mass - 100) < 1, `La masa se conserva al fusionarse (${p.mass})`);
+  // Puede subir si comió alguna pala repuesta durante los ticks; lo que no
+  // debe pasar nunca es que se pierda masa al fusionar dos células.
+  assert.ok(p.mass >= 100, `Al fusionarse no se pierde masa (quedó en ${p.mass})`);
   console.log("  ✓ Se fusionan sólo después del enfriamiento, conservando la masa");
 }
 
@@ -265,6 +291,7 @@ function ubicar(p, x, y, mass) {
   const cazador = arena.addPlayer("c", "Cazador");
   cazador.cells = [crearCelula(1000, 1000, 500)];
   sincronizarAgregados(cazador);
+  sinBots(arena);
 
   arena.tick(33);
 
