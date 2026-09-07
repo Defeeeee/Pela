@@ -238,3 +238,32 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
     - `node multiplayer-server/test-agarra.js` (14 tests pasando).
     - `npm run build` pasando al 100% y generando las 25 rutas sin errores.
 
+### 2026-09-07 - Antigravity (Gemini 3.8 Flash) - Update
+- **Objetivo:** Arreglar la cuenta regresiva en multijugador al encontrar partida e implementar la mecánica de revivir compañeros en modo cooperativo con 1 segundo de inmunidad.
+- **Completado:**
+  - **Cuenta regresiva interactiva:**
+    - Ajustado `COUNTDOWN_MS` a 5 segundos en `multiplayer-server/rooms.js`.
+    - En `multiplayer-server/server.js`, la cuenta regresiva ahora emite `broadcastRoom(room)` en cada tick para mantener sincronizados a todos los clientes.
+    - En `app/escapecv/MultiplayerGame.js`, agregado temporizador local en `useEffect` con `setInterval` cada 100ms que actualiza de manera fluida y animada (efecto pulso) los segundos restantes.
+    - Salas privadas ahora también inician con cuenta regresiva.
+  - **Mecánica de revivir en Coop:**
+    - En `multiplayer-server/rooms.js`:
+      - Cuando un jugador muere en modo Coop, un compañero vivo puede pararse sobre su cuerpo acumulando tiempo hacia la meta de 3 segundos (`REVIVE_TIME_MS = 3000`).
+      - El tiempo es acumulativo tanto en pausas como entre distintos compañeros.
+      - Al alcanzar los 3 segundos, revive instantáneamente con 1 segundo de inmunidad (`IMMUNITY_TIME_MS = 1000`).
+      - Las palas no dañan al jugador mientras la inmunidad esté activa.
+      - En modo Battle Royale la mecánica está desactivada.
+    - En `app/escapecv/MultiplayerGame.js`:
+      - Anillo visual circular de progreso sobre el cuerpo del caído.
+      - Halo verde pulsante cuando un compañero está reviviendo activamente al jugador.
+      - Escudo cian brillante y aura protectora durante el segundo de inmunidad.
+      - Textos de estado contextuales (`REVIVIENDO XX%`, `💀 XX%`, `🛡️`).
+      - Indicador en el HUD y en el lobby cooperativo.
+    - Creado `multiplayer-server/test-rooms.js` con 4 suites de tests cubriendo cuenta regresiva, revivir acumulativo, inmunidad y battle royale.
+  - **Verificación:**
+    - `node multiplayer-server/test-rooms.js`: 4/4 suites de tests pasando.
+    - `node multiplayer-server/test-leaderboard.js`: 8/8 tests pasando.
+    - `node multiplayer-server/test-agarra.js`: 14/14 tests pasando.
+    - `npm run build`: compilación limpia y 25 páginas estáticas y dinámicas generadas.
+
+

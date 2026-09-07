@@ -51,6 +51,7 @@ export default function MultiplayerGame({ onExit }) {
   const [room, setRoom] = useState(null); // último roomUpdate
   const [results, setResults] = useState(null);
   const [connecting, setConnecting] = useState(false);
+  const [countdownSec, setCountdownSec] = useState(null);
 
   const socketRef = useRef(null);
   const keysRef = useRef({});
@@ -59,6 +60,21 @@ export default function MultiplayerGame({ onExit }) {
   const { deductCredit } = useSocialCredit();
   const deductRef = useRef(deductCredit);
   useEffect(() => { deductRef.current = deductCredit; }, [deductCredit]);
+
+  // Actualización fluida de la cuenta regresiva tanto en PC como en móviles
+  useEffect(() => {
+    if (room?.state !== 'countdown' || !room?.countdownEndsAt) {
+      setCountdownSec(null);
+      return;
+    }
+    const update = () => {
+      const remaining = Math.max(0, Math.ceil((room.countdownEndsAt - Date.now()) / 1000));
+      setCountdownSec(remaining);
+    };
+    update();
+    const interval = setInterval(update, 100);
+    return () => clearInterval(interval);
+  }, [room?.state, room?.countdownEndsAt]);
 
   const gyroRef = useRef({
     beta: 0,
@@ -309,8 +325,34 @@ export default function MultiplayerGame({ onExit }) {
     for (const p of room.players) {
       const size = p.size * scaleX;
       const x = p.x * scaleX, y = p.y * scaleY;
+
+      // Halo verde pulsante si está siendo revivido activamente por un compañero
+      if (!p.alive && p.isBeingRevived) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, (size / 2) + 7 * scaleX, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(76, 175, 80, ${0.4 + Math.sin(now / 120) * 0.35})`;
+        ctx.lineWidth = 4 * scaleX;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Escudo de inmunidad (1s tras revivir)
+      if (p.alive && p.isImmune) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, (size / 2) + 5 * scaleX, 0, Math.PI * 2);
+        ctx.strokeStyle = '#00e5ff';
+        ctx.lineWidth = 3.5 * scaleX;
+        ctx.shadowColor = '#00e5ff';
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Avatar del jugador
       ctx.save();
-      if (!p.alive) ctx.globalAlpha = 0.25;
+      if (!p.alive) ctx.globalAlpha = 0.35;
       ctx.beginPath();
       ctx.arc(x, y, size / 2, 0, Math.PI * 2);
       ctx.save();
@@ -318,16 +360,49 @@ export default function MultiplayerGame({ onExit }) {
       if (playerImg) ctx.drawImage(playerImg, x - size / 2, y - size / 2, size, size);
       ctx.restore();
       ctx.lineWidth = 3;
-      ctx.strokeStyle = p.color;
+      ctx.strokeStyle = p.alive ? p.color : '#777';
       ctx.stroke();
       ctx.restore();
 
+      // Anillo de progreso de revivido en modo cooperativo
+      if (!p.alive && room.mode === 'coop' && (p.reviveProgress || 0) > 0) {
+        const startAngle = -Math.PI / 2;
+        const endAngle = startAngle + (Math.PI * 2 * p.reviveProgress);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, (size / 2) + 3.5 * scaleX, startAngle, endAngle);
+        ctx.strokeStyle = '#4caf50';
+        ctx.lineWidth = 4 * scaleX;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Etiqueta y estado sobre la cabeza
       ctx.save();
-      ctx.globalAlpha = p.alive ? 1 : 0.5;
-      ctx.fillStyle = p.color;
-      ctx.font = 'bold 13px sans-serif';
+      ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(p.alive ? p.name : `${p.name} 💀`, x, y - size / 2 - 8);
+      if (p.alive) {
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.isImmune ? `${p.name} 🛡️` : p.name, x, y - size / 2 - 8);
+      } else {
+        if (room.mode === 'coop') {
+          const pct = Math.round((p.reviveProgress || 0) * 100);
+          if (p.isBeingRevived) {
+            ctx.fillStyle = '#4caf50';
+            ctx.fillText(`REVIVIENDO ${pct}%`, x, y - size / 2 - 8);
+          } else if (pct > 0) {
+            ctx.fillStyle = '#81c784';
+            ctx.fillText(`${p.name} 💀 ${pct}%`, x, y - size / 2 - 8);
+          } else {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.fillText(`${p.name} 💀 [REVIVIR]`, x, y - size / 2 - 8);
+          }
+        } else {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+          ctx.fillText(`${p.name} 💀`, x, y - size / 2 - 8);
+        }
+      }
       ctx.restore();
     }
   }, [room]);
@@ -361,7 +436,8 @@ export default function MultiplayerGame({ onExit }) {
         .mp-players { list-style: none; padding: 0; margin: 12px 0; text-align: left; }
         .mp-players li { padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,0.04); margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
         .mp-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-        .mp-countdown { font-size: 2.5rem; font-weight: 900; color: #ffeb3b; }
+        .mp-countdown { font-size: 3.5rem; font-weight: 900; color: #ffeb3b; animation: mp-pulse 1s infinite ease-in-out; }
+        @keyframes mp-pulse { 0% { transform: scale(1); } 50% { transform: scale(1.12); color: #fff; } 100% { transform: scale(1); } }
         .mp-canvas-wrap { width: 95vw; height: 82vh; position: relative; border-radius: 12px; overflow: hidden; }
         .mp-hud { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; font-size: 0.85rem; color: #ccc; z-index: 2; }
         .mp-btn-calib { background: rgba(255, 235, 59, 0.2); border: 1px solid #ffeb3b; color: #ffeb3b; border-radius: 6px; padding: 4px 10px; font-size: 0.75rem; font-weight: 700; cursor: pointer; touch-action: manipulation; }
@@ -436,7 +512,11 @@ export default function MultiplayerGame({ onExit }) {
           )}
 
           {room.state === 'countdown' && (
-            <div className="mp-countdown">{Math.max(0, Math.ceil((room.countdownEndsAt - Date.now()) / 1000))}</div>
+            <div className="mp-countdown">
+              {countdownSec !== null
+                ? countdownSec
+                : (room.countdownRemainingSec ?? Math.max(0, Math.ceil((room.countdownEndsAt - Date.now()) / 1000)))}
+            </div>
           )}
 
           <ul className="mp-players">
@@ -461,6 +541,9 @@ export default function MultiplayerGame({ onExit }) {
           )}
 
           <p style={{ color: '#aaa', fontSize: '0.8rem', margin: '8px 0 4px' }}>📱 En celular podés jugar inclinando la pantalla.</p>
+          {room.mode === 'coop' && (
+            <p style={{ color: '#4caf50', fontSize: '0.8rem', margin: '4px 0' }}>🤝 En Coop revivís a compañeros caídos parándote 3s sobre ellos.</p>
+          )}
 
           <button className="mp-btn secondary" style={{ marginTop: 10 }} onClick={leaveRoom}>Salir de la sala</button>
         </div>
@@ -469,7 +552,14 @@ export default function MultiplayerGame({ onExit }) {
       {view === 'room' && room && room.state === 'playing' && (
         <>
           <div className="mp-hud">
-            <span>{room.mode === 'battle' ? '⚔️ Battle Royale' : '🤝 Coop'} · {fmtTime(room.elapsedMs)}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span>{room.mode === 'battle' ? '⚔️ Battle Royale' : '🤝 Coop'} · {fmtTime(room.elapsedMs)}</span>
+              {room.mode === 'coop' && room.players.some((p) => !p.alive) && (
+                <span style={{ color: '#4caf50', fontWeight: 'bold' }}>
+                  ¡Pasá por arriba de tu compañero para revivirlo!
+                </span>
+              )}
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button
                 type="button"
