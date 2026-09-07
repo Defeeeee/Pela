@@ -20,9 +20,20 @@ const INTERP_DELAY_MS = 120;
 
 function multiplayerUrl() {
   if (typeof window === "undefined") return undefined;
-  return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-    ? "http://localhost:9315"
-    : undefined;
+
+  const enLocal =
+    window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
+  if (!enLocal) return undefined; // en producción, mismo origen: Traefik rutea /socket.io
+
+  // Fuera del horario laboral proxy.js cierra el sitio en producción y no hay
+  // bypass posible (godMode y testDate están detrás de !isProd). Para poder
+  // probar contra la arena real igual, se levanta la página en local y con
+  // ?server=prod los sockets van al servidor de producción.
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("server") === "prod") return "https://pela.signai.ar";
+
+  return "http://localhost:9315";
 }
 
 export default function AgarraGame() {
