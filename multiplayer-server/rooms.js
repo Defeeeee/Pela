@@ -13,8 +13,10 @@ export const CORRAL_Y = (WORLD_HEIGHT - CORRAL_H) / 2;
 export const TICK_MS = 1000 / 30;
 export const MAX_PLAYERS = 8;
 export const PUBLIC_LOBBY_MIN_PLAYERS = 2;
-export const COUNTDOWN_MS = 10_000;
+export const COUNTDOWN_MS = 5_000;
 export const RESULTS_DISPLAY_MS = 12_000;
+export const REVIVE_TIME_MS = 3_000;
+export const IMMUNITY_TIME_MS = 1_000;
 export const NAME_MAX_LEN = 16;
 
 const PLAYER_SIZE = 48;
@@ -83,6 +85,9 @@ export class Room {
       dy: 0,
       alive: true,
       survivedMs: 0,
+      reviveProgressMs: 0,
+      isBeingRevived: false,
+      immuneUntil: 0,
     };
     this.players.set(socketId, player);
     if (!this.hostId) this.hostId = socketId;
@@ -139,6 +144,9 @@ export class Room {
     for (const p of this.players.values()) {
       p.alive = true;
       p.survivedMs = 0;
+      p.reviveProgressMs = 0;
+      p.isBeingRevived = false;
+      p.immuneUntil = 0;
       p.x = CORRAL_X + CORRAL_W / 2 + (Math.random() - 0.5) * 100;
       p.y = CORRAL_Y + CORRAL_H / 2 + (Math.random() - 0.5) * 100;
     }
@@ -197,6 +205,37 @@ export class Room {
       }
     }
 
+    // Revivir en modo cooperativo: si un compañero vivo se para encima durante 3s acumulativos
+    if (this.mode === "coop") {
+      const REVIVE_DIST = PLAYER_SIZE;
+
+      for (const deadP of this.players.values()) {
+        if (deadP.alive) continue;
+
+        let hasTeammateOver = false;
+        for (const aliveP of this.players.values()) {
+          if (!aliveP.alive || aliveP.id === deadP.id) continue;
+          const dist = Math.hypot(aliveP.x - deadP.x, aliveP.y - deadP.y);
+          if (dist <= REVIVE_DIST) {
+            hasTeammateOver = true;
+            break;
+          }
+        }
+
+        deadP.isBeingRevived = hasTeammateOver;
+
+        if (hasTeammateOver) {
+          deadP.reviveProgressMs = (deadP.reviveProgressMs || 0) + dtMs;
+          if (deadP.reviveProgressMs >= REVIVE_TIME_MS) {
+            deadP.alive = true;
+            deadP.reviveProgressMs = 0;
+            deadP.isBeingRevived = false;
+            deadP.immuneUntil = now + IMMUNITY_TIME_MS; // 1 segundo de inmunidad al revivir
+          }
+        }
+      }
+    }
+
     const enemyBaseSpeed = ENEMY_BASE_SPEED + elapsedS * 0.05;
 
     // Spawns: mismo patrón que el modo Dodge solitario — oleadas que entran
@@ -248,10 +287,13 @@ export class Room {
       const hitboxR = e.size * 0.35;
       for (const p of this.players.values()) {
         if (!p.alive) continue;
+        if (p.immuneUntil && now < p.immuneUntil) continue; // Inmunidad activa tras revivir
         const d = Math.hypot(p.x - e.x, p.y - e.y);
         if (d < p.size / 2 + hitboxR) {
           p.alive = false;
           p.survivedMs = now - this.startTime;
+          p.reviveProgressMs = 0;
+          p.isBeingRevived = false;
         }
       }
 
@@ -276,6 +318,7 @@ export class Room {
   }
 
   snapshot() {
+    const now = Date.now();
     return {
       code: this.code,
       isPublic: this.isPublic,
@@ -284,14 +327,19 @@ export class Room {
       hostId: this.hostId,
       roundId: this.roundId,
       countdownEndsAt: this.countdownEndsAt,
-      elapsedMs: this.startTime ? Date.now() - this.startTime : 0,
+      countdownRemainingSec: this.countdownEndsAt ? Math.max(0, Math.ceil((this.countdownEndsAt - now) / 1000)) : null,
+      serverTime: now,
+      elapsedMs: this.startTime ? now - this.startTime : 0,
       players: [...this.players.values()].map((p) => ({
         id: p.id, name: p.name, color: p.color,
         x: p.x, y: p.y, size: p.size, alive: p.alive, survivedMs: p.survivedMs,
+        reviveProgress: p.alive ? 0 : Math.min(1, (p.reviveProgressMs || 0) / REVIVE_TIME_MS),
+        isBeingRevived: !!p.isBeingRevived,
+        isImmune: !!(p.immuneUntil && now < p.immuneUntil),
       })),
       enemies: this.enemies.map((e) => ({ x: e.x, y: e.y, size: e.size, vx: e.vx, vy: e.vy })),
       warnings: this.warnings
-        .filter((w) => w.spawnAt - Date.now() < 1200)
+        .filter((w) => w.spawnAt - now < 1200)
         .map((w) => ({ x: clamp(w.x, 0, WORLD_WIDTH), y: clamp(w.y, 0, WORLD_HEIGHT), size: w.size, spawnAt: w.spawnAt })),
     };
   }

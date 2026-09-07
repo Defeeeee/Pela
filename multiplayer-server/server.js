@@ -174,7 +174,7 @@ io.on("connection", (socket) => {
     if (room.isPublic) return ack?.({ error: "Las salas públicas arrancan solas cuando hay suficientes jugadores." });
     if (room.hostId !== socket.id) return ack?.({ error: "Sólo quien creó la sala puede arrancar la partida." });
     if (!room.canStart()) return ack?.({ error: "La sala ya está jugando." });
-    room.beginPlaying();
+    room.startCountdown();
     broadcastRoom(room);
     ack?.({ ok: true });
   });
@@ -207,6 +207,9 @@ setInterval(() => {
         broadcastRoom(room);
       } else if (now >= room.countdownEndsAt) {
         room.beginPlaying();
+        broadcastRoom(room);
+      } else {
+        // Transmitir continuamente durante la cuenta regresiva para refrescar el reloj
         broadcastRoom(room);
       }
     } else if (room.state === "playing") {
