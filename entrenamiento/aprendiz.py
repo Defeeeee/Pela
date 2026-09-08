@@ -30,6 +30,10 @@ import torch.nn.functional as F
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
+# Posición de masaPico dentro del bloque de estadísticas que manda el actor
+# (ver el orden de salSta en actor.js). Es la única que no se junta sumando.
+IDX_MASA_PICO = 4
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Actores
@@ -134,7 +138,14 @@ class Enjambre:
         rec = np.concatenate([a.rec for a in self.actores])
         fin = np.concatenate([a.fin for a in self.actores])
         msc = np.concatenate([a.msc for a in self.actores])
-        sta = np.sum([a.stats for a in self.actores], axis=0)
+        # Casi todas las estadísticas son contadores y se juntan sumando. La
+        # excepción es masaPico, que es un MÁXIMO: sumar los máximos de los 8
+        # actores daba la suma de los ocho mejores (~8x el valor real) y el
+        # panel mostraba un récord inflado que no se correspondía con nada de
+        # lo que se veía en el espectador.
+        pilas = np.stack([a.stats for a in self.actores])
+        sta = pilas.sum(axis=0)
+        sta[IDX_MASA_PICO] = pilas[:, IDX_MASA_PICO].max()
         return obs, rec, fin, msc, sta
 
     def enviar(self, acciones):
