@@ -109,7 +109,8 @@ export default function PelardlePage() {
               ...prev,
               played: Math.max(prev.played, Number(res.records.pelardle.played) || 0),
               wins: Math.max(prev.wins, Number(res.records.pelardle.wins) || 0),
-              streak: Math.max(prev.streak, Number(res.records.pelardle.currentStreak || res.records.pelardle.streak) || 0),
+              // La racha en curso la decide el servidor, no el máximo contra lo local.
+              streak: Number(res.records.pelardle.currentStreak !== undefined ? res.records.pelardle.currentStreak : res.records.pelardle.streak) || 0,
               maxStreak: Math.max(prev.maxStreak, Number(res.records.pelardle.maxStreak) || 0),
               lastPuzzle: res.records.pelardle.lastPuzzle !== null && res.records.pelardle.lastPuzzle !== undefined ? Number(res.records.pelardle.lastPuzzle) : prev.lastPuzzle,
             }));
@@ -124,7 +125,8 @@ export default function PelardlePage() {
           ...prev,
           played: Math.max(prev.played, Number(e.detail.pelardle.played) || 0),
           wins: Math.max(prev.wins, Number(e.detail.pelardle.wins) || 0),
-          streak: Math.max(prev.streak, Number(e.detail.pelardle.currentStreak || e.detail.pelardle.streak) || 0),
+          // La racha en curso la decide el servidor, no el máximo contra lo local.
+          streak: Number(e.detail.pelardle.currentStreak !== undefined ? e.detail.pelardle.currentStreak : e.detail.pelardle.streak) || 0,
           maxStreak: Math.max(prev.maxStreak, Number(e.detail.pelardle.maxStreak) || 0),
           lastPuzzle: e.detail.pelardle.lastPuzzle !== null && e.detail.pelardle.lastPuzzle !== undefined ? Number(e.detail.pelardle.lastPuzzle) : prev.lastPuzzle,
         }));
@@ -677,7 +679,13 @@ export default function PelardlePage() {
                       return (
                         <div key={row.playerId} className={`pel-board-row ${isMe ? "me" : ""}`}>
                           <span className="col-rank">{row.rank}</span>
-                          <span className="col-name">{row.playerName}</span>
+                          <span className="col-name">
+                            {/* El apodo es la identidad pública: desde el ranking
+                                se llega al legajo de cada uno. */}
+                            <a className="pel-board-perfil" href={`/p/${encodeURIComponent(row.playerName || "")}`}>
+                              {row.playerName}
+                            </a>
+                          </span>
                           <span className="col-att">{row.solved ? `${row.attempts}/6` : "X/6"}</span>
                           <span className="col-status">{row.solved ? "✅ Aprobado" : "❌ Archivado"}</span>
                         </div>
@@ -718,7 +726,13 @@ export default function PelardlePage() {
                       return (
                         <div key={row.playerId} className={`pel-board-row ${isMe ? "me" : ""}`}>
                           <span className="col-rank">{row.rank}</span>
-                          <span className="col-name">{row.playerName}</span>
+                          <span className="col-name">
+                            {/* El apodo es la identidad pública: desde el ranking
+                                se llega al legajo de cada uno. */}
+                            <a className="pel-board-perfil" href={`/p/${encodeURIComponent(row.playerName || "")}`}>
+                              {row.playerName}
+                            </a>
+                          </span>
                           <span className="col-att">{row.gamesWon}</span>
                           <span className="col-status">🔥 {row.maxStreak}</span>
                         </div>
@@ -1053,6 +1067,12 @@ function PelardleStyles() {
         color: rgba(255,255,255,0.6);
       }
       .pel-name-cuenta strong { color: #ffeb3b; }
+      .pel-board-perfil {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px dotted rgba(255,255,255,0.25);
+      }
+      .pel-board-perfil:hover { color: #ffeb3b; }
       .pel-board-aviso {
         font-size: 0.75rem;
         color: rgba(255,255,255,0.6);

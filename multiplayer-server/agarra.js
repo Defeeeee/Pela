@@ -5,6 +5,18 @@ export const INITIAL_MASS = 20;
 export const PALA_MASS = 1;
 export const EAT_MASS_RATIO = 1.25;
 export const TARGET_POPULATION = 12;
+
+// Techo de masa de los bots, tras el cual se jubilan y entra uno nuevo.
+//
+// Los bots no se mueren solos: sólo caen si alguien más grande se los come, y
+// al más grande de todos no se lo come nadie. Sin decaimiento de masa (se sacó
+// a pedido: molestaba en la partida humana) el líder crecía sin freno; en
+// producción se lo vio en 160.851, un círculo que tapaba media pantalla y
+// contra el que ningún jugador nuevo tenía nada que hacer.
+//
+// 1500 es masa suficiente para ser el jefe de la arena (radio ~155px contra
+// los 18px de uno que recién entra) sin volverse un accidente geográfico.
+export const BOT_MAX_MASS = 1500;
 export const BASE_SPEED = 260; // px/segundo a masa 1
 
 // División (barra espaciadora). Un jugador deja de ser un círculo y pasa a ser
@@ -97,6 +109,11 @@ export class Arena {
 
     this.nextBotId = 1;
 
+    // Récords a persistir, que server.js drena después de cada tick. La arena
+    // no conoce el leaderboard a propósito: así se sigue pudiendo testear la
+    // física sin sockets ni disco.
+    this.recordsPendientes = [];
+
     // Inicializar las 600 palas repartidas por el mapa
     this.initPalas();
     // Las palas iniciales se entregan completas en allPalas() al unirse; no van en deltas
@@ -130,10 +147,18 @@ export class Arena {
     return list;
   }
 
-  addPlayer(socketId, name) {
+  /**
+   * `playerId` es la identidad de la cuenta, que la arena guarda pero no usa:
+   * la necesita sólo para poder decir de quién es el récord cuando lo encola.
+   * Se resuelve al entrar y no al salir porque al desconectarse el socket ya
+   * no existe, y ésa es justamente la partida que más interesa registrar: la
+   * del que se va vivo después de una buena racha.
+   */
+  addPlayer(socketId, name, playerId = null) {
     if (this.players.has(socketId)) {
       const existing = this.players.get(socketId);
       existing.name = sanitizeName(name);
+      if (playerId) existing.playerId = playerId;
       if (!existing.alive) this.respawnPlayer(socketId);
       return existing;
     }
@@ -156,8 +181,13 @@ export class Arena {
       dy: 0,
       alive: true,
       isBot: false,
+      playerId,
       kills: 0,
       joinedAt: Date.now(),
+      // Mejor masa de la sesión. La lleva el servidor porque el servidor es
+      // quien simula: es el único récord del sitio que no hace falta creerle
+      // al navegador.
+      maxMass: mass,
     };
 
     this.players.set(socketId, player);
@@ -224,8 +254,26 @@ export class Arena {
   }
 
   removePlayer(socketId) {
+    const p = this.players.get(socketId);
+    // También al desconectarse: si no, la partida de quien se va vivo (que es
+    // justo la del que la venía rompiendo) no quedaría registrada.
+    if (p && !p.isBot) this.anotarRecord(p);
     this.players.delete(socketId);
     this.syncBots();
+  }
+
+  /** Encola la mejor masa de un jugador para que el servidor la persista. */
+  anotarRecord(p) {
+    const masa = Math.round(Number(p.maxMass) || 0);
+    if (!p.playerId || masa <= 0) return; // sin cuenta no hay dónde guardarlo
+    this.recordsPendientes.push({ playerId: p.playerId, maxMass: masa });
+  }
+
+  /** Devuelve los récords acumulados y vacía la cola. */
+  drenarRecords() {
+    const pendientes = this.recordsPendientes;
+    this.recordsPendientes = [];
+    return pendientes;
   }
 
   setInput(socketId, dx, dy) {
@@ -241,6 +289,23 @@ export class Arena {
     }
     player.dx = vx;
     player.dy = vy;
+  }
+
+  /**
+   * Saca de la arena a los bots que pasaron el techo y los reemplaza por uno
+   * nuevo y chico.
+   *
+   * Se los jubila en vez de frenarles la masa porque un bot clavado en el
+   * techo seguiría siendo intocable para siempre; reemplazarlo devuelve la
+   * arena a un estado jugable y mantiene la población en TARGET_POPULATION.
+   */
+  jubilarBotsGordos() {
+    for (const p of [...this.players.values()]) {
+      if (!p.isBot || !p.alive) continue;
+      if (p.mass <= BOT_MAX_MASS) continue;
+      this.players.delete(p.id);
+      this.spawnBot();
+    }
   }
 
   syncBots() {
@@ -285,6 +350,7 @@ export class Arena {
       isBot: true,
       kills: 0,
       joinedAt: Date.now(),
+      maxMass: mass,
       botChangeTargetAt: 0,
     };
 
@@ -510,6 +576,7 @@ export class Arena {
             if (b.cells.length === 0) {
               b.alive = false;
               a.kills = (a.kills || 0) + 1;
+              if (!b.isBot) this.anotarRecord(b);
 
               if (b.isBot) {
                 setTimeout(() => {
@@ -530,6 +597,14 @@ export class Arena {
     for (const p of this.players.values()) {
       if (p.alive) sincronizarAgregados(p);
     }
+
+    // 4b. Mejor masa de la sesión y jubilación de los bots que se pasaron.
+    //     Va después de sincronizarAgregados porque p.mass recién es válido acá.
+    for (const p of this.players.values()) {
+      if (!p.alive) continue;
+      if (p.mass > (p.maxMass || 0)) p.maxMass = p.mass;
+    }
+    this.jubilarBotsGordos();
 
     // 5. Reponer palas si bajaron de PALAS_COUNT
     const missingPalas = PALAS_COUNT - this.palas.size;
