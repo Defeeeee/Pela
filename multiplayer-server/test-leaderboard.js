@@ -421,6 +421,89 @@ const testDir = path.join(os.tmpdir(), `pela-test-leaderboard-${Date.now()}`);
   fs.rmSync(`${testDir}-records`, { recursive: true, force: true });
 }
 
+// La racha en curso no se resucita desde un dispositivo con datos viejos
+{
+  const store = new LeaderboardStore({ dataDir: `${testDir}-zombie` });
+  await store.init();
+
+  // Venía con racha 5 y hoy la cortó: el servidor lo sabe porque él cuenta.
+  store.history["z"] = {
+    playerId: "z", playerName: "Z", gamesPlayed: 20, gamesWon: 15,
+    currentStreak: 0, maxStreak: 9, lastPuzzle: 200,
+  };
+
+  // Abre el sitio en otro dispositivo cuyo localStorage quedó en el puzzle 190.
+  store.updateRecords("z", {
+    pelardle: { played: 20, wins: 15, currentStreak: 5, maxStreak: 9, lastPuzzle: 190 },
+  });
+
+  assert.strictEqual(store.history["z"].currentStreak, 0, "La racha cortada no puede volver");
+  assert.strictEqual(store.history["z"].maxStreak, 9, "Pero los acumulados sí se fusionan");
+  assert.strictEqual(store.history["z"].gamesWon, 15);
+
+  store.clearSaveTimer();
+  console.log("  ✓ Una racha ya cortada no vuelve desde un dispositivo viejo");
+  fs.rmSync(`${testDir}-zombie`, { recursive: true, force: true });
+}
+
+// La masa del Agarrá la escribe el servidor, no el navegador
+{
+  const store = new LeaderboardStore({ dataDir: `${testDir}-masa` });
+  await store.init();
+
+  // Primera sincronización: se acepta, es la migración de quien ya jugaba.
+  store.updateRecords("m", { agarra: { maxMass: 340 } });
+  assert.strictEqual(store.records["m"].agarra.maxMass, 340, "La primera vez se acepta");
+
+  // Después ya no: un POST no puede inflar el récord.
+  store.updateRecords("m", { agarra: { maxMass: 999999 } });
+  assert.strictEqual(store.records["m"].agarra.maxMass, 340, "Un POST no infla el récord");
+
+  // Lo medido por la arena sí entra.
+  store.updateRecords("m", { agarra: { maxMass: 812 } }, { deConfianza: true });
+  assert.strictEqual(store.records["m"].agarra.maxMass, 812, "Lo que mide el servidor sí manda");
+
+  // Y ni siquiera el servidor baja un récord ya logrado.
+  store.updateRecords("m", { agarra: { maxMass: 5 } }, { deConfianza: true });
+  assert.strictEqual(store.records["m"].agarra.maxMass, 812, "El récord no baja");
+
+  store.clearSaveTimer();
+  console.log("  ✓ La masa del Agarrá la escribe el servidor, no el cliente");
+  fs.rmSync(`${testDir}-masa`, { recursive: true, force: true });
+}
+
+// Perfil público: se busca por apodo y sólo publica lo que el servidor mide
+{
+  const store = new LeaderboardStore({ dataDir: `${testDir}-perfil` });
+  await store.init();
+
+  store.vincularCuenta({ googleSub: "gp", email: "secreto@ejemplo.com", playerIdAnonimo: "pp" });
+  store.reservarApodo({ playerId: "pp", apodo: "Pelado Sindical" });
+  store.registerAttempt({ puzzle: 300, playerId: "pp", playerName: "x", guess: "CALVO", solved: true });
+  store.updateRecords("pp", { agarra: { maxMass: 648 } });
+  // Récords que el servidor no puede verificar: no deben salir publicados.
+  store.updateRecords("pp", { escapecv: { chase: 99, dodge: 99 }, clicker: { palas: 1e9 } });
+
+  const perfil = store.perfilPublico("pELADO sINDICAL"); // sin distinguir mayúsculas
+  assert.ok(perfil, "Se encuentra por apodo sin importar mayúsculas");
+  assert.strictEqual(perfil.apodo, "Pelado Sindical", "Devuelve el apodo como se escribió");
+  assert.strictEqual(perfil.pelardle.wins, 1);
+  assert.strictEqual(perfil.agarra.maxMass, 648);
+  assert.strictEqual(perfil.puestoHistorico, 1);
+
+  const publicado = JSON.stringify(perfil);
+  assert.ok(!publicado.includes("secreto@ejemplo.com"), "El email no se publica");
+  assert.ok(!publicado.includes("escapecv"), "Los récords del navegador no se publican");
+  assert.ok(!publicado.includes("clicker"), "El Clicker tampoco");
+
+  assert.strictEqual(store.perfilPublico("no-existe"), null);
+  assert.strictEqual(store.perfilPublico(""), null);
+
+  store.clearSaveTimer();
+  console.log("  ✓ El perfil público sale por apodo y sin datos que no se puedan verificar");
+  fs.rmSync(`${testDir}-perfil`, { recursive: true, force: true });
+}
+
 // Limpieza de testDir
 try {
   fs.rmSync(testDir, { recursive: true, force: true });
