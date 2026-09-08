@@ -27,17 +27,28 @@ const URL_SITIO = process.env.APP_INTERNAL_URL || "http://127.0.0.1:9314";
  * Resuelve la identidad de quien abre un socket. Devuelve null si no hay
  * sesión válida, y el multijugador lo rechaza: jugar con otros pide cuenta.
  */
+/**
+ * Quién es el que abre el socket, según el sitio.
+ *
+ * Devuelve la identidad, `null` si no hay sesión válida, o `"sin-login"` si el
+ * sitio contesta que el login no está configurado. Esa tercera respuesta
+ * importa: sin credenciales de Google, `autenticado` es false para todo el
+ * mundo, y tratar eso como "no tiene sesión" dejaría el multijugador cerrado
+ * para todos — en un clon del repo sin secretos, y en producción si alguna vez
+ * falta el archivo. Cuando no hay login que exigir, no se exige.
+ */
 async function identidadDeSocket(socket) {
   const token = socket.handshake?.auth?.sesion;
-  if (!token) return null;
   try {
     const res = await fetch(`${URL_SITIO}/api/auth/me`, {
-      headers: { "x-pela-sesion": token },
+      headers: token ? { "x-pela-sesion": token } : {},
       signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return null;
     const datos = await res.json();
-    return datos?.autenticado ? datos : null;
+    if (datos?.autenticado) return datos;
+    if (datos?.loginDisponible === false) return "sin-login";
+    return null;
   } catch (e) {
     return null;
   }
@@ -190,8 +201,10 @@ function joinRoom(socket, room, name) {
 io.use(async (socket, next) => {
   const identidad = await identidadDeSocket(socket);
   if (!identidad) return next(new Error("LOGIN_REQUERIDO"));
-  socket.data.playerId = identidad.playerId;
-  socket.data.nombreCuenta = identidad.nombre;
+  if (identidad !== "sin-login") {
+    socket.data.playerId = identidad.playerId;
+    socket.data.nombreCuenta = identidad.nombre;
+  }
   next();
 });
 
@@ -284,8 +297,10 @@ const agarraArena = new Arena();
 agarraIo.use(async (socket, next) => {
   const identidad = await identidadDeSocket(socket);
   if (!identidad) return next(new Error("LOGIN_REQUERIDO"));
-  socket.data.playerId = identidad.playerId;
-  socket.data.nombreCuenta = identidad.nombre;
+  if (identidad !== "sin-login") {
+    socket.data.playerId = identidad.playerId;
+    socket.data.nombreCuenta = identidad.nombre;
+  }
   next();
 });
 
