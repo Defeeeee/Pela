@@ -58,11 +58,19 @@ export class EntornoVectorial {
     arenas = 24,
     agentesPorArena = 4,
     semilla = 1,
-    // Cada cuántos pasos de decisión se recicla una arena. Los bots crecen sin
-    // parar hasta el techo de 1500 y una arena vieja es una carnicería donde un
-    // agente que reaparece con masa 20 no tiene ninguna chance: mide dificultad
-    // creciente, no aprendizaje. Reciclarlas mantiene estacionaria la dificultad.
-    reciclarCada = 6000,
+    // Cada cuántos pasos de decisión se recicla una arena, en promedio.
+    //
+    // Muy por encima de la duración de una vida (6000) y con variación por
+    // arena, a propósito. Cuando valía lo mismo que una vida pasaban dos cosas
+    // malas: el reciclado le ganaba siempre al tope de tiempo, así que las
+    // vidas nunca terminaban por vencimiento; y como reciclar pone en cero el
+    // reloj de todos los agentes de esa arena, volvía a sincronizarlos después
+    // de haberlos escalonado, dejando ventanas enteras sin un solo episodio
+    // terminado por tiempo.
+    //
+    // Además hoy hace mucha menos falta: la arena ya jubila sola a los bots que
+    // pasan BOT_MAX_MASS, que era el problema que el reciclado venía a tapar.
+    reciclarCada = 30000,
     // Fracción de reapariciones que arrancan con masa alta.
     //
     // En cero por decisión: **todos nacen con 20, como un jugador de verdad**.
@@ -87,6 +95,9 @@ export class EntornoVectorial {
     this.semillaBase = semilla;
     this.rngCurriculo = rngConSemilla(semilla * 104729 + 7);
     this.edadArena = new Int32Array(arenas);
+    // Cuánto vive cada arena, sorteado en un rango ancho: si todas duran lo
+    // mismo se reciclan en ola y arrastran a todos los agentes juntos.
+    this.vidaArena = new Int32Array(arenas);
     this.nAgentes = arenas * agentesPorArena;
 
     this.obs = new Float32Array(this.nAgentes * TAM_OBS);
@@ -132,6 +143,7 @@ export class EntornoVectorial {
     };
 
     for (let a = 0; a < arenas; a++) {
+      this.vidaArena[a] = Math.floor(reciclarCada * (0.5 + this.rngCurriculo()));
       const arena = new Arena({ random: rngConSemilla(semilla * 7919 + a) });
       this.arenas.push(arena);
       for (let k = 0; k < agentesPorArena; k++) {
@@ -282,7 +294,7 @@ export class EntornoVectorial {
     // no salte de golpe cuando se renuevan todas juntas.
     if (this.reciclarCada > 0) {
       for (let a = 0; a < this.nArenas; a++) {
-        if (++this.edadArena[a] >= this.reciclarCada + a * 17) this.#reciclarArena(a);
+        if (++this.edadArena[a] >= this.vidaArena[a]) this.#reciclarArena(a);
       }
     }
 
@@ -309,13 +321,16 @@ export class EntornoVectorial {
         this.stats.pasosSuma += this.pasos[i];
       }
       arena.addPlayer(this.ids[i], `A${a}-${k}`, null);
-      this.pasos[i] = 0;
+      // Relojes escalonados otra vez: ponerlos en cero volvía a sincronizar a
+      // todos y dejaba ventanas enteras sin episodios terminados por tiempo.
+      this.pasos[i] = Math.floor(this.rngCurriculo() * MAX_PASOS);
       this.picoEpisodio[i] = 0;
       this.killsPrevias[i] = 0;
     }
     arena.syncBots();
     this.arenas[a] = arena;
     this.edadArena[a] = 0;
+    this.vidaArena[a] = Math.floor(this.reciclarCada * (0.5 + this.rngCurriculo()));
     this.stats.reciclajes++;
     for (let k = 0; k < this.porArena; k++) {
       const i = a * this.porArena + k;
