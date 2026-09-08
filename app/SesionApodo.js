@@ -12,6 +12,19 @@ const CLAVE_STATS = "pelardle_stats_v1";
 const CLAVE_MIGRADO = "pela_progreso_migrado";
 
 /**
+ * Misma regla que sanitizarHandle del servidor, aplicada mientras se escribe.
+ * No reemplaza a la validación del servidor: está para que no se pueda tipear
+ * algo que después va a ser rechazado.
+ */
+function normalizarHandle(bruto) {
+  return String(bruto || "")
+    .replace(/\s+/g, "_")
+    .replace(/[^\p{L}\p{N}_-]/gu, "")
+    .replace(/_{2,}/g, "_")
+    .slice(0, 16);
+}
+
+/**
  * Cuadro de primer login: elegir apodo y traerse la racha vieja.
  *
  * Va montado en el layout, no en una página, porque después de Google se
@@ -43,7 +56,9 @@ export default function SesionApodo() {
 
       if (!yo.nombre) {
         try {
-          setApodo((localStorage.getItem(CLAVE_NOMBRE) || "").slice(0, 16));
+          // El nombre guardado puede tener espacios (antes se permitían), así
+          // que la sugerencia se normaliza antes de proponerla.
+          setApodo(normalizarHandle(localStorage.getItem(CLAVE_NOMBRE) || ""));
         } catch (e) {
           // localStorage bloqueado: se elige desde cero
         }
@@ -127,10 +142,14 @@ export default function SesionApodo() {
   return (
     <div className="apodo-fondo">
       <div className="apodo-caja">
-        <h2 className="apodo-titulo">Elegí tu apodo</h2>
+        <h2 className="apodo-titulo">Elegí tu handle</h2>
         <p className="apodo-texto">
-          Con este nombre vas a aparecer en el ranking y en los juegos con otra gente. Queda
-          reservado para vos: nadie más lo puede usar.
+          Con este nombre vas a aparecer en el ranking y en los juegos con otra gente, y es la
+          dirección de tu legajo. Queda reservado para vos: nadie más lo puede usar.
+        </p>
+        <p className="apodo-regla">
+          Sin espacios, de 2 a 16 caracteres. Tu legajo va a quedar en{" "}
+          <span className="apodo-url">/p/{apodo || "tu_handle"}</span>
         </p>
 
         {rachaImportada !== null && (
@@ -144,9 +163,9 @@ export default function SesionApodo() {
           className="apodo-input"
           maxLength={16}
           autoFocus
-          placeholder="Pelado Sindical"
+          placeholder="pelado_sindical"
           value={apodo}
-          onChange={(e) => setApodo(e.target.value)}
+          onChange={(e) => setApodo(normalizarHandle(e.target.value))}
           onKeyDown={(e) => e.key === "Enter" && !guardando && guardar()}
         />
 
@@ -192,6 +211,18 @@ export default function SesionApodo() {
           font-size: 0.85rem;
           line-height: 1.5;
           margin: 0 0 14px;
+        }
+
+        .apodo-regla {
+          color: #6e7681;
+          font-size: 0.75rem;
+          line-height: 1.5;
+          margin: 0 0 14px;
+        }
+
+        .apodo-url {
+          color: #ffeb3b;
+          word-break: break-all;
         }
 
         .apodo-racha {

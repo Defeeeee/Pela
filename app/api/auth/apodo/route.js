@@ -28,10 +28,19 @@ export async function POST(request) {
     return NextResponse.json({ error: "Pedido inválido." }, { status: 400 });
   }
 
-  const limpio = typeof apodo === "string" ? apodo.trim() : "";
-  if (limpio.length < 2 || limpio.length > 16) {
-    return NextResponse.json({ error: "El apodo va de 2 a 16 caracteres." }, { status: 400 });
+  // El handle va sin espacios porque es un identificador y viaja en la URL del
+  // legajo. Se valida acá además de en el servicio para poder contestar el
+  // error puntual sin dar el viaje, pero la regla vive en sanitizarHandle y el
+  // servicio la vuelve a aplicar: ésta es una comodidad, no la defensa.
+  const bruto = typeof apodo === "string" ? apodo.trim() : "";
+
+  if (/\s/.test(bruto)) {
+    return NextResponse.json({ error: "El handle no puede llevar espacios." }, { status: 400 });
   }
+  if (bruto.length < 2 || bruto.length > 16) {
+    return NextResponse.json({ error: "El handle va de 2 a 16 caracteres." }, { status: 400 });
+  }
+  const limpio = bruto;
 
   let respuesta;
   try {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { LeaderboardStore } from "./leaderboard.js";
+import { LeaderboardStore, sanitizarHandle } from "./leaderboard.js";
 
 console.log("Iniciando tests de LeaderboardStore (Pelardle)...");
 
@@ -73,7 +73,9 @@ const testDir = path.join(os.tmpdir(), `pela-test-leaderboard-${Date.now()}`);
   // registradas, así que sin esto la tabla saldría vacía.
   for (const id of ["A", "B", "C"]) {
     store.vincularCuenta({ googleSub: `sub_${id}`, playerIdAnonimo: id });
-    store.reservarApodo({ playerId: id, apodo: id });
+    // El handle va con dos caracteres como mínimo, así que no puede ser el id
+    // pelado: "A" no es un handle válido.
+    store.reservarApodo({ playerId: id, apodo: `jugador_${id}` });
   }
 
   // Jugador A gana en 4 intentos
@@ -299,20 +301,20 @@ const testDir = path.join(os.tmpdir(), `pela-test-leaderboard-${Date.now()}`);
   await store.init();
 
   store.vincularCuenta({ googleSub: "g_a", playerIdAnonimo: "pa" });
-  assert.strictEqual(store.reservarApodo({ playerId: "pa", apodo: "Pelado Real" }).ok, true);
+  assert.strictEqual(store.reservarApodo({ playerId: "pa", apodo: "Pelado_Real" }).ok, true);
 
-  // Sin distinguir mayúsculas: "pelado real" es el mismo apodo
-  const robo = store.reservarApodo({ playerId: "pb", apodo: "pelado real" });
+  // Sin distinguir mayúsculas: "pelado_real" es el mismo handle
+  const robo = store.reservarApodo({ playerId: "pb", apodo: "pelado_real" });
   assert.ok(robo.error, "No puede haber dos dueños del mismo apodo");
 
   // El camino sin sesión no puede cambiar un apodo reservado
   const porLaVentana = store.updatePlayerName("pa", "Impostor");
   assert.strictEqual(porLaVentana.ok, false, "updatePlayerName no toca un apodo reservado");
-  assert.strictEqual(store.apodoDe("pa"), "Pelado Real");
+  assert.strictEqual(store.apodoDe("pa"), "Pelado_Real");
 
   // Ni mandando otro nombre en el intento
   store.registerAttempt({ puzzle: 50, playerId: "pa", playerName: "Nombre Falso", guess: "CALVO", solved: true });
-  assert.strictEqual(store.daily["50"][0].playerName, "Pelado Real", "Vale el apodo, no lo que mandó el cliente");
+  assert.strictEqual(store.daily["50"][0].playerName, "Pelado_Real", "Vale el handle, no lo que mandó el cliente");
 
   store.clearSaveTimer();
   console.log("  ✓ El apodo tiene un solo dueño y no se pisa desde el cliente");
@@ -478,15 +480,15 @@ const testDir = path.join(os.tmpdir(), `pela-test-leaderboard-${Date.now()}`);
   await store.init();
 
   store.vincularCuenta({ googleSub: "gp", email: "secreto@ejemplo.com", playerIdAnonimo: "pp" });
-  store.reservarApodo({ playerId: "pp", apodo: "Pelado Sindical" });
+  store.reservarApodo({ playerId: "pp", apodo: "Pelado_Sindical" });
   store.registerAttempt({ puzzle: 300, playerId: "pp", playerName: "x", guess: "CALVO", solved: true });
   store.updateRecords("pp", { agarra: { maxMass: 648 } });
   // Récords que el servidor no puede verificar: no deben salir publicados.
   store.updateRecords("pp", { escapecv: { chase: 99, dodge: 99 }, clicker: { palas: 1e9 } });
 
-  const perfil = store.perfilPublico("pELADO sINDICAL"); // sin distinguir mayúsculas
+  const perfil = store.perfilPublico("pELADO_sINDICAL"); // sin distinguir mayúsculas
   assert.ok(perfil, "Se encuentra por apodo sin importar mayúsculas");
-  assert.strictEqual(perfil.apodo, "Pelado Sindical", "Devuelve el apodo como se escribió");
+  assert.strictEqual(perfil.apodo, "Pelado_Sindical", "Devuelve el handle como se escribió");
   assert.strictEqual(perfil.pelardle.wins, 1);
   assert.strictEqual(perfil.agarra.maxMass, 648);
   assert.strictEqual(perfil.puestoHistorico, 1);
@@ -502,6 +504,76 @@ const testDir = path.join(os.tmpdir(), `pela-test-leaderboard-${Date.now()}`);
   store.clearSaveTimer();
   console.log("  ✓ El perfil público sale por apodo y sin datos que no se puedan verificar");
   fs.rmSync(`${testDir}-perfil`, { recursive: true, force: true });
+}
+
+// El handle no lleva espacios: es un identificador y va en la URL del legajo
+{
+  assert.strictEqual(sanitizarHandle("Juan Domingo"), "Juan_Domingo", "Los espacios pasan a guión bajo");
+  assert.strictEqual(sanitizarHandle("  varios   espacios  "), "varios_espacios", "Sin importar cuántos");
+  assert.strictEqual(sanitizarHandle("tipo@raro!!"), "tiporaro", "Se caen los símbolos");
+  assert.strictEqual(sanitizarHandle("Ñoño"), "Ñoño", "Acentos y Ñ se conservan: el sitio es en castellano");
+  assert.strictEqual(sanitizarHandle("a"), null, "Menos de 2 caracteres no sirve");
+  assert.strictEqual(sanitizarHandle("___"), null, "Ni algo que se queda sin nada");
+  assert.strictEqual(sanitizarHandle("UnHandleDemasiadoLargoParaEntrar").length, 16, "Se corta a 16");
+
+  const store = new LeaderboardStore({ dataDir: `${testDir}-handle` });
+  await store.init();
+
+  const conEspacios = store.reservarApodo({ playerId: "h1", apodo: "Pelado Sindical" });
+  assert.strictEqual(conEspacios.ok, true);
+  assert.strictEqual(conEspacios.apodo, "Pelado_Sindical", "Se guarda ya normalizado");
+
+  assert.ok(store.reservarApodo({ playerId: "h2", apodo: " " }).error, "Un handle vacío se rechaza");
+
+  // Y la unicidad se mide sobre el handle normalizado, no sobre lo tipeado
+  assert.ok(
+    store.reservarApodo({ playerId: "h3", apodo: "pelado sindical" }).error,
+    "Escribirlo con espacios no esquiva al dueño"
+  );
+
+  store.clearSaveTimer();
+  console.log("  ✓ El handle va sin espacios y la unicidad se mide sobre el normalizado");
+  fs.rmSync(`${testDir}-handle`, { recursive: true, force: true });
+}
+
+// Los handles viejos con espacios se migran solos al arrancar
+{
+  const dir = `${testDir}-migra`;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "leaderboard.json"),
+    JSON.stringify({
+      daily: { 300: [{ playerId: "p2", playerName: "Juan Domingo", attempts: 3, solved: true, solvedAt: 1 }] },
+      history: {
+        p2: { playerId: "p2", playerName: "Juan Domingo", gamesPlayed: 20, gamesWon: 18, currentStreak: 12, maxStreak: 12, lastPuzzle: 300 },
+      },
+      cuentas: { s2: { playerId: "p2" } },
+      apodos: { "juan domingo": { playerId: "p2", apodo: "Juan Domingo" } },
+      records: {},
+    })
+  );
+
+  const store = new LeaderboardStore({ dataDir: dir });
+  await store.init();
+
+  assert.strictEqual(store.apodoDe("p2"), "Juan_Domingo", "El handle queda migrado");
+  assert.strictEqual(store.history["p2"].playerName, "Juan_Domingo", "Y el historial acompaña");
+  assert.strictEqual(store.daily["300"][0].playerName, "Juan_Domingo", "Y el ranking diario también");
+  assert.strictEqual(store.apodos["juan domingo"], undefined, "La clave vieja se va");
+
+  // Un link viejo con espacios tiene que seguir llevando al mismo legajo
+  assert.strictEqual(store.perfilPublico("Juan Domingo")?.apodo, "Juan_Domingo");
+  assert.strictEqual(store.perfilPublico("juan_domingo")?.apodo, "Juan_Domingo");
+
+  // Y volver a arrancar sobre lo ya migrado no cambia nada
+  const store2 = new LeaderboardStore({ dataDir: dir });
+  await store2.init();
+  assert.strictEqual(store2.apodoDe("p2"), "Juan_Domingo", "La migración es idempotente");
+
+  store.clearSaveTimer();
+  store2.clearSaveTimer();
+  console.log("  ✓ Los handles con espacios se migran solos y los links viejos siguen andando");
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 // Limpieza de testDir
