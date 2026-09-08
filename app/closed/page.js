@@ -1,4 +1,18 @@
-export default function ClosedPage() {
+import { cookies } from 'next/headers';
+import { COOKIE_SESION, leerSesion } from '../lib/sesion';
+import { mensajeDeLoginError } from '../lib/erroresLogin';
+
+/**
+ * Fuera de horario todas las páginas rebotan acá, incluida la vuelta del login.
+ * Por eso esta página, que no tiene nada que ver con las cuentas, es la que
+ * termina teniendo que contar cómo salió el ingreso: si no, entrar con Google
+ * a las 19h parecía no hacer nada.
+ */
+export default async function ClosedPage({ searchParams }) {
+  const params = await searchParams;
+  const errorLogin = mensajeDeLoginError(params?.loginError);
+  const sesion = errorLogin ? null : leerSesion((await cookies()).get(COOKIE_SESION)?.value);
+
   return (
     <div style={{
       display: 'flex',
@@ -48,6 +62,37 @@ export default function ClosedPage() {
         }}>
           hoy no laburo, no me jodas
         </h1>
+
+        {errorLogin && (
+          <p style={{
+            marginTop: '28px',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            border: '1px solid rgba(255, 82, 82, 0.4)',
+            background: 'rgba(255, 82, 82, 0.08)',
+            color: '#ff8a80',
+            fontSize: '0.85rem',
+            maxWidth: '420px'
+          }}>
+            {errorLogin}
+          </p>
+        )}
+
+        {!errorLogin && sesion && (
+          <p style={{
+            marginTop: '28px',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            border: '1px solid rgba(126, 231, 135, 0.35)',
+            background: 'rgba(126, 231, 135, 0.08)',
+            color: '#7ee787',
+            fontSize: '0.85rem',
+            maxWidth: '420px'
+          }}>
+            Entraste bien{sesion.nombre ? ` como ${sesion.nombre}` : ""}. Volvé en horario laboral y
+            seguí donde estabas.
+          </p>
+        )}
       </div>
     </div>
   );

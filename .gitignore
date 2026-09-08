@@ -36,3 +36,7 @@ next-env.d.ts
 # persistent data
 /data
 
+
+# credenciales: viven en ~/pela-data/secretos.env, fuera del repo.
+# Esta línea es sólo un seguro por si alguna vez cae una copia acá adentro.
+secretos.env

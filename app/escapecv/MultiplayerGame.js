@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import { useSocialCredit } from '../SocialCreditContext';
+import { ticketDeSocket, entrarConGoogle, quienSoy } from '../lib/sesionCliente';
 
 // Tienen que coincidir con multiplayer-server/rooms.js: no hay build step
 // compartido entre ese proceso standalone y esta app, así que el mundo del
@@ -48,6 +49,8 @@ export default function MultiplayerGame({ onExit }) {
   const [name, setName] = useState('');
   const [joinCode, setJoinCode] = useState('');
   const [error, setError] = useState('');
+  const [necesitaLogin, setNecesitaLogin] = useState(false);
+  const [sesion, setSesion] = useState(null);
   const [room, setRoom] = useState(null); // último roomUpdate
   const [results, setResults] = useState(null);
   const [connecting, setConnecting] = useState(false);
@@ -60,6 +63,19 @@ export default function MultiplayerGame({ onExit }) {
   const { deductCredit } = useSocialCredit();
   const deductRef = useRef(deductCredit);
   useEffect(() => { deductRef.current = deductCredit; }, [deductCredit]);
+
+  // Se pregunta la sesión al abrir el menú y no al conectar: el multijugador
+  // cobra 20 de Reserva al arrancar, y descubrir que falta la cuenta después
+  // de pagar sería cobrarle al jugador una partida que nunca empieza.
+  useEffect(() => {
+    let vivo = true;
+    quienSoy().then((yo) => {
+      if (!vivo) return;
+      setSesion(yo);
+      if (yo.loginDisponible && !yo.autenticado) setNecesitaLogin(true);
+    });
+    return () => { vivo = false; };
+  }, []);
 
   // Actualización fluida de la cuenta regresiva tanto en PC como en móviles
   useEffect(() => {
@@ -117,10 +133,23 @@ export default function MultiplayerGame({ onExit }) {
 
   const ensureSocket = useCallback(() => {
     if (socketRef.current) return socketRef.current;
-    const s = io(multiplayerUrl(), { transports: ['websocket'] });
+    const s = io(multiplayerUrl(), {
+      transports: ['websocket'],
+      // auth como función: socket.io la resuelve antes de cada intento de
+      // conexión, así se puede pedir el ticket (que es asíncrono) sin volver
+      // asíncrono todo el código que abre el socket.
+      auth: (cb) => ticketDeSocket().then((ticket) => cb({ sesion: ticket })),
+    });
     s.on('roomUpdate', (snap) => setRoom(snap));
     s.on('gameEnded', (payload) => setResults(payload.results));
-    s.on('connect_error', () => setError('No se pudo conectar al servidor multijugador. Probá de nuevo en un rato.'));
+    s.on('connect_error', (err) => {
+      if (err?.message === 'LOGIN_REQUERIDO') {
+        setError('Para jugar con otros necesitás entrar con Google.');
+        setNecesitaLogin(true);
+      } else {
+        setError('No se pudo conectar al servidor multijugador. Probá de nuevo en un rato.');
+      }
+    });
     socketRef.current = s;
     return s;
   }, []);
@@ -431,6 +460,10 @@ export default function MultiplayerGame({ onExit }) {
         .mp-btn.battle { background: #ff5722; color: #fff; }
         .mp-btn:disabled { opacity: 0.5; cursor: default; }
         .mp-error { color: #ff5252; font-size: 0.85rem; margin: 8px 0; min-height: 1.2em; }
+        /* Blanco de Google en vez del amarillo del sitio: es el botón de un tercero. */
+        .mp-btn-google { background: #fff; color: #1f1f1f; }
+        .mp-login-texto { color: #8b949e; font-size: 0.8rem; line-height: 1.5; margin: 4px 0 12px; }
+        .mp-sesion { color: #8b949e; font-size: 0.75rem; margin-bottom: 8px; }
         .mp-section-title { font-size: 0.8rem; color: #999; text-transform: uppercase; letter-spacing: 0.05em; margin: 18px 0 8px; }
         .mp-code { font-size: 2rem; font-weight: 900; letter-spacing: 0.2em; color: #ffeb3b; margin: 10px 0; }
         .mp-players { list-style: none; padding: 0; margin: 12px 0; text-align: left; }
@@ -462,6 +495,21 @@ export default function MultiplayerGame({ onExit }) {
           />
           <div className="mp-error">{error}</div>
 
+          {necesitaLogin ? (
+            <>
+              <p className="mp-login-texto">
+                Para jugar con otros hace falta una cuenta: así el nombre con el que entrás es
+                tuyo y nadie se puede hacer pasar por vos. Pelardle se sigue jugando sin cuenta.
+              </p>
+              <button className="mp-btn mp-btn-google" onClick={() => entrarConGoogle('/escapecv')}>
+                Entrar con Google
+              </button>
+              <button className="mp-btn secondary" style={{ marginTop: 10 }} onClick={onExit}>← Volver</button>
+            </>
+          ) : (
+          <>
+          {sesion?.autenticado && <div className="mp-sesion">Entraste como {sesion.nombre}</div>}
+
           <div className="mp-section-title">Lobby público (-20 al arrancar)</div>
           <div className="mp-row">
             <button className="mp-btn" disabled={connecting || !name.trim()} onClick={() => joinPublic('coop')}>Coop</button>
@@ -486,6 +534,8 @@ export default function MultiplayerGame({ onExit }) {
           </div>
 
           <button className="mp-btn secondary" style={{ marginTop: 10 }} onClick={onExit}>← Volver</button>
+          </>
+          )}
         </div>
       )}
 

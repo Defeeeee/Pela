@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { io } from "socket.io-client";
 import { useSocialCredit } from "../SocialCreditContext";
+import { ticketDeSocket, entrarConGoogle, quienSoy } from "../lib/sesionCliente";
 
 const WORLD_WIDTH = 4000;
 const WORLD_HEIGHT = 4000;
@@ -41,6 +42,8 @@ export default function AgarraGame() {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [connecting, setConnecting] = useState(false);
+  const [necesitaLogin, setNecesitaLogin] = useState(false);
+  const [sesion, setSesion] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [myPlayerInfo, setMyPlayerInfo] = useState({ mass: 20, kills: 0, alive: true });
 
@@ -62,6 +65,21 @@ export default function AgarraGame() {
   // Cargar imágenes
   const peladoImgRef = useRef(null);
   const shovelImgRef = useRef(null);
+
+  // Se pregunta la sesión al entrar, no al conectar: si el login faltara y se
+  // descubriera recién en el connect_error, el jugador ya habría pagado los 20
+  // de Reserva por una partida que nunca arranca.
+  useEffect(() => {
+    let vivo = true;
+    quienSoy().then((yo) => {
+      if (!vivo) return;
+      setSesion(yo);
+      if (yo.loginDisponible && !yo.autenticado) setNecesitaLogin(true);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   useEffect(() => {
     const savedName = localStorage.getItem(NAME_KEY) || "";
@@ -85,7 +103,12 @@ export default function AgarraGame() {
 
     const base = multiplayerUrl();
     const url = base ? `${base}/agarra` : "/agarra";
-    const s = io(url, { transports: ["websocket"] });
+    const s = io(url, {
+      transports: ["websocket"],
+      // auth como función: socket.io la resuelve antes de cada intento, así
+      // se pide el ticket (asíncrono) sin volver asíncrono todo esto.
+      auth: (cb) => ticketDeSocket().then((ticket) => cb({ sesion: ticket })),
+    });
 
     s.on("connect", () => {
       setError("");
@@ -157,9 +180,14 @@ export default function AgarraGame() {
       }
     });
 
-    s.on("connect_error", () => {
+    s.on("connect_error", (err) => {
       setConnecting(false);
-      setError("No se pudo conectar al servidor de Agarrá.io. Probá de nuevo.");
+      if (err?.message === "LOGIN_REQUERIDO") {
+        setNecesitaLogin(true);
+        setError("Para entrar a la arena necesitás una cuenta.");
+      } else {
+        setError("No se pudo conectar al servidor de Agarrá.io. Probá de nuevo.");
+      }
     });
 
     socketRef.current = s;
@@ -168,6 +196,10 @@ export default function AgarraGame() {
 
   const handleStartGame = () => {
     if (connecting) return;
+    if (necesitaLogin) {
+      entrarConGoogle("/agarra");
+      return;
+    }
     setError("");
 
     // Cobrar Reserva de Pala una sola vez al entrar
@@ -523,19 +555,42 @@ export default function AgarraGame() {
 
             {error && <div className="agarra-error">{error}</div>}
 
-            <button
-              type="button"
-              className="agarra-play-btn"
-              disabled={connecting}
-              onClick={handleStartGame}
-            >
-              {connecting ? "CONECTANDO..." : `JUGAR (Cuesta ${ENTRY_COST} de Reserva)`}
-            </button>
+            {necesitaLogin ? (
+              <>
+                <button
+                  type="button"
+                  className="agarra-play-btn agarra-google-btn"
+                  onClick={() => entrarConGoogle("/agarra")}
+                >
+                  ENTRAR CON GOOGLE
+                </button>
+                <p className="agarra-fee-hint">
+                  La arena es contra otra gente de verdad, así que hace falta una cuenta para
+                  que el nombre sea tuyo y nadie se haga pasar por vos. Pelardle se sigue
+                  jugando sin cuenta.
+                </p>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="agarra-play-btn"
+                  disabled={connecting}
+                  onClick={handleStartGame}
+                >
+                  {connecting ? "CONECTANDO..." : `JUGAR (Cuesta ${ENTRY_COST} de Reserva)`}
+                </button>
 
-            <p className="agarra-fee-hint">
-              Respawn gratis ilimitado una vez adentro. Movés al pelado con el cursor del mouse
-              y te dividís con la barra espaciadora para alcanzar al que se te escapa.
-            </p>
+                {sesion?.autenticado && (
+                  <p className="agarra-sesion">Entraste como {sesion.nombre}</p>
+                )}
+
+                <p className="agarra-fee-hint">
+                  Respawn gratis ilimitado una vez adentro. Movés al pelado con el cursor del
+                  mouse y te dividís con la barra espaciadora para alcanzar al que se te escapa.
+                </p>
+              </>
+            )}
           </div>
 
           <Link href="/menu" className="agarra-back-link">
@@ -732,6 +787,21 @@ export default function AgarraGame() {
         .agarra-play-btn:disabled {
           opacity: 0.6;
           cursor: not-allowed;
+        }
+
+        /* Blanco de Google en vez del amarillo del sitio: es el botón de un
+           tercero y conviene que se lea como tal. */
+        .agarra-google-btn {
+          background: #ffffff;
+          color: #1f1f1f;
+          box-shadow: 0 4px 15px rgba(0, 0, 0, 0.35);
+        }
+
+        .agarra-sesion {
+          font-size: 11px;
+          color: #8b949e;
+          text-align: center;
+          margin: 6px 0 0;
         }
 
         .agarra-fee-hint {
