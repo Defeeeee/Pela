@@ -15,6 +15,39 @@ function sanitizeName(name) {
   return trimmed || "Pelado Anónimo";
 }
 
+/**
+ * Normaliza un handle: el nombre con el que alguien aparece en el ranking y en
+ * su legajo público.
+ *
+ * No es un nombre libre como el que se pone en una partida: es un
+ * identificador con dueño y va en la URL del perfil (/p/handle). Por eso no
+ * lleva espacios — un identificador con espacios obliga a andar percent-
+ * encodeando el link para compartirlo y hace que "Juan  Domingo" y
+ * "Juan Domingo" parezcan el mismo y no lo sean.
+ *
+ * Los espacios se convierten en guión bajo en vez de borrarse para que un
+ * handle viejo siga siendo reconocible después de migrarlo.
+ *
+ * Se dejan pasar acentos y la Ñ: el sitio es en castellano y no hay razón para
+ * que alguien no pueda llamarse Ñoño. La unicidad sigue siendo sin distinguir
+ * mayúsculas, como antes.
+ *
+ * Devuelve null si no queda nada usable, y el llamador decide qué contestar.
+ */
+export function sanitizarHandle(bruto) {
+  const texto = String(bruto || "").trim();
+  if (!texto) return null;
+
+  const limpio = texto
+    .replace(/\s+/g, "_")                          // espacios -> guión bajo
+    .replace(/[^\p{L}\p{N}_-]/gu, "")              // fuera todo lo demás
+    .replace(/_{2,}/g, "_")                        // sin guiones bajos repetidos
+    .replace(/^[_-]+|[_-]+$/g, "")                 // ni al principio ni al final
+    .slice(0, 16);
+
+  return limpio.length >= 2 ? limpio : null;
+}
+
 export class LeaderboardStore {
   constructor(options = {}) {
     const dataDir = options.dataDir || process.env.MP_DATA_DIR || DEFAULT_DATA_DIR;
@@ -54,6 +87,7 @@ export class LeaderboardStore {
             this.cuentas = parsed.cuentas || {};
             this.apodos = parsed.apodos || {};
             this.records = parsed.records || {};
+            this.migrarHandles();
           }
         } catch (parseErr) {
           console.error("[leaderboard] Archivo JSON corrupto. Creando respaldo y reiniciando...", parseErr);
@@ -279,7 +313,10 @@ export class LeaderboardStore {
   reservarApodo({ playerId, apodo }) {
     if (!playerId || !apodo) return { error: "Faltan playerId o apodo" };
     const pId = String(playerId);
-    const limpio = sanitizeName(apodo);
+    const limpio = sanitizarHandle(apodo);
+    if (!limpio) {
+      return { error: "El handle va de 2 a 16 caracteres, sin espacios ni símbolos raros." };
+    }
     const clave = limpio.toLowerCase();
 
     const dueño = this.apodos[clave];
@@ -309,6 +346,62 @@ export class LeaderboardStore {
     return { ok: true, apodo: limpio };
   }
 
+  /**
+   * Pasa a handle los apodos guardados antes de que existiera la regla.
+   *
+   * Corre en cada arranque y es idempotente: un handle que ya cumple queda
+   * igual. Se hace acá y no con un script suelto porque el archivo de datos
+   * vive en el servidor, fuera del repo, y no hay ningún paso de deploy donde
+   * meter una migración; que se arregle sola al levantar es lo único que no
+   * depende de que alguien se acuerde de correrla.
+   *
+   * El nombre nuevo también se propaga al historial y al ranking diario: ahí
+   * está copiado el nombre que se muestra, y si no se actualizara el legajo
+   * diría una cosa y la tabla otra.
+   */
+  migrarHandles() {
+    const renombrados = [];
+
+    for (const [claveVieja, registro] of Object.entries(this.apodos)) {
+      const actual = registro?.apodo;
+      if (!actual) continue;
+
+      const nuevo = sanitizarHandle(actual);
+      if (!nuevo || nuevo === actual) continue;
+
+      // Si el handle migrado choca con otro que ya existe, se numera. Es raro,
+      // pero perder el apodo de alguien por una colisión lo sería más.
+      let candidato = nuevo;
+      let n = 2;
+      while (
+        this.apodos[candidato.toLowerCase()] &&
+        this.apodos[candidato.toLowerCase()].playerId !== registro.playerId
+      ) {
+        candidato = `${nuevo.slice(0, 14)}_${n++}`;
+      }
+
+      delete this.apodos[claveVieja];
+      this.apodos[candidato.toLowerCase()] = { playerId: registro.playerId, apodo: candidato };
+
+      if (this.history[registro.playerId]) {
+        this.history[registro.playerId].playerName = candidato;
+      }
+      for (const entradas of Object.values(this.daily)) {
+        if (!Array.isArray(entradas)) continue;
+        for (const e of entradas) {
+          if (e.playerId === registro.playerId) e.playerName = candidato;
+        }
+      }
+
+      renombrados.push(`${actual} -> ${candidato}`);
+    }
+
+    if (renombrados.length) {
+      console.log(`[leaderboard] Handles migrados: ${renombrados.join(", ")}`);
+      this.scheduleSave();
+    }
+  }
+
   /** Apodo reservado por una identidad, o null si todavía no eligió ninguno. */
   apodoDe(playerId) {
     const pId = String(playerId);
@@ -333,7 +426,11 @@ export class LeaderboardStore {
    */
   perfilPublico(apodo) {
     if (!apodo) return null;
-    const registro = this.apodos[String(apodo).trim().toLowerCase()];
+    // Se normaliza lo que viene en la URL con la misma regla del handle, así
+    // un link viejo con espacios (/p/Juan%20Domingo) sigue llevando al legajo
+    // que ahora se llama Juan_Domingo.
+    const clave = sanitizarHandle(apodo);
+    const registro = clave ? this.apodos[clave.toLowerCase()] : null;
     if (!registro) return null;
 
     const pId = registro.playerId;
