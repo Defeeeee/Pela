@@ -221,7 +221,10 @@ async function refrescar() {
 
   <div class="seccion">Cómo juegan</div>
   <div class="grilla">
-    ${caja("Masa pico por vida", fmt(m.masaPicoMediaEpisodio, 1), "", "promedio de lo más grande que llegó")}
+    ${caja("Crecimiento", fmt(m.crecimientoRelativo, 2), "x", "cuánto multiplicó su masa de nacimiento",
+           null, m.crecimientoRelativo >= 1 ? "var(--verde)" : "var(--rojo)")}
+    ${caja("Masa pico naciendo chico", fmt(m.masaPicoNacidosChicos, 1), "", "sólo vidas que arrancaron en 20")}
+    ${caja("Masa pico por vida", fmt(m.masaPicoMediaEpisodio, 1), "", "incluye las que nacen grandes por currículum")}
     ${caja("Récord absoluto", fmt(m.masaPicoGlobal, 0), "", "mejor masa vista")}
     ${caja("Supervivencia", fmt(m.supervivenciaSeg, 1), "s", "de juego por vida")}
     ${caja("Mueren", fmt(m.tasaMuerte * 100, 0), "%", "el resto llega al límite de tiempo", m.tasaMuerte, "var(--rojo)")}
@@ -248,7 +251,8 @@ async function refrescar() {
   <div class="seccion">Curvas</div>
   <div class="graficas">
     ${graf("Retorno por vida", col("retornoMedio"), "var(--oro)", "", { dec: 2 })}
-    ${graf("Masa pico por vida", col("masaPicoMediaEpisodio"), "var(--verde)", "", { dec: 1, desdeCero: true })}
+    ${graf("Crecimiento (x masa inicial)", col("crecimientoRelativo"), "var(--verde)", "", { dec: 2, desdeCero: true })}
+    ${graf("Masa pico naciendo chico", col("masaPicoNacidosChicos"), "var(--verde)", "", { dec: 1, desdeCero: true })}
     ${graf("Récord absoluto", col("masaPicoGlobal"), "var(--verde)", "", { dec: 0, desdeCero: true })}
     ${graf("Supervivencia (s)", col("supervivenciaSeg"), "var(--azul)", "", { dec: 1, desdeCero: true })}
     ${graf("Tasa de muerte", col("tasaMuerte"), "var(--rojo)", "", { dec: 2, desdeCero: true })}

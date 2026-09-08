@@ -36,7 +36,7 @@ const cadaMsEspectador = Number(args.espectadorMs || 400);
 const env = new EntornoVectorial({ arenas, agentesPorArena: porArena, semilla });
 const N = env.nAgentes;
 
-const N_STATS = 12;
+const N_STATS = 15;
 const bytesAcciones = N * 4;
 const bytesSalida = N * TAM_OBS * 4 + N * 4 + N + N * NUM_ACCIONES + N_STATS * 4;
 
@@ -97,8 +97,11 @@ function empaquetar() {
   salSta[7] = s.divisiones;
   salSta[8] = s.divisionesLegales;
   salSta[9] = s.picoEpisodioSuma;
-  salSta[10] = s.reciclajes;
-  salSta[11] = s.ticks;
+  salSta[10] = s.crecimientoSuma;
+  salSta[11] = s.episodiosChicos;
+  salSta[12] = s.picoChicosSuma;
+  salSta[13] = s.reciclajes;
+  salSta[14] = s.ticks;
 }
 
 /**

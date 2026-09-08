@@ -77,6 +77,7 @@ export class EntornoVectorial {
     this.killsPrevias = new Int32Array(this.nAgentes);
     this.pasos = new Int32Array(this.nAgentes);
     this.picoEpisodio = new Float32Array(this.nAgentes);
+    this.masaInicial = new Float32Array(this.nAgentes);
 
     // Estadísticas que el aprendiz reporta al panel.
     this.stats = {
@@ -90,6 +91,14 @@ export class EntornoVectorial {
       divisiones: 0,
       divisionesLegales: 0,
       picoEpisodioSuma: 0,
+      // Crecimiento relativo: pico alcanzado dividido masa con la que nació.
+      // Es la única de las tres que mide HABILIDAD. `masaPicoMediaEpisodio`
+      // no sirve sola porque una vida que nace con 400 por el currículum tiene
+      // pico >= 400 sin que el agente haya hecho nada.
+      crecimientoSuma: 0,
+      // Y aparte, sólo las vidas que nacieron chicas: ahí crecer es todo mérito.
+      episodiosChicos: 0,
+      picoChicosSuma: 0,
       reciclajes: 0,
       ticks: 0,
     };
@@ -111,6 +120,7 @@ export class EntornoVectorial {
 
     for (let i = 0; i < this.nAgentes; i++) {
       this.masaPrevia[i] = this.#masa(i);
+      this.masaInicial[i] = this.masaPrevia[i];
       this.killsPrevias[i] = 0;
     }
     this.#observarTodos();
@@ -203,6 +213,12 @@ export class EntornoVectorial {
         if (murio) this.stats.muertes++; else this.stats.porTiempo++;
         this.stats.masaFinalSuma += murio ? 0 : masa;
         this.stats.picoEpisodioSuma += this.picoEpisodio[i];
+        const inicial = Math.max(1, this.masaInicial[i]);
+        this.stats.crecimientoSuma += this.picoEpisodio[i] / inicial;
+        if (inicial < 30) {
+          this.stats.episodiosChicos++;
+          this.stats.picoChicosSuma += this.picoEpisodio[i];
+        }
         this.stats.pasosSuma += this.pasos[i];
         this.#reiniciarAgente(i);
       }
@@ -238,6 +254,7 @@ export class EntornoVectorial {
     for (let k = 0; k < this.porArena; k++) {
       const i = a * this.porArena + k;
       this.masaPrevia[i] = this.#masa(i);
+      this.masaInicial[i] = this.masaPrevia[i];
     }
   }
 
@@ -263,6 +280,7 @@ export class EntornoVectorial {
     this.pasos[i] = 0;
     this.picoEpisodio[i] = 0;
     this.masaPrevia[i] = this.#masa(i);
+    this.masaInicial[i] = this.masaPrevia[i];
     this.killsPrevias[i] = 0;
   }
 
@@ -273,6 +291,7 @@ export class EntornoVectorial {
       episodios: 0, muertes: 0, porTiempo: 0, masaFinalSuma: 0,
       masaPico: 0, pasosSuma: 0, killsTotales: 0,
       divisiones: 0, divisionesLegales: 0, picoEpisodioSuma: 0,
+      crecimientoSuma: 0, episodiosChicos: 0, picoChicosSuma: 0,
       reciclajes: 0, ticks: 0,
     };
     return s;

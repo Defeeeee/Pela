@@ -54,7 +54,7 @@ class Actor:
         if magia != 0x50454C41:
             raise RuntimeError(f"actor {idx}: cabecera inesperada")
 
-        self.n_stats = 12
+        self.n_stats = 15
         self.bytes_salida = (self.n * self.tam_obs * 4 + self.n * 4 + self.n
                              + self.n * self.n_acc + self.n_stats * 4)
         self.buf = bytearray(self.bytes_salida)
@@ -335,7 +335,8 @@ def main():
     hist_masa = deque(maxlen=200)
     acum = {k: 0.0 for k in ("episodios", "muertes", "porTiempo", "masaFinalSuma",
                              "pasosSuma", "kills", "divisiones", "divLegales",
-                             "picoEpisodioSuma", "reciclajes", "ticks")}
+                             "picoEpisodioSuma", "crecimientoSuma", "episodiosChicos",
+                             "picoChicosSuma", "reciclajes", "ticks")}
     masa_pico_global = 0.0
     ret_parcial = np.zeros(N, dtype=np.float64)
     histograma = np.zeros(NACC, dtype=np.int64)
@@ -434,7 +435,8 @@ def main():
 
             for k, v in zip(("episodios", "muertes", "porTiempo", "masaFinalSuma",
                              "masaPico", "pasosSuma", "kills", "divisiones",
-                             "divLegales", "picoEpisodioSuma", "reciclajes",
+                             "divLegales", "picoEpisodioSuma", "crecimientoSuma",
+                             "episodiosChicos", "picoChicosSuma", "reciclajes",
                              "ticks"), sta):
                 if k == "masaPico":
                     masa_pico_ciclo = max(masa_pico_ciclo, float(v))
@@ -506,6 +508,9 @@ def main():
             "tasaMuerte": round(acum_local["muertes"] / eps, 3),
             "masaMediaFinal": round(acum_local["masaFinalSuma"] / max(1, acum_local["porTiempo"]), 1),
             "masaPicoMediaEpisodio": round(acum_local["picoEpisodioSuma"] / eps, 1),
+            "crecimientoRelativo": round(acum_local["crecimientoSuma"] / eps, 3),
+            "masaPicoNacidosChicos": round(
+                acum_local["picoChicosSuma"] / max(1, acum_local["episodiosChicos"]), 1),
             "reciclajes": int(acum["reciclajes"]),
             "masaPicoCiclo": round(masa_pico_ciclo, 1),
             "masaPicoGlobal": round(masa_pico_global, 1),
