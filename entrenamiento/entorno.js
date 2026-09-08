@@ -37,13 +37,27 @@ export const PENALIZACION_MUERTE = 0.5;
  * misma paga, la política óptima es juntar, y eso fue exactamente lo que
  * aprendió: 30.000 divisiones y 5 kills por cada dos millones de pasos.
  *
- * Con 2, la masa robada paga el triple que la misma masa en palas (la propia
- * más dos veces el extra), que es lo que compensa el riesgo.
+ * Con 1, la masa robada paga el doble que la misma masa en palas. Se probó
+ * con 2 (triple) y fue demasiado: la mortalidad se fue a 0,993 porque cazar
+ * pasó a convenir tanto que sobrevivir dejó de importar.
  */
-export const BONUS_CAZA = 2;
+export const BONUS_CAZA = 1;
 
-/** Premio fijo por terminar de comerse a alguien, aparte de su masa. */
-export const BONUS_KILL = 2;
+/**
+ * NO hay premio fijo por matar, a propósito.
+ *
+ * Hubo uno de +2 y armó un pump: comerse a alguien de masa 20 estando en 243
+ * pagaba 0,63 por la masa, 1,90 por el bonus proporcional y 2,00 fijos — o sea
+ * que matar cosas chiquitas rendía más, en proporción, que matar cosas
+ * grandes. Y como el que muere reaparece enseguida en masa 20, había una
+ * fuente infinita de presas baratas: quedarse donde reaparecen y cobrar. El
+ * agente más grande terminaba amontonado en una esquina, partido en siete,
+ * cosechando a los otros tres.
+ *
+ * El bonus proporcional ya premia matar; lo hace según lo que valga la presa,
+ * que es lo que evita ese degenere.
+ */
+export const BONUS_KILL = 0;
 
 /** Generador congruencial: barato, reproducible y suficiente para esto. */
 export function rngConSemilla(semilla) {
@@ -272,7 +286,7 @@ export class EntornoVectorial {
 
       const kills = p ? (p.kills || 0) : this.killsPrevias[i];
       if (kills > this.killsPrevias[i]) {
-        r += BONUS_KILL * (kills - this.killsPrevias[i]);
+        if (BONUS_KILL) r += BONUS_KILL * (kills - this.killsPrevias[i]);
         this.stats.killsTotales += kills - this.killsPrevias[i];
       }
       this.killsPrevias[i] = kills;
