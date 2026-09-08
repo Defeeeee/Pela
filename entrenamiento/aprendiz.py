@@ -247,7 +247,11 @@ def main():
     ap.add_argument("--epocas", type=int, default=3)
     ap.add_argument("--minilote", type=int, default=16384)
     ap.add_argument("--lr", type=float, default=3e-4)
-    ap.add_argument("--gamma", type=float, default=0.995)
+    # Horizonte efectivo 1/(1-gamma): con 0,995 son 200 decisiones = 20s, que
+    # alcanza para reaccionar pero no para "me hago grande ahora para comer
+    # dentro de un minuto". Con vidas de 10 minutos hace falta más vista: 0,998
+    # son 500 decisiones = 50s. Más que eso empieza a costar mucha varianza.
+    ap.add_argument("--gamma", type=float, default=0.998)
     ap.add_argument("--lam", type=float, default=0.95)
     ap.add_argument("--clip", type=float, default=0.2)
     ap.add_argument("--entropia", type=float, default=0.01)
@@ -332,6 +336,11 @@ def main():
 
     t_inicio = time.time()
     hist_ret = deque(maxlen=200)
+    # Ventana móvil de contadores crudos. Las razones por episodio se calculan
+    # sumando la ventana entera y dividiendo una sola vez, en vez de promediar
+    # razones ciclo a ciclo: un ciclo donde terminaron 5 episodios en vez de 60
+    # da una razón diez veces más grande sin que haya cambiado nada del juego.
+    ventana = deque(maxlen=20)
     hist_masa = deque(maxlen=200)
     acum = {k: 0.0 for k in ("episodios", "muertes", "porTiempo", "masaFinalSuma",
                              "pasosSuma", "kills", "divisiones", "divLegales",
@@ -487,7 +496,9 @@ def main():
 
         transiciones = T * N
         dur = time.time() - t_ciclo
-        eps = max(1.0, acum_local["episodios"])
+        ventana.append(acum_local)
+        suma = {k: sum(c[k] for c in ventana) for k in acum_local}
+        eps = max(1.0, suma["episodios"])
         dist_acc = histograma / max(1, histograma.sum())
 
         m = {
@@ -505,20 +516,21 @@ def main():
             # juego
             "episodios": int(acum["episodios"]),
             "episodiosPorSeg": round(acum_local["episodios"] / dur, 1),
-            "tasaMuerte": round(acum_local["muertes"] / eps, 3),
-            "masaMediaFinal": round(acum_local["masaFinalSuma"] / max(1, acum_local["porTiempo"]), 1),
-            "masaPicoMediaEpisodio": round(acum_local["picoEpisodioSuma"] / eps, 1),
-            "crecimientoRelativo": round(acum_local["crecimientoSuma"] / eps, 3),
+            "episodiosEnVentana": int(suma["episodios"]),
+            "tasaMuerte": round(suma["muertes"] / eps, 3),
+            "masaMediaFinal": round(suma["masaFinalSuma"] / max(1, suma["porTiempo"]), 1),
+            "masaPicoMediaEpisodio": round(suma["picoEpisodioSuma"] / eps, 1),
+            "crecimientoRelativo": round(suma["crecimientoSuma"] / eps, 3),
             "masaPicoNacidosChicos": round(
-                acum_local["picoChicosSuma"] / max(1, acum_local["episodiosChicos"]), 1),
-            "fraccionVidasDivisibles": round(acum_local["episodiosDivisibles"] / eps, 4),
+                suma["picoChicosSuma"] / max(1, suma["episodiosChicos"]), 1),
+            "fraccionVidasDivisibles": round(suma["episodiosDivisibles"] / eps, 4),
             "reciclajes": int(acum["reciclajes"]),
             "masaPicoCiclo": round(masa_pico_ciclo, 1),
             "masaPicoGlobal": round(masa_pico_global, 1),
-            "supervivenciaSeg": round(acum_local["pasosSuma"] / eps / 10, 1),
-            "killsPorEpisodio": round(acum_local["kills"] / eps, 3),
-            "divisionesPorEpisodio": round(acum_local["divisiones"] / eps, 2),
-            "divisionesEfectivas": round(acum_local["divLegales"] / max(1, acum_local["divisiones"]), 3),
+            "supervivenciaSeg": round(suma["pasosSuma"] / eps / 10, 1),
+            "killsPorEpisodio": round(suma["kills"] / eps, 4),
+            "divisionesPorEpisodio": round(suma["divisiones"] / eps, 2),
+            "divisionesEfectivas": round(suma["divLegales"] / max(1, suma["divisiones"]), 3),
             "retornoMedio": round(float(np.mean(hist_ret)) if hist_ret else 0.0, 2),
             "recompensaPorPaso": round(float(b.rec.mean()), 4),
             # aprendizaje

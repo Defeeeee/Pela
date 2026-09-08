@@ -232,6 +232,7 @@ async function refrescar() {
     ${caja("Kills por vida", fmt(m.killsPorEpisodio, 3), "", "pelados que se comió")}
     ${caja("Divisiones por vida", fmt(m.divisionesPorEpisodio, 2), "", `${fmt(m.divisionesEfectivas*100,0)}% efectivas`)}
     ${caja("Vidas jugadas", fmt(m.episodios), "", `${fmt(m.episodiosPorSeg,1)} por segundo`)}
+    ${caja("Muestra de los promedios", fmt(m.episodiosEnVentana || 0), "", "vidas detrás de las cifras de arriba")}
     ${caja("Arenas recicladas", fmt(m.reciclajes || 0), "", "para que los bots no engorden sin freno")}
   </div>
 

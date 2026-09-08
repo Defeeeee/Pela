@@ -10,13 +10,15 @@ const DT = 1000 / 30;
 export const REPETIR_ACCION = 3; // 10 decisiones por segundo simulado
 
 /**
- * Tope de una vida, en decisiones. A 10 Hz son 180 segundos simulados.
+ * Tope de una vida, en decisiones. A 10 Hz son 600 segundos simulados: 10 min.
  *
- * Eran 60 y era poco: llegar al tope terminaba la vida sin costo, así que
- * "aguantar sin hacer nada" era una salida gratis y segura. Con vidas largas,
- * el tiempo hay que usarlo para crecer.
+ * Fue creciendo con el agente. Con 60s llegar al tope era una salida gratis y
+ * segura; con 180s ya casi no morían (11%), así que lo que pasó a limitar el
+ * crecimiento fue el propio tope y no los rivales. Con 10 minutos hay tiempo
+ * de sobra para farmear hasta una masa desde la cual comerse a otro sea
+ * posible, que es la dinámica que todavía no aprendió.
  */
-export const MAX_PASOS = 1800;
+export const MAX_PASOS = 6000;
 
 /**
  * Cuánto de lo construido se pierde al morir, como fracción de √masa.
@@ -60,7 +62,7 @@ export class EntornoVectorial {
     // parar hasta el techo de 1500 y una arena vieja es una carnicería donde un
     // agente que reaparece con masa 20 no tiene ninguna chance: mide dificultad
     // creciente, no aprendizaje. Reciclarlas mantiene estacionaria la dificultad.
-    reciclarCada = 2000,
+    reciclarCada = 6000,
     // Fracción de reapariciones que arrancan con masa alta.
     //
     // En cero por decisión: **todos nacen con 20, como un jugador de verdad**.
@@ -148,6 +150,12 @@ export class EntornoVectorial {
       this.masaPrevia[i] = this.#masa(i);
       this.masaInicial[i] = this.masaPrevia[i];
       this.killsPrevias[i] = 0;
+      // Relojes de vida escalonados. Si todos nacen a la vez, todos cumplen el
+      // tope a la vez y las terminaciones llegan en oleadas: hay ventanas con
+      // 70 episodios cerrados y otras con 5. Cualquier promedio por episodio
+      // calculado sobre esas ventanas chicas es ruido, y además el lote de
+      // entrenamiento queda correlacionado.
+      this.pasos[i] = Math.floor(this.rngCurriculo() * MAX_PASOS);
     }
     this.#observarTodos();
   }
@@ -288,6 +296,18 @@ export class EntornoVectorial {
     });
     for (let k = 0; k < this.porArena; k++) {
       const i = a * this.porArena + k;
+      // Reciclar la arena corta la vida en curso, así que cuenta como episodio
+      // terminado. Antes esas vidas desaparecían de las estadísticas sin más.
+      if (this.pasos[i] > 0) {
+        this.stats.episodios++;
+        this.stats.porTiempo++;
+        this.stats.picoEpisodioSuma += this.picoEpisodio[i];
+        this.stats.crecimientoSuma += this.picoEpisodio[i] / Math.max(1, this.masaInicial[i]);
+        this.stats.episodiosChicos++;
+        this.stats.picoChicosSuma += this.picoEpisodio[i];
+        if (this.picoEpisodio[i] >= MIN_SPLIT_MASS) this.stats.episodiosDivisibles++;
+        this.stats.pasosSuma += this.pasos[i];
+      }
       arena.addPlayer(this.ids[i], `A${a}-${k}`, null);
       this.pasos[i] = 0;
       this.picoEpisodio[i] = 0;
