@@ -166,6 +166,8 @@ export default function MenuPage() {
         .menu-sesion strong { color: var(--gold); }
 
         .menu-sesion-btn {
+          text-decoration: none;
+          display: inline-block;
           background: transparent;
           border: 1px solid var(--card-border-hover);
           color: var(--gold);
@@ -417,6 +419,14 @@ export default function MenuPage() {
                   <span>
                     Entraste como <strong>{sesion.nombre || "sin apodo"}</strong>
                   </span>
+                  {sesion.nombre && (
+                    <Link
+                      href={`/p/${encodeURIComponent(sesion.nombre)}`}
+                      className="menu-sesion-btn"
+                    >
+                      Mi legajo
+                    </Link>
+                  )}
                   <button className="menu-sesion-btn" onClick={salir}>Salir</button>
                 </>
               ) : (

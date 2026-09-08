@@ -90,6 +90,14 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
+  // Perfil público por apodo
+  if (url.pathname === "/cuentas/perfil" && req.method === "GET") {
+    const perfil = leaderboardStore.perfilPublico(url.searchParams.get("apodo") || "");
+    res.writeHead(perfil ? 200 : 404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(perfil ? { ok: true, perfil } : { ok: false, error: "No existe ese apodo." }));
+    return;
+  }
+
   // Consulta de récords unificados de la cuenta
   if (url.pathname === "/cuentas/records" && req.method === "GET") {
     const playerId = url.searchParams.get("playerId") || "";
@@ -316,7 +324,7 @@ agarraIo.use(async (socket, next) => {
 
 agarraIo.on("connection", (socket) => {
   socket.on("join", ({ name } = {}, ack) => {
-    const player = agarraArena.addPlayer(socket.id, name);
+    const player = agarraArena.addPlayer(socket.id, name, socket.data.playerId);
     ack?.({
       ok: true,
       playerId: socket.id,
@@ -349,6 +357,13 @@ const AGARRA_TICK_MS = 1000 / 30; // 30 Hz simulación
 setInterval(() => {
   agarraArena.tick(AGARRA_TICK_MS);
   agarraTickCount++;
+
+  // La mejor masa la escribe el servidor, no el navegador: la arena es suya y
+  // ya la tiene medida. El cliente sigue guardando su copia local para poder
+  // mostrarla sin estar logueado, pero lo que queda en la cuenta sale de acá.
+  for (const { playerId, maxMass } of agarraArena.drenarRecords()) {
+    leaderboardStore.updateRecords(playerId, { agarra: { maxMass } }, { deConfianza: true });
+  }
 
   // Difusión a 15 Hz (cada 2 ticks) para optimizar ancho de banda
   if (agarraTickCount % 2 === 0) {

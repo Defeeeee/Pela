@@ -11,6 +11,7 @@ import {
   MAX_CELLS,
   crearCelula,
   sincronizarAgregados,
+  BOT_MAX_MASS
 } from "./agarra.js";
 
 console.log("Iniciando tests deterministas de Arena (Agarrá.io)...");
@@ -305,6 +306,65 @@ function ubicar(p, x, y, mass) {
   arena.tick(33);
   assert.strictEqual(victima.alive, false, "Sin células, muere");
   console.log("  ✓ Morís recién cuando te comieron todas las células");
+}
+
+// Los bots no crecen sin techo: al pasarse, se jubilan y entra uno nuevo
+{
+  const arena = new Arena();
+  const bot = [...arena.players.values()].find((p) => p.isBot);
+  const idGordo = bot.id;
+  const poblacionAntes = arena.players.size;
+
+  bot.cells[0].mass = BOT_MAX_MASS + 500;
+  arena.tick(1000 / 30);
+
+  assert.strictEqual(arena.players.has(idGordo), false, "El bot pasado de masa se va");
+  assert.strictEqual(arena.players.size, poblacionAntes, "Y entra uno nuevo en su lugar");
+
+  const masaMayor = Math.max(...[...arena.players.values()].map((p) => p.mass));
+  assert.ok(masaMayor <= BOT_MAX_MASS, `Nadie queda por encima del techo (${masaMayor})`);
+
+  // Un humano gordo NO se jubila: crecer es el juego.
+  const arena2 = new Arena();
+  arena2.addPlayer("humano", "Fede", "cuenta");
+  arena2.players.get("humano").cells[0].mass = BOT_MAX_MASS + 500;
+  arena2.tick(1000 / 30);
+  assert.ok(arena2.players.has("humano"), "Al humano no se lo jubila por grande");
+
+  console.log("  ✓ Los bots se jubilan al pasar el techo de masa, los humanos no");
+}
+
+// La mejor masa la mide la arena y queda encolada para la cuenta
+{
+  const arena = new Arena();
+  arena.addPlayer("s1", "Fede", "cuenta-fede");
+  arena.players.get("s1").cells[0].mass = 476;
+  arena.tick(1000 / 30);
+
+  const pico = arena.players.get("s1").maxMass;
+  assert.ok(pico >= 476, "La arena registra el pico de masa");
+
+  // Baja de masa: el máximo de la sesión no baja con ella.
+  arena.players.get("s1").cells[0].mass = 30;
+  arena.tick(1000 / 30);
+  assert.strictEqual(arena.players.get("s1").maxMass, pico, "El máximo de la sesión no baja");
+
+  arena.removePlayer("s1"); // se va vivo
+  const encolados = arena.drenarRecords();
+  assert.strictEqual(encolados.length, 1, "Al irse queda encolado el récord");
+  assert.strictEqual(encolados[0].playerId, "cuenta-fede", "Atado a la cuenta, no al socket");
+  assert.strictEqual(encolados[0].maxMass, pico);
+  assert.strictEqual(arena.drenarRecords().length, 0, "Drenar vacía la cola");
+
+  // Sin cuenta no hay dónde guardarlo, así que no se encola nada.
+  const arena2 = new Arena();
+  arena2.addPlayer("s2", "Anon", null);
+  arena2.players.get("s2").cells[0].mass = 900;
+  arena2.tick(1000 / 30);
+  arena2.removePlayer("s2");
+  assert.strictEqual(arena2.drenarRecords().length, 0, "Un anónimo no encola récords");
+
+  console.log("  ✓ La mejor masa la mide la arena y se encola contra la cuenta");
 }
 
 console.log("\n¡Todos los tests de Arena pasaron exitosamente!");

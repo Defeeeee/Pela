@@ -318,6 +318,49 @@ export class LeaderboardStore {
     return null;
   }
 
+  /**
+   * Datos públicos de un jugador, buscado por su apodo.
+   *
+   * Muestra sólo lo que el servidor mide por su cuenta: las estadísticas de
+   * Pelardle (él cuenta los intentos) y la mayor masa del Agarrá (él simula la
+   * arena). Los récords de EscapeCV y del Clicker quedan afuera a propósito:
+   * son juegos de un solo jugador que corren enteros en el navegador, así que
+   * su valor es el que el navegador dice, y una página pública que los
+   * mostrara estaría publicando un número que cualquiera se puede poner.
+   *
+   * Tampoco sale el email ni el googleSub: el apodo es la única identidad
+   * pública que eligió la persona.
+   */
+  perfilPublico(apodo) {
+    if (!apodo) return null;
+    const registro = this.apodos[String(apodo).trim().toLowerCase()];
+    if (!registro) return null;
+
+    const pId = registro.playerId;
+    const h = this.history[pId] || {};
+    const rec = this.records[pId] || {};
+
+    // Puesto en el histórico, con el mismo orden y filtro que el ranking.
+    const rankeables = this.idsRankeables();
+    const orden = Object.values(this.history)
+      .filter((e) => rankeables.has(e.playerId))
+      .sort((a, b) => (b.gamesWon - a.gamesWon) || (b.maxStreak - a.maxStreak) || (b.gamesPlayed - a.gamesPlayed));
+    const puesto = orden.findIndex((e) => e.playerId === pId);
+
+    return {
+      apodo: registro.apodo,
+      pelardle: {
+        played: Number(h.gamesPlayed) || 0,
+        wins: Number(h.gamesWon) || 0,
+        currentStreak: Number(h.currentStreak) || 0,
+        maxStreak: Number(h.maxStreak) || 0,
+      },
+      agarra: { maxMass: Number(rec.agarra?.maxMass) || 0 },
+      puestoHistorico: puesto >= 0 ? puesto + 1 : null,
+      deCuantos: orden.length,
+    };
+  }
+
   /** Una identidad tiene cuenta si algún googleSub la reclamó. */
   tieneCuenta(playerId) {
     return Object.values(this.cuentas).some((c) => c.playerId === playerId);
@@ -603,7 +646,7 @@ export class LeaderboardStore {
    * Regla de oro: Se conserva SIEMPRE el mejor valor (máximo) entre el actual
    * del dispositivo y el guardado en la sesión, para que nadie pierda progreso.
    */
-  updateRecords(playerId, incoming) {
+  updateRecords(playerId, incoming, { deConfianza = false } = {}) {
     if (!playerId) return { error: "Falta playerId" };
     const pId = String(playerId);
 
@@ -625,14 +668,21 @@ export class LeaderboardStore {
       };
     }
 
-    // 2. Agarrá.io: se guarda la mayor masa alcanzada
+    // 2. Agarrá.io: la mayor masa alcanzada.
+    //
+    //    Este dato lo escribe el servidor de la arena, que es quien simula la
+    //    partida (ver anotarRecord en agarra.js). Del navegador sólo se acepta
+    //    la PRIMERA vez, para no hacerle perder el récord a quien ya venía
+    //    jugando sin cuenta; después manda lo medido. Sin ese corte, cualquiera
+    //    con sesión se ponía la masa que quisiera con un POST.
     if (incoming?.agarra) {
-      const incomingMass = Number(incoming.agarra.maxMass) || 0;
       const currentMass = Number(current.agarra?.maxMass) || 0;
+      const incomingMass = Number(incoming.agarra.maxMass) || 0;
+      const esMigracion = currentMass === 0;
 
-      current.agarra = {
-        maxMass: Math.max(currentMass, incomingMass),
-      };
+      if (deConfianza || esMigracion) {
+        current.agarra = { maxMass: Math.max(currentMass, incomingMass) };
+      }
     }
 
     // 3. Pelardle: se sincroniza con this.history[pId]
@@ -650,16 +700,26 @@ export class LeaderboardStore {
       }
       const h = this.history[pId];
       const inc = incoming.pelardle;
+
+      // Los acumulados van por el máximo: sólo crecen, así que fusionarlos
+      // entre dispositivos no puede hacer perder nada.
       h.gamesPlayed = Math.max(h.gamesPlayed || 0, Number(inc.played) || 0);
       h.gamesWon = Math.max(h.gamesWon || 0, Number(inc.wins) || 0);
       h.maxStreak = Math.max(h.maxStreak || 0, Number(inc.maxStreak) || 0);
-      if (inc.currentStreak !== undefined || inc.streak !== undefined) {
-        const strk = Number(inc.currentStreak !== undefined ? inc.currentStreak : inc.streak) || 0;
-        h.currentStreak = Math.max(h.currentStreak || 0, strk);
-      }
       if (inc.lastPuzzle !== null && inc.lastPuzzle !== undefined) {
         h.lastPuzzle = Math.max(Number(h.lastPuzzle) || 0, Number(inc.lastPuzzle) || 0);
       }
+
+      // La racha EN CURSO no se toca desde acá, a propósito. No es un
+      // acumulado: baja a cero cuando se corta, y el servidor ya la lleva bien
+      // porque él mismo cuenta los intentos (recordCompletion). Tomar el
+      // máximo contra lo que manda el navegador la resucitaba: alcanzaba con
+      // abrir el sitio en un dispositivo cuyo localStorage quedó viejo para
+      // devolverle una racha a alguien que la había cortado hoy.
+      //
+      // La única entrada legítima de una racha del cliente es la migración de
+      // quien venía jugando sin cuenta, y ésa tiene su propio camino con el
+      // chequeo de racha viva (ver importarProgresoLocal).
     }
 
     // 4. Pala Clicker: fusión de partida completa sin pérdida de progreso

@@ -128,12 +128,22 @@ export function guardarRecordsLocales(records) {
         if (raw) localPelardle = JSON.parse(raw);
       } catch (e) {}
 
+      const rachaDelServidor = Number(
+        records.pelardle.currentStreak !== undefined
+          ? records.pelardle.currentStreak
+          : records.pelardle.streak
+      ) || 0;
+
       const mergedPelardle = {
         played: Math.max(Number(localPelardle.played) || 0, Number(records.pelardle.played) || 0),
         wins: Math.max(Number(localPelardle.wins) || 0, Number(records.pelardle.wins) || 0),
         maxStreak: Math.max(Number(localPelardle.maxStreak) || 0, Number(records.pelardle.maxStreak) || 0),
-        streak: Math.max(Number(localPelardle.streak || localPelardle.currentStreak) || 0, Number(records.pelardle.currentStreak || records.pelardle.streak) || 0),
-        currentStreak: Math.max(Number(localPelardle.currentStreak || localPelardle.streak) || 0, Number(records.pelardle.currentStreak || records.pelardle.streak) || 0),
+        // La racha en curso la manda el servidor tal cual, sin máximo: él es
+        // el que cuenta los intentos, así que sabe si sigue viva. Tomar el
+        // máximo contra el localStorage mostraba una racha ya cortada en
+        // cualquier dispositivo que hubiera quedado viejo.
+        streak: rachaDelServidor,
+        currentStreak: rachaDelServidor,
         lastPuzzle: records.pelardle.lastPuzzle !== null && records.pelardle.lastPuzzle !== undefined ? Number(records.pelardle.lastPuzzle) : localPelardle.lastPuzzle,
       };
 
