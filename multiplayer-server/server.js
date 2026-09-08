@@ -18,6 +18,42 @@ const PORT = process.env.MP_PORT || 9315;
 // Override por si hace falta probar desde otro dispositivo de la LAN (por
 // ejemplo el celular, para los controles táctiles del Agarrá).
 const MP_HOST = process.env.MP_HOST || "127.0.0.1";
+// Dónde preguntar quién es cada jugador. Se le delega la validación al sitio
+// en vez de duplicar acá la criptografía de la sesión: un solo lugar sabe
+// verificar tokens, y si mañana cambia el formato no hay que tocar dos procesos.
+const URL_SITIO = process.env.APP_INTERNAL_URL || "http://127.0.0.1:9314";
+
+/**
+ * Resuelve la identidad de quien abre un socket. Devuelve null si no hay
+ * sesión válida, y el multijugador lo rechaza: jugar con otros pide cuenta.
+ */
+/**
+ * Quién es el que abre el socket, según el sitio.
+ *
+ * Devuelve la identidad, `null` si no hay sesión válida, o `"sin-login"` si el
+ * sitio contesta que el login no está configurado. Esa tercera respuesta
+ * importa: sin credenciales de Google, `autenticado` es false para todo el
+ * mundo, y tratar eso como "no tiene sesión" dejaría el multijugador cerrado
+ * para todos — en un clon del repo sin secretos, y en producción si alguna vez
+ * falta el archivo. Cuando no hay login que exigir, no se exige.
+ */
+async function identidadDeSocket(socket) {
+  const token = socket.handshake?.auth?.sesion;
+  try {
+    const res = await fetch(`${URL_SITIO}/api/auth/me`, {
+      headers: token ? { "x-pela-sesion": token } : {},
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) return null;
+    const datos = await res.json();
+    if (datos?.autenticado) return datos;
+    if (datos?.loginDisponible === false) return "sin-login";
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
 const leaderboardStore = new LeaderboardStore();
 leaderboardStore.init().catch((err) => {
   console.error("[pela-multiplayer] Error iniciando LeaderboardStore:", err);
@@ -54,7 +90,18 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
-  if (url.pathname === "/pelardle/attempt" && req.method === "POST") {
+  // Endpoints que reciben un JSON y devuelven lo que responda el store. Todos
+  // siguen el mismo molde, así que se resuelven con una tabla en vez de repetir
+  // el manejo del cuerpo cinco veces.
+  const postHandlers = {
+    "/pelardle/attempt": (body) => leaderboardStore.registerAttempt(body),
+    "/cuentas/vincular": (body) => leaderboardStore.vincularCuenta(body),
+    "/cuentas/importar": (body) => leaderboardStore.importarProgresoLocal(body),
+    "/cuentas/apodo": (body) => leaderboardStore.reservarApodo(body),
+  };
+
+  const handler = postHandlers[url.pathname];
+  if (handler && req.method === "POST") {
     let bodyStr = "";
     req.on("data", (chunk) => {
       bodyStr += chunk;
@@ -64,8 +111,8 @@ const httpServer = createServer(async (req, res) => {
     req.on("end", () => {
       try {
         const body = JSON.parse(bodyStr || "{}");
-        const result = leaderboardStore.registerAttempt(body);
-        res.writeHead(200, { "Content-Type": "application/json" });
+        const result = handler(body);
+        res.writeHead(result?.error ? 400 : 200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(result));
       } catch (err) {
         res.writeHead(400, { "Content-Type": "application/json" });
@@ -146,6 +193,20 @@ function joinRoom(socket, room, name) {
   broadcastRoom(room);
   return { snapshot: room.snapshot(), isHost: room.hostId === socket.id };
 }
+
+// Jugar con otros pide cuenta. Se valida en el handshake, antes de que el
+// socket entre a ninguna sala: así no hay forma de colarse en una partida y
+// después quedar sin identidad. Los modos de un jugador de /escapecv no pasan
+// por acá y siguen abiertos.
+io.use(async (socket, next) => {
+  const identidad = await identidadDeSocket(socket);
+  if (!identidad) return next(new Error("LOGIN_REQUERIDO"));
+  if (identidad !== "sin-login") {
+    socket.data.playerId = identidad.playerId;
+    socket.data.nombreCuenta = identidad.nombre;
+  }
+  next();
+});
 
 io.on("connection", (socket) => {
   socket.data.roomCode = null;
@@ -232,6 +293,16 @@ setInterval(() => {
 // ==========================================
 const agarraIo = io.of("/agarra");
 const agarraArena = new Arena();
+
+agarraIo.use(async (socket, next) => {
+  const identidad = await identidadDeSocket(socket);
+  if (!identidad) return next(new Error("LOGIN_REQUERIDO"));
+  if (identidad !== "sin-login") {
+    socket.data.playerId = identidad.playerId;
+    socket.data.nombreCuenta = identidad.nombre;
+  }
+  next();
+});
 
 agarraIo.on("connection", (socket) => {
   socket.on("join", ({ name } = {}, ack) => {
