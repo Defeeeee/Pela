@@ -229,7 +229,10 @@ async function refrescar() {
     ${caja("Récord absoluto", fmt(m.masaPicoGlobal, 0), "", "mejor masa vista")}
     ${caja("Supervivencia", fmt(m.supervivenciaSeg, 1), "s", "de juego por vida")}
     ${caja("Mueren", fmt(m.tasaMuerte * 100, 0), "%", "el resto llega al límite de tiempo", m.tasaMuerte, "var(--rojo)")}
-    ${caja("Kills por vida", fmt(m.killsPorEpisodio, 3), "", "pelados que se comió")}
+    ${caja("Kills por millón de pasos", fmt(m.killsPorMillon, 2), "", "denominador fijo: no se dispara solo",
+           null, (m.killsPorMillon || 0) > 0 ? "var(--verde)" : "var(--rojo)")}
+    ${caja("Masa robada por millón", fmt(m.masaRobadaPorMillon, 0), "", "arrebatada a otros jugadores")}
+    ${caja("Kills por vida", fmt(m.killsPorEpisodio, 3), "", "ojo: depende de cuántas vidas cierren")}
     ${caja("Divisiones por vida", fmt(m.divisionesPorEpisodio, 2), "", `${fmt(m.divisionesEfectivas*100,0)}% efectivas`)}
     ${caja("Vidas jugadas", fmt(m.episodios), "", `${fmt(m.episodiosPorSeg,1)} por segundo`)}
     ${caja("Muestra de los promedios", fmt(m.episodiosEnVentana || 0), "", "vidas detrás de las cifras de arriba")}
@@ -258,8 +261,9 @@ async function refrescar() {
     ${graf("Récord absoluto", col("masaPicoGlobal"), "var(--verde)", "", { dec: 0, desdeCero: true })}
     ${graf("Supervivencia (s)", col("supervivenciaSeg"), "var(--azul)", "", { dec: 1, desdeCero: true })}
     ${graf("Tasa de muerte", col("tasaMuerte"), "var(--rojo)", "", { dec: 2, desdeCero: true })}
-    ${graf("Kills por vida", col("killsPorEpisodio"), "var(--rojo)", "", { dec: 3, desdeCero: true })}
-    ${graf("Divisiones por vida", col("divisionesPorEpisodio"), "var(--oro)", "", { dec: 2, desdeCero: true })}
+    ${graf("Kills por millón de pasos", col("killsPorMillon"), "var(--rojo)", "", { dec: 2, desdeCero: true })}
+    ${graf("Masa robada por millón", col("masaRobadaPorMillon"), "var(--rojo)", "", { dec: 0, desdeCero: true })}
+    ${graf("Divisiones por millón de pasos", col("divisionesPorMillon"), "var(--oro)", "", { dec: 0, desdeCero: true })}
     ${graf("Exploración (entropía)", col("entropia"), "var(--violeta)", "", { dec: 3 })}
     ${graf("Varianza explicada", col("varianzaExplicada"), "var(--azul)", "", { dec: 3 })}
     ${graf("Pérdida de valor", col("perdidaValor"), "var(--violeta)", "", { dec: 3, desdeCero: true })}

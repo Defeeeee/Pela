@@ -58,7 +58,7 @@ class Actor:
         if magia != 0x50454C41:
             raise RuntimeError(f"actor {idx}: cabecera inesperada")
 
-        self.n_stats = 16
+        self.n_stats = 17
         self.bytes_salida = (self.n * self.tam_obs * 4 + self.n * 4 + self.n
                              + self.n * self.n_acc + self.n_stats * 4)
         self.buf = bytearray(self.bytes_salida)
@@ -356,7 +356,8 @@ def main():
     acum = {k: 0.0 for k in ("episodios", "muertes", "porTiempo", "masaFinalSuma",
                              "pasosSuma", "kills", "divisiones", "divLegales",
                              "picoEpisodioSuma", "crecimientoSuma", "episodiosChicos",
-                             "picoChicosSuma", "episodiosDivisibles", "reciclajes", "ticks")}
+                             "picoChicosSuma", "episodiosDivisibles", "reciclajes", "ticks",
+                             "masaRobada")}
     masa_pico_global = 0.0
     ret_parcial = np.zeros(N, dtype=np.float64)
     histograma = np.zeros(NACC, dtype=np.int64)
@@ -457,7 +458,8 @@ def main():
                              "masaPico", "pasosSuma", "kills", "divisiones",
                              "divLegales", "picoEpisodioSuma", "crecimientoSuma",
                              "episodiosChicos", "picoChicosSuma",
-                             "episodiosDivisibles", "reciclajes", "ticks"), sta):
+                             "episodiosDivisibles", "reciclajes", "ticks",
+                             "masaRobada"), sta):
                 if k == "masaPico":
                     masa_pico_ciclo = max(masa_pico_ciclo, float(v))
                 else:
@@ -510,6 +512,7 @@ def main():
         ventana.append(acum_local)
         suma = {k: sum(c[k] for c in ventana) for k in acum_local}
         eps = max(1.0, suma["episodios"])
+        millones = max(1e-9, len(ventana) * transiciones / 1e6)
         dist_acc = histograma / max(1, histograma.sum())
 
         m = {
@@ -540,6 +543,14 @@ def main():
             "masaPicoGlobal": round(masa_pico_global, 1),
             "supervivenciaSeg": round(suma["pasosSuma"] / eps / 10, 1),
             "killsPorEpisodio": round(suma["kills"] / eps, 4),
+            # Por millón de transiciones: el denominador es la experiencia
+            # recogida, que es constante, en vez de los episodios que
+            # casualmente terminaron. Un cociente por episodio se dispara solo
+            # cuando terminan pocas vidas, y eso ya nos hizo creer tres veces
+            # que el agente había cambiado de comportamiento cuando no.
+            "killsPorMillon": round(suma["kills"] / millones, 2),
+            "divisionesPorMillon": round(suma["divisiones"] / millones, 0),
+            "masaRobadaPorMillon": round(suma["masaRobada"] / millones, 0),
             "divisionesPorEpisodio": round(suma["divisiones"] / eps, 2),
             "divisionesEfectivas": round(suma["divLegales"] / max(1, suma["divisiones"]), 3),
             "retornoMedio": round(float(np.mean(hist_ret)) if hist_ret else 0.0, 2),

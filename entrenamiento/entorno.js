@@ -26,6 +26,25 @@ export const MAX_PASOS = 6000;
  */
 export const PENALIZACION_MUERTE = 0.5;
 
+/**
+ * Cuánto vale de más la masa arrebatada a otro jugador, comparada con la misma
+ * masa juntada en palas.
+ *
+ * Sin esto, cazar y juntar pagan idéntico: la recompensa mira la variación de
+ * masa y no le importa de dónde vino. Pero cazar exige acercarse a alguien que
+ * puede darse vuelta y comerte, y muchas veces dividirse —quedando vulnerable
+ * doce segundos—, mientras que una pala es +1 garantizado y sin riesgo. Con la
+ * misma paga, la política óptima es juntar, y eso fue exactamente lo que
+ * aprendió: 30.000 divisiones y 5 kills por cada dos millones de pasos.
+ *
+ * Con 2, la masa robada paga el triple que la misma masa en palas (la propia
+ * más dos veces el extra), que es lo que compensa el riesgo.
+ */
+export const BONUS_CAZA = 2;
+
+/** Premio fijo por terminar de comerse a alguien, aparte de su masa. */
+export const BONUS_KILL = 2;
+
 /** Generador congruencial: barato, reproducible y suficiente para esto. */
 export function rngConSemilla(semilla) {
   let x = semilla >>> 0;
@@ -111,6 +130,7 @@ export class EntornoVectorial {
     this.ids = [];
     this.masaPrevia = new Float32Array(this.nAgentes);
     this.killsPrevias = new Int32Array(this.nAgentes);
+    this.robadaPrevia = new Float32Array(this.nAgentes);
     this.pasos = new Int32Array(this.nAgentes);
     this.picoEpisodio = new Float32Array(this.nAgentes);
     this.masaInicial = new Float32Array(this.nAgentes);
@@ -127,6 +147,7 @@ export class EntornoVectorial {
       divisiones: 0,
       divisionesLegales: 0,
       picoEpisodioSuma: 0,
+      masaRobada: 0,
       // Crecimiento relativo: pico alcanzado dividido masa con la que nació.
       // Es la única de las tres que mide HABILIDAD. `masaPicoMediaEpisodio`
       // no sirve sola porque una vida que nace con 400 por el currículum tiene
@@ -236,9 +257,22 @@ export class EntornoVectorial {
       // radio y mantiene la escala sana entre masa 20 y 20.000.
       let r = Math.sqrt(masa) - Math.sqrt(this.masaPrevia[i]);
 
+      // Cazar: la masa arrebatada a otro jugador ya entró arriba en la
+      // variación de masa; acá se le suma su aporte otra vez, multiplicado.
+      // Se calcula sobre la raíz para que quede en la misma escala que el
+      // resto de la recompensa y no domine cuando las masas son grandes.
+      const robada = p ? (p.masaRobada || 0) : this.robadaPrevia[i];
+      const robadaPaso = Math.max(0, robada - this.robadaPrevia[i]);
+      if (robadaPaso > 0) {
+        const antes = Math.max(1, masa - robadaPaso);
+        r += BONUS_CAZA * (Math.sqrt(masa) - Math.sqrt(antes));
+        this.stats.masaRobada += robadaPaso;
+      }
+      this.robadaPrevia[i] = robada;
+
       const kills = p ? (p.kills || 0) : this.killsPrevias[i];
       if (kills > this.killsPrevias[i]) {
-        r += 0.5 * (kills - this.killsPrevias[i]);
+        r += BONUS_KILL * (kills - this.killsPrevias[i]);
         this.stats.killsTotales += kills - this.killsPrevias[i];
       }
       this.killsPrevias[i] = kills;
@@ -326,6 +360,7 @@ export class EntornoVectorial {
       this.pasos[i] = Math.floor(this.rngCurriculo() * MAX_PASOS);
       this.picoEpisodio[i] = 0;
       this.killsPrevias[i] = 0;
+      this.robadaPrevia[i] = 0;
     }
     arena.syncBots();
     this.arenas[a] = arena;
@@ -371,7 +406,7 @@ export class EntornoVectorial {
     this.stats = {
       episodios: 0, muertes: 0, porTiempo: 0, masaFinalSuma: 0,
       masaPico: 0, pasosSuma: 0, killsTotales: 0,
-      divisiones: 0, divisionesLegales: 0, picoEpisodioSuma: 0,
+      divisiones: 0, divisionesLegales: 0, picoEpisodioSuma: 0, masaRobada: 0,
       crecimientoSuma: 0, episodiosChicos: 0, picoChicosSuma: 0,
       episodiosDivisibles: 0, reciclajes: 0, ticks: 0,
     };

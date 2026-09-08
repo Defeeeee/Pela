@@ -35,8 +35,18 @@ for patron in "entrenamiento/aprendiz.py" "entrenamiento/actor.js"; do
 done
 
 if [ "$LIMPIAR" = "1" ]; then
-  echo "[arrancar] borrando métricas y checkpoint anteriores"
-  rm -f entrenamiento/estado/metricas.jsonl entrenamiento/estado/politica.pt
+  # Nunca se borra una política: se archiva. Cambiar la recompensa obliga a
+  # empezar de cero, pero la política vieja sigue siendo la mejor jugadora que
+  # existe para el objetivo con el que fue entrenada, y sirve de rival de
+  # referencia. Ya se perdió una así.
+  if [ -f entrenamiento/estado/politica.pt ]; then
+    DEST="entrenamiento/versiones/auto-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$DEST"
+    mv entrenamiento/estado/politica.pt "$DEST/politica.pt"
+    [ -f entrenamiento/estado/metricas.jsonl ] && mv entrenamiento/estado/metricas.jsonl "$DEST/metricas.jsonl"
+    echo "[arrancar] política anterior archivada en $DEST"
+  fi
+  rm -f entrenamiento/estado/metricas.jsonl
 fi
 
 nohup "$PY" entrenamiento/aprendiz.py \

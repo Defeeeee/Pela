@@ -206,6 +206,7 @@ export class Arena {
       isBot: false,
       playerId,
       kills: 0,
+      masaRobada: 0,
       joinedAt: Date.now(),
       // Mejor masa de la sesión. La lleva el servidor porque el servidor es
       // quien simula: es el único récord del sitio que no hace falta creerle
@@ -372,6 +373,7 @@ export class Arena {
       alive: true,
       isBot: true,
       kills: 0,
+      masaRobada: 0,
       joinedAt: Date.now(),
       maxMass: mass,
       botChangeTargetAt: 0,
@@ -594,6 +596,11 @@ export class Arena {
 
             ca.mass += cb.mass;
             ca.radius = radiusForMass(ca.mass);
+            // Masa arrebatada a otros jugadores, acumulada aparte de la que
+            // viene de las palas. Para el juego es una curiosidad; para el
+            // entrenamiento es la diferencia entre premiar cazar y premiar
+            // juntar, que son dos formas muy distintas de crecer.
+            a.masaRobada = (a.masaRobada || 0) + cb.mass;
             b.cells.splice(j, 1);
             j--;
 
