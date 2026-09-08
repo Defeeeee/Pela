@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrenamiento de los pelados</title>
+<style>
+  :root {
+    --oro: #ffeb3b;
+    --verde: #7ee787;
+    --rojo: #ff7b72;
+    --azul: #79c0ff;
+    --violeta: #d2a8ff;
+    --texto: #e6edf3;
+    --tenue: #8b949e;
+    --borde: rgba(255,255,255,0.09);
+    --panel: #12161c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 18px;
+    background: #0a0d11;
+    background-image: radial-gradient(circle at 50% -10%, #1a1a00 0%, #0a0d11 55%);
+    color: var(--texto);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  h1 { font-size: 1.25rem; margin: 0; color: var(--oro); letter-spacing: .3px; }
+  .estado { font-size: .78rem; color: var(--tenue); }
+  .vivo { color: var(--verde); }
+  .frio { color: var(--rojo); }
+
+  .seccion { margin: 22px 0 10px; font-size: .7rem; letter-spacing: .16em;
+             text-transform: uppercase; color: var(--tenue);
+             border-bottom: 1px solid var(--borde); padding-bottom: 6px; }
+
+  .grilla { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); }
+  .caja { background: var(--panel); border: 1px solid var(--borde); border-radius: 9px; padding: 11px 12px; }
+  .caja .k { font-size: .68rem; color: var(--tenue); display: block; margin-bottom: 4px;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .caja .v { font-size: 1.24rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .caja .u { font-size: .68rem; color: var(--tenue); margin-left: 3px; font-weight: 400; }
+  .caja .d { font-size: .66rem; color: var(--tenue); margin-top: 3px; }
+
+  .barra { height: 5px; border-radius: 3px; background: rgba(255,255,255,.08); margin-top: 7px; overflow: hidden; }
+  .barra i { display: block; height: 100%; border-radius: 3px; }
+
+  .graficas { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); }
+  .graf { background: var(--panel); border: 1px solid var(--borde); border-radius: 9px; padding: 11px 12px 6px; }
+  .graf h3 { margin: 0 0 2px; font-size: .74rem; font-weight: 600; color: var(--texto); }
+  .graf .sub { font-size: .66rem; color: var(--tenue); margin-bottom: 6px; }
+  svg { display: block; width: 100%; height: 108px; overflow: visible; }
+
+  .acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .acciones { grid-template-columns: 1fr; } }
+  .rosa { display: block; margin: 0 auto; }
+  .leyenda { font-size: .68rem; color: var(--tenue); text-align: center; margin-top: 4px; }
+  .vacio { color: var(--tenue); font-size: .82rem; padding: 30px 0; text-align: center; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🧠 Entrenamiento de los pelados</h1>
+  <span class="estado" id="estado">conectando…</span>
+</header>
+
+<div class="seccion">En vivo · el mejor de todos</div>
+<div class="graf" style="padding:11px 12px 12px">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap">
+    <h3 style="margin:0">🔭 Arena del agente más grande</h3>
+    <span class="sub" id="espInfo" style="margin:0">esperando volcado…</span>
+  </div>
+  <canvas id="arena" style="width:100%;max-width:100%;display:block;margin-top:8px;
+    border-radius:8px;background:#080a0d;border:1px solid var(--borde)"></canvas>
+  <div class="leyenda" id="espLeyenda"></div>
+</div>
+
+<div id="contenido"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (n, d = 0) =>
+  n === undefined || n === null || Number.isNaN(n) ? "—"
+  : Number(n).toLocaleString("es-AR", { minimumFractionDigits: d, maximumFractionDigits: d });
+
+function duracion(s) {
+  s = Math.round(s || 0);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+}
+
+/** Caja de un número, con barra opcional (0..1) y detalle abajo. */
+function caja(k, v, u = "", d = "", frac = null, color = "var(--oro)") {
+  const barra = frac === null ? "" :
+    `<div class="barra"><i style="width:${Math.min(100, Math.max(0, frac * 100))}%;background:${color}"></i></div>`;
+  return `<div class="caja"><span class="k" title="${k}">${k}</span>
+    <span class="v" style="color:${color}">${v}<span class="u">${u}</span></span>
+    ${barra}${d ? `<div class="d">${d}</div>` : ""}</div>`;
+}
+
+/** Gráfica de línea con relleno, escala automática y último valor marcado. */
+function linea(datos, color, opciones = {}) {
+  const W = 300, H = 100, P = 2;
+  if (!datos.length) return `<svg viewBox="0 0 ${W} ${H}"></svg>`;
+  let min = Math.min(...datos), max = Math.max(...datos);
+  if (opciones.desdeCero) min = Math.min(0, min);
+  if (max - min < 1e-9) { max += 1; min -= 1; }
+  const x = (i) => P + (i / Math.max(1, datos.length - 1)) * (W - 2 * P);
+  const y = (v) => H - P - ((v - min) / (max - min)) * (H - 2 * P);
+  const pts = datos.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const cero = min <= 0 && max >= 0
+    ? `<line x1="0" x2="${W}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}"
+             stroke="rgba(255,255,255,.14)" stroke-dasharray="3 3"/>` : "";
+  const ult = datos[datos.length - 1];
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    ${cero}
+    <polyline points="${pts} ${x(datos.length - 1).toFixed(1)},${H} ${P},${H}"
+      fill="${color}" opacity=".10" stroke="none"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.6"
+      stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+    <circle cx="${x(datos.length - 1).toFixed(1)}" cy="${y(ult).toFixed(1)}" r="2.4" fill="${color}"/>
+  </svg>`;
+}
+
+function graf(titulo, datos, color, sub = "", opciones = {}) {
+  const ult = datos.length ? datos[datos.length - 1] : null;
+  const dec = opciones.dec ?? 2;
+  return `<div class="graf"><h3>${titulo}</h3>
+    <div class="sub">${sub || (ult !== null ? "ahora: " + fmt(ult, dec) : "")}</div>
+    ${linea(datos, color, opciones)}</div>`;
+}
+
+/**
+ * Rosa de acciones: los 16 rumbos alrededor del centro. El anillo interior es
+ * moverse y el exterior moverse dividiéndose, así se ve de un vistazo si la
+ * política aprendió a preferir una dirección y cuánto se está dividiendo.
+ */
+function rosaAcciones(dist) {
+  if (!dist || dist.length < 33) return "";
+  const R = 62, C = 78;
+  const mover = dist.slice(1, 17), dividir = dist.slice(17, 33);
+  const maxV = Math.max(...mover, ...dividir, 1e-6);
+  let svg = `<svg class="rosa" viewBox="0 0 ${C * 2} ${C * 2}" style="height:156px;width:156px">`;
+  svg += `<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="rgba(255,255,255,.08)"/>`;
+  svg += `<circle cx="${C}" cy="${C}" r="${R / 2}" fill="none" stroke="rgba(255,255,255,.05)"/>`;
+  for (let i = 0; i < 16; i++) {
+    const a0 = (i / 16) * Math.PI * 2 - Math.PI / 16;
+    const a1 = ((i + 1) / 16) * Math.PI * 2 - Math.PI / 16;
+    for (const [vals, color, r0] of [[mover, "#79c0ff", 0], [dividir, "#ffeb3b", R * 0.55]]) {
+      const largo = (vals[i] / maxV) * (R * 0.45);
+      const ri = r0 + (r0 ? 2 : 0), ro = ri + largo;
+      if (largo < 0.4) continue;
+      const p = (r, a) => `${(C + Math.cos(a) * r).toFixed(1)},${(C + Math.sin(a) * r).toFixed(1)}`;
+      svg += `<path d="M ${p(ri, a0)} L ${p(ro, a0)} A ${ro} ${ro} 0 0 1 ${p(ro, a1)} L ${p(ri, a1)} Z"
+                fill="${color}" opacity=".8"/>`;
+    }
+  }
+  const quieto = dist[0];
+  svg += `<circle cx="${C}" cy="${C}" r="${(4 + quieto * 40).toFixed(1)}" fill="#ff7b72" opacity=".7"/>`;
+  svg += `</svg>`;
+  const totalSplit = dividir.reduce((a, b) => a + b, 0);
+  return `<div class="graf"><h3>Rosa de acciones</h3>
+    <div class="sub">azul: moverse · amarillo: moverse y dividirse · rojo: quieto</div>
+    ${svg}
+    <div class="leyenda">dividirse ${fmt(totalSplit * 100, 1)}% · quieto ${fmt(quieto * 100, 1)}%</div>
+  </div>`;
+}
+
+let ultimoPaso = -1, ultimoCambio = Date.now();
+
+async function refrescar() {
+  let d;
+  try {
+    d = await (await fetch("/metricas?n=400", { cache: "no-store" })).json();
+  } catch (e) {
+    $("estado").innerHTML = `<span class="frio">sin conexión con el panel</span>`;
+    return;
+  }
+
+  const f = d.filas;
+  if (!f.length) {
+    $("estado").innerHTML = `<span class="frio">sin métricas todavía</span>`;
+    $("contenido").innerHTML = `<div class="vacio">El aprendiz todavía no escribió nada en
+      <code>${d.archivo}</code>.<br>Arrancá el entrenamiento y esto se puebla solo.</div>`;
+    return;
+  }
+
+  const m = f[f.length - 1];
+  const col = (k) => f.map((x) => x[k] ?? 0);
+
+  if (m.paso !== ultimoPaso) { ultimoPaso = m.paso; ultimoCambio = Date.now(); }
+  const quieto = (Date.now() - ultimoCambio) / 1000;
+  $("estado").innerHTML = quieto < 25
+    ? `<span class="vivo">● entrenando</span> · paso ${fmt(m.paso)} · ${duracion(m.tiempo)} en marcha`
+    : `<span class="frio">● detenido hace ${duracion(quieto)}</span> · último paso ${fmt(m.paso)}`;
+
+  const entMax = m.entropiaMax || Math.log(33);
+  const explora = m.entropia / entMax;
+
+  const html = `
+  <div class="seccion">Rendimiento</div>
+  <div class="grilla">
+    ${caja("Transiciones por segundo", fmt(m.transicionesPorSeg), "", "experiencia que genera")}
+    ${caja("Veces el tiempo real", fmt(m.vecesTiempoReal), "x", `${fmt(m.segSimuladosPorSeg,0)}s de juego por segundo`)}
+    ${caja("Ticks de arena / s", fmt(m.ticksPorSeg))}
+    ${caja("Transiciones totales", fmt(m.transicionesTotales), "", duracion(m.tiempo) + " de entrenamiento")}
+    ${caja("Simulando", fmt(m.fraccionSimulando * 100, 0), "%", "del tiempo de reloj", m.fraccionSimulando, "var(--azul)")}
+    ${caja("Aprendiendo", fmt(m.fraccionAprendiendo * 100, 0), "%", "backprop en la GPU", m.fraccionAprendiendo, "var(--violeta)")}
+    ${caja("Agentes en paralelo", fmt(m.agentes), "", `${m.workers} actores x ${m.arenasPorWorker} arenas`)}
+    ${caja("Lote por actualización", fmt(m.loteRollout), "", "transiciones")}
+  </div>
+
+  <div class="seccion">Hardware</div>
+  <div class="grilla">
+    ${caja("GPU", fmt(m.gpuUso, 0), "%", "GTX 1650", m.gpuUso / 100, "var(--verde)")}
+    ${caja("Memoria GPU", fmt(m.gpuMemMB, 0), "MB", `de ${fmt(m.gpuMemTotalMB,0)} MB`, m.gpuMemMB / (m.gpuMemTotalMB || 1), "var(--verde)")}
+    ${caja("Temperatura GPU", fmt(m.gpuTemp, 0), "°C")}
+    ${caja("CPU", fmt((m.cargaCPU / (m.cores || 8)) * 100, 0), "%", `carga ${fmt(m.cargaCPU,2)} sobre ${m.cores} cores`, m.cargaCPU / (m.cores || 8), "var(--azul)")}
+  </div>
+
+  <div class="seccion">Cómo juegan</div>
+  <div class="grilla">
+    ${caja("Masa pico por vida", fmt(m.masaPicoMediaEpisodio, 1), "", "promedio de lo más grande que llegó")}
+    ${caja("Récord absoluto", fmt(m.masaPicoGlobal, 0), "", "mejor masa vista")}
+    ${caja("Supervivencia", fmt(m.supervivenciaSeg, 1), "s", "de juego por vida")}
+    ${caja("Mueren", fmt(m.tasaMuerte * 100, 0), "%", "el resto llega al límite de tiempo", m.tasaMuerte, "var(--rojo)")}
+    ${caja("Kills por vida", fmt(m.killsPorEpisodio, 3), "", "pelados que se comió")}
+    ${caja("Divisiones por vida", fmt(m.divisionesPorEpisodio, 2), "", `${fmt(m.divisionesEfectivas*100,0)}% efectivas`)}
+    ${caja("Vidas jugadas", fmt(m.episodios), "", `${fmt(m.episodiosPorSeg,1)} por segundo`)}
+    ${caja("Arenas recicladas", fmt(m.reciclajes || 0), "", "para que los bots no engorden sin freno")}
+  </div>
+
+  <div class="seccion">Aprendizaje</div>
+  <div class="grilla">
+    ${caja("Retorno medio", fmt(m.retornoMedio, 2), "", "recompensa por vida completa",
+           null, m.retornoMedio >= 0 ? "var(--verde)" : "var(--rojo)")}
+    ${caja("Recompensa por paso", fmt(m.recompensaPorPaso, 4))}
+    ${caja("Exploración", fmt(explora * 100, 0), "%", `entropía ${fmt(m.entropia,2)} de ${fmt(entMax,2)}`, explora, "var(--violeta)")}
+    ${caja("Varianza explicada", fmt(m.varianzaExplicada * 100, 0), "%", "qué tan bien predice el valor",
+           Math.max(0, m.varianzaExplicada), "var(--azul)")}
+    ${caja("Pérdida de política", fmt(m.perdidaPolitica, 5))}
+    ${caja("Pérdida de valor", fmt(m.perdidaValor, 3))}
+    ${caja("KL aproximada", fmt(m.klAprox, 5), "", "cuánto cambió la política")}
+    ${caja("Fracción recortada", fmt(m.fraccionRecortada * 100, 1), "%", "pasos que tocaron el límite de PPO")}
+  </div>
+
+  <div class="seccion">Curvas</div>
+  <div class="graficas">
+    ${graf("Retorno por vida", col("retornoMedio"), "var(--oro)", "", { dec: 2 })}
+    ${graf("Masa pico por vida", col("masaPicoMediaEpisodio"), "var(--verde)", "", { dec: 1, desdeCero: true })}
+    ${graf("Récord absoluto", col("masaPicoGlobal"), "var(--verde)", "", { dec: 0, desdeCero: true })}
+    ${graf("Supervivencia (s)", col("supervivenciaSeg"), "var(--azul)", "", { dec: 1, desdeCero: true })}
+    ${graf("Tasa de muerte", col("tasaMuerte"), "var(--rojo)", "", { dec: 2, desdeCero: true })}
+    ${graf("Kills por vida", col("killsPorEpisodio"), "var(--rojo)", "", { dec: 3, desdeCero: true })}
+    ${graf("Divisiones por vida", col("divisionesPorEpisodio"), "var(--oro)", "", { dec: 2, desdeCero: true })}
+    ${graf("Exploración (entropía)", col("entropia"), "var(--violeta)", "", { dec: 3 })}
+    ${graf("Varianza explicada", col("varianzaExplicada"), "var(--azul)", "", { dec: 3 })}
+    ${graf("Pérdida de valor", col("perdidaValor"), "var(--violeta)", "", { dec: 3, desdeCero: true })}
+    ${graf("Transiciones / s", col("transicionesPorSeg"), "var(--azul)", "", { dec: 0, desdeCero: true })}
+    ${graf("GPU (%)", col("gpuUso"), "var(--verde)", "", { dec: 0, desdeCero: true })}
+  </div>
+
+  <div class="seccion">Qué está eligiendo</div>
+  <div class="acciones">
+    ${rosaAcciones(m.distribucionAcciones)}
+    ${graf("Fracción de acciones de división", f.map((x) =>
+        (x.distribucionAcciones || []).slice(17).reduce((a, b) => a + b, 0)),
+        "var(--oro)", "", { dec: 3, desdeCero: true })}
+  </div>`;
+
+  $("contenido").innerHTML = html;
+}
+
+/* ── Espectador ──────────────────────────────────────────────────────────
+   Se dibuja la arena entera y no una cámara que sigue al agente: con 12
+   jugadores en 4000x4000 lo interesante es ver las posiciones relativas —
+   quién arrincona a quién, si el grande caza o junta palas— y una cámara
+   pegada al protagonista lo esconde. La estrella va marcada. */
+const lienzo = $("arena");
+const ctx = lienzo.getContext("2d");
+let ultimoTs = 0;
+
+function ajustarLienzo() {
+  const ancho = lienzo.clientWidth || 600;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  lienzo.style.height = Math.round(ancho * 0.56) + "px";
+  lienzo.width = Math.round(ancho * dpr);
+  lienzo.height = Math.round(ancho * 0.56 * dpr);
+  return dpr;
+}
+
+async function refrescarEspectador() {
+  let e;
+  try {
+    e = await (await fetch("/espectador", { cache: "no-store" })).json();
+  } catch (err) { return; }
+
+  if (e.vacio || !e.jugadores) {
+    $("espInfo").textContent = "sin volcado todavía";
+    return;
+  }
+
+  ajustarLienzo();
+  const W = lienzo.width, H = lienzo.height;
+  const [MW, MH] = e.mundo;
+  // El mundo es cuadrado y el lienzo apaisado: se encaja centrado.
+  const esc = Math.min(W / MW, H / MH);
+  const ox = (W - MW * esc) / 2, oy = (H - MH * esc) / 2;
+  const X = (x) => ox + x * esc, Y = (y) => oy + y * esc;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#0b0e12";
+  ctx.fillRect(ox, oy, MW * esc, MH * esc);
+  ctx.strokeStyle = "rgba(255,255,255,.08)";
+  ctx.strokeRect(ox, oy, MW * esc, MH * esc);
+
+  ctx.fillStyle = "rgba(255,235,59,.42)";
+  for (const [x, y] of e.palas) {
+    ctx.fillRect(X(x) - 1, Y(y) - 1, 2.2, 2.2);
+  }
+
+  const ordenados = [...e.jugadores].sort((a, b) => a.masa - b.masa);
+  for (const j of ordenados) {
+    for (const [cx, cy, r] of j.celulas) {
+      const rr = Math.max(2, r * esc);
+      ctx.beginPath();
+      ctx.arc(X(cx), Y(cy), rr, 0, Math.PI * 2);
+      ctx.fillStyle = j.esEstrella ? "rgba(126,231,135,.85)"
+                    : j.esAgente ? "rgba(121,192,255,.6)"
+                    : "rgba(255,123,114,.42)";
+      ctx.fill();
+      if (j.esEstrella) {
+        ctx.strokeStyle = "#7ee787";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+    }
+    if (j.esEstrella && j.celulas.length) {
+      const [cx, cy, r] = j.celulas[0];
+      ctx.fillStyle = "#7ee787";
+      ctx.font = `${Math.max(11, 12 * (window.devicePixelRatio || 1))}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.fillText(`${j.masa}`, X(cx), Y(cy) - Math.max(2, r * esc) - 5);
+    }
+  }
+
+  const agentes = e.jugadores.filter((j) => j.esAgente).length;
+  const bots = e.jugadores.length - agentes;
+  const fresco = Date.now() - e.ts < 4000;
+  $("espInfo").innerHTML = fresco
+    ? `<span class="vivo">● en vivo</span> · masa ${fmt(e.mejorMasa)} · ${e.fuente || ""}`
+    : `<span class="frio">● congelado</span> · último volcado hace ${duracion((Date.now()-e.ts)/1000)}`;
+  $("espLeyenda").textContent =
+    `verde: el más grande · azul: otros ${agentes - 1} que aprenden · rojo: ${bots} bots heurísticos`
+    + (e.cambio ? " · acaba de cambiar de protagonista"
+               : e.faltaEnfriar ? ` · próximo cambio en ${Math.ceil(e.faltaEnfriar/1000)}s` : "");
+  ultimoTs = e.ts;
+}
+
+refrescar();
+setInterval(refrescar, 2000);
+refrescarEspectador();
+setInterval(refrescarEspectador, 450);
+window.addEventListener("resize", refrescarEspectador);
+</script>
+</body>
+</html>

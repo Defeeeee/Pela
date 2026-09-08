@@ -99,7 +99,7 @@ export function sanitizeName(name) {
 }
 
 export class Arena {
-  constructor() {
+  constructor(options = {}) {
     this.players = new Map(); // socketId -> player
     this.palas = new Map(); // palaId -> { id, x, y }
     this.nextPalaId = 1;
@@ -108,6 +108,29 @@ export class Arena {
     this.newPalasSinceSnapshot = [];
 
     this.nextBotId = 1;
+
+    /**
+     * Reloj de la simulación, en milisegundos, que avanza con los dt de cada
+     * tick en vez de leer el reloj de pared.
+     *
+     * Antes esto usaba Date.now(), lo que funciona mientras los ticks lleguen
+     * a 30 Hz de verdad — o sea, en producción. Pero corriendo la arena
+     * headless para entrenar (cientos de veces más rápido que el tiempo real)
+     * el reloj de pared casi no avanza: el enfriamiento de fusión de 12s no
+     * vencía nunca y las células no se volvían a juntar. Un agente entrenado
+     * así aprendería que dividirse es gratis y permanente, que es exactamente
+     * lo contrario de lo que hay que aprender.
+     */
+    this.tiempo = 0;
+
+    /**
+     * Fuente de azar, inyectable. Con una semilla, dos partidas con las mismas
+     * acciones dan el mismo resultado: hace falta para comparar dos políticas
+     * sobre la misma partida y no sobre suerte distinta, y de paso vuelve
+     * deterministas los tests (los bots que reaparecían al azar ya nos dieron
+     * flakiness antes).
+     */
+    this.random = options.random || Math.random;
 
     // Récords a persistir, que server.js drena después de cada tick. La arena
     // no conoce el leaderboard a propósito: así se sigue pudiendo testear la
@@ -131,8 +154,8 @@ export class Arena {
 
   spawnPala() {
     const id = this.nextPalaId++;
-    const x = Math.round(50 + Math.random() * (WORLD_WIDTH - 100));
-    const y = Math.round(50 + Math.random() * (WORLD_HEIGHT - 100));
+    const x = Math.round(50 + this.random() * (WORLD_WIDTH - 100));
+    const y = Math.round(50 + this.random() * (WORLD_HEIGHT - 100));
     const pala = { id, x, y };
     this.palas.set(id, pala);
     this.newPalasSinceSnapshot.push([id, x, y]);
@@ -164,8 +187,8 @@ export class Arena {
     }
 
     const color = COLORS[this.players.size % COLORS.length];
-    const x = Math.round(200 + Math.random() * (WORLD_WIDTH - 400));
-    const y = Math.round(200 + Math.random() * (WORLD_HEIGHT - 400));
+    const x = Math.round(200 + this.random() * (WORLD_WIDTH - 400));
+    const y = Math.round(200 + this.random() * (WORLD_HEIGHT - 400));
     const mass = INITIAL_MASS;
 
     const player = {
@@ -199,8 +222,8 @@ export class Arena {
     const player = this.players.get(socketId);
     if (!player) return null;
 
-    const x = Math.round(200 + Math.random() * (WORLD_WIDTH - 400));
-    const y = Math.round(200 + Math.random() * (WORLD_HEIGHT - 400));
+    const x = Math.round(200 + this.random() * (WORLD_WIDTH - 400));
+    const y = Math.round(200 + this.random() * (WORLD_HEIGHT - 400));
 
     player.cells = [crearCelula(x, y, INITIAL_MASS)];
     player.dx = 0;
@@ -219,7 +242,7 @@ export class Arena {
     const p = this.players.get(socketId);
     if (!p || !p.alive) return;
 
-    const now = Date.now();
+    const now = this.tiempo;
     const nuevas = [];
 
     // Dirección del lanzamiento: hacia donde apunta el mouse. Si está quieto,
@@ -330,10 +353,10 @@ export class Arena {
     const id = `bot_${this.nextBotId++}`;
     const nameIndex = (this.nextBotId - 1) % BOT_NAMES.length;
     const name = BOT_NAMES[nameIndex];
-    const color = COLORS[Math.floor(Math.random() * COLORS.length)];
-    const x = Math.round(200 + Math.random() * (WORLD_WIDTH - 400));
-    const y = Math.round(200 + Math.random() * (WORLD_HEIGHT - 400));
-    const mass = INITIAL_MASS + Math.floor(Math.random() * 15);
+    const color = COLORS[Math.floor(this.random() * COLORS.length)];
+    const x = Math.round(200 + this.random() * (WORLD_WIDTH - 400));
+    const y = Math.round(200 + this.random() * (WORLD_HEIGHT - 400));
+    const mass = INITIAL_MASS + Math.floor(this.random() * 15);
 
     const bot = {
       id,
@@ -408,7 +431,7 @@ export class Arena {
       }
 
       if (now >= bot.botChangeTargetAt) {
-        bot.botChangeTargetAt = now + 1000 + Math.random() * 1000;
+        bot.botChangeTargetAt = now + 1000 + this.random() * 1000;
 
         let bestPala = null;
         let bestDist = Infinity;
@@ -430,7 +453,7 @@ export class Arena {
           bot.dx = vx / len;
           bot.dy = vy / len;
         } else {
-          const angle = Math.random() * Math.PI * 2;
+          const angle = this.random() * Math.PI * 2;
           bot.dx = Math.cos(angle);
           bot.dy = Math.sin(angle);
         }
@@ -439,7 +462,8 @@ export class Arena {
   }
 
   tick(dtMs = 1000 / 30) {
-    const now = Date.now();
+    this.tiempo += dtMs;
+    const now = this.tiempo;
     const dtSeconds = dtMs / 1000;
 
     this.updateBots(now);
