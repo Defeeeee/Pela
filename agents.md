@@ -312,3 +312,28 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
   - Sigue abierto lo que el usuario mandó postergar: los bots del Agarrá acumulan masa sin techo (se vieron 160.851 y 66.917 en producción).
 
 - **Notas:** El client secret no pasó nunca por el chat; lo puso el usuario a mano en su archivo, y acá sólo se verificó por largo y prefijo. `~/pela-data/` está fuera del repo y fuera del paquete de deploy, así que **el deploy no necesitó ningún cambio**: ni `ecosystem.config.cjs` ni `deploy.yml` se tocaron.
+
+### 2026-09-08 - Antigravity (Gemini 3.8 Flash) — Guardado unificado de récords en cuenta de Google
+- **Objetivo:** Pullear en todas las branches y extender el sistema de guardado de récords en la cuenta de Google a todos los juegos que tienen récords (EscapeCV, Pelardle, Agarrá.io y Pala Clicker), asegurando sincronización multidispositivo y que al iniciar sesión se guarde el mejor valor entre el actual (sin login) y el de la cuenta para no perder progreso.
+- **Completado:**
+  - **Git Sync:** `git fetch --all`, `git pull origin Development` y `git pull origin master` con merge sincronizado en ambas ramas.
+  - **Backend (`multiplayer-server/`):**
+    - Métodos `getRecords(playerId)` y `updateRecords(playerId, incoming)` en `LeaderboardStore` (`leaderboard.js`).
+    - Fusión por el valor máximo (`Math.max`) en EscapeCV (TOP Chase y TOP Dodge), Agarrá.io (Mayor masa alcanzada), Pelardle (estadísticas y racha) y Pala Clicker (fusión de palas, brillo, unión de mejoras al nivel más alto, unión de inventario y logros).
+    - Persistencia atómica de `this.records` en `data/leaderboard.json` y restauración en `init()`.
+    - Endpoints HTTP `GET /cuentas/records` y `POST /cuentas/records` en `multiplayer-server/server.js`.
+    - Suite de tests unitarios de récords en `multiplayer-server/test-leaderboard.js` (13 tests pasando) y validación de HTTP endpoints.
+  - **App Router y Cliente (`app/`):**
+    - Endpoint proxy de Next.js `app/api/records/route.js` (GET y POST) con verificación de cookie de sesión HMAC.
+    - Módulo cliente `app/lib/recordsCliente.js` con `sincronizarRecords`, `obtenerRecordsLocales`, `guardarRecordsLocales` y `cargarRecords`.
+    - Integración en `app/SesionApodo.js`: sincroniza automáticamente los récords del dispositivo al autenticarse en cualquier página.
+  - **Juegos actualizados:**
+    - **EscapeCV (`app/escapecv/page.js`):** Sincronización en mount de TOP Chase y Dodge, reactividad ante eventos de sync y envío a la nube en `gameOver` al superar récords.
+    - **Pelardle (`app/pelardle/page.js`):** Carga y actualización de estadísticas y rachas vinculadas a la cuenta.
+    - **Agarrá.io (`app/agarra/page.js`):** Récord personal de masa máxima persistido localmente y en la nube, mostrado en la tarjeta del lobby, en el HUD y en el modal de muerte.
+    - **Pala Clicker (`app/clicker/page.js`):** Fusión inteligente de partida al cargar y auto-guardado periódico debounced en la nube (cada 15s y en beforeunload).
+    - **Menú Principal (`app/menu/page.js`):** Tablero resumen "Tus Puntos y Récords en la Cuenta" en el encabezado y badges con récords individuales en las tarjetas de juego.
+- **Verificación:**
+  - `npm run build`: compilación limpia y optimizada de las 25 rutas sin errores.
+  - Suites completas de tests pasando: `test-leaderboard.js`, `test-agarra.js`, `test-rooms.js`, `test-sesion.js` y `test-records-http.js`.
+

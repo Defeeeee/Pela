@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { quienSoy } from "./lib/sesionCliente";
+import { sincronizarRecords } from "./lib/recordsCliente";
 
 const CLAVE_NOMBRE = "pela_player_name";
 const CLAVE_STATS = "pelardle_stats_v1";
@@ -35,6 +36,8 @@ export default function SesionApodo() {
       const yo = await quienSoy();
       if (!vivo || !yo.autenticado) return;
 
+      // Sincronizar todos los récords de todos los juegos con la cuenta
+      await sincronizarRecords();
       await migrarProgreso();
       if (!vivo) return;
 

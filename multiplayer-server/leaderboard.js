@@ -30,6 +30,7 @@ export class LeaderboardStore {
     // historial sería circular, ya que el historial es justo lo que el cliente
     // puede intentar pisar.
     this.apodos = {};
+    this.records = {}; // playerId -> { escapecv, agarra, clicker, updatedAt }
     this.inProgress = new Map(); // `${puzzle}_${playerId}` -> { attemptsCount, guesses, solved, finished }
 
     this.saveTimeout = null;
@@ -52,6 +53,7 @@ export class LeaderboardStore {
             this.history = parsed.history || {};
             this.cuentas = parsed.cuentas || {};
             this.apodos = parsed.apodos || {};
+            this.records = parsed.records || {};
           }
         } catch (parseErr) {
           console.error("[leaderboard] Archivo JSON corrupto. Creando respaldo y reiniciando...", parseErr);
@@ -65,6 +67,7 @@ export class LeaderboardStore {
           this.history = {};
           this.cuentas = {};
           this.apodos = {};
+          this.records = {};
         }
       }
     } catch (err) {
@@ -133,6 +136,7 @@ export class LeaderboardStore {
         history: this.history,
         cuentas: this.cuentas,
         apodos: this.apodos,
+        records: this.records,
       });
 
       const tempFile = `${this.filePath}.tmp.${Date.now()}`;
@@ -562,6 +566,164 @@ export class LeaderboardStore {
       puzzle: pz,
       daily,
       history,
+    };
+  }
+
+  /**
+   * Obtiene los récords y estadísticas unificadas de un jugador para todos los juegos.
+   */
+  getRecords(playerId) {
+    if (!playerId) return null;
+    const pId = String(playerId);
+    const rec = this.records[pId] || {};
+    const h = this.history[pId] || {};
+
+    return {
+      escapecv: {
+        chase: Number(rec.escapecv?.chase) || 0,
+        dodge: Number(rec.escapecv?.dodge) || 0,
+      },
+      agarra: {
+        maxMass: Number(rec.agarra?.maxMass) || 0,
+      },
+      pelardle: {
+        played: Number(h.gamesPlayed) || 0,
+        wins: Number(h.gamesWon) || 0,
+        currentStreak: Number(h.currentStreak) || 0,
+        maxStreak: Number(h.maxStreak) || 0,
+        lastPuzzle: h.lastPuzzle !== null && h.lastPuzzle !== undefined ? Number(h.lastPuzzle) : null,
+      },
+      clicker: rec.clicker || null,
+      updatedAt: rec.updatedAt || null,
+    };
+  }
+
+  /**
+   * Sincroniza y fusiona récords recibidos con los que ya tiene la cuenta.
+   * Regla de oro: Se conserva SIEMPRE el mejor valor (máximo) entre el actual
+   * del dispositivo y el guardado en la sesión, para que nadie pierda progreso.
+   */
+  updateRecords(playerId, incoming) {
+    if (!playerId) return { error: "Falta playerId" };
+    const pId = String(playerId);
+
+    if (!this.records[pId]) {
+      this.records[pId] = {};
+    }
+    const current = this.records[pId];
+
+    // 1. EscapeCV: se guarda el mejor (máximo) puntaje en cada modo
+    if (incoming?.escapecv) {
+      const incomingChase = Number(incoming.escapecv.chase) || 0;
+      const incomingDodge = Number(incoming.escapecv.dodge) || 0;
+      const currentChase = Number(current.escapecv?.chase) || 0;
+      const currentDodge = Number(current.escapecv?.dodge) || 0;
+
+      current.escapecv = {
+        chase: Math.max(currentChase, incomingChase),
+        dodge: Math.max(currentDodge, incomingDodge),
+      };
+    }
+
+    // 2. Agarrá.io: se guarda la mayor masa alcanzada
+    if (incoming?.agarra) {
+      const incomingMass = Number(incoming.agarra.maxMass) || 0;
+      const currentMass = Number(current.agarra?.maxMass) || 0;
+
+      current.agarra = {
+        maxMass: Math.max(currentMass, incomingMass),
+      };
+    }
+
+    // 3. Pelardle: se sincroniza con this.history[pId]
+    if (incoming?.pelardle) {
+      if (!this.history[pId]) {
+        this.history[pId] = {
+          playerId: pId,
+          playerName: this.apodoDe(pId) || null,
+          gamesPlayed: 0,
+          gamesWon: 0,
+          currentStreak: 0,
+          maxStreak: 0,
+          lastPuzzle: null,
+        };
+      }
+      const h = this.history[pId];
+      const inc = incoming.pelardle;
+      h.gamesPlayed = Math.max(h.gamesPlayed || 0, Number(inc.played) || 0);
+      h.gamesWon = Math.max(h.gamesWon || 0, Number(inc.wins) || 0);
+      h.maxStreak = Math.max(h.maxStreak || 0, Number(inc.maxStreak) || 0);
+      if (inc.currentStreak !== undefined || inc.streak !== undefined) {
+        const strk = Number(inc.currentStreak !== undefined ? inc.currentStreak : inc.streak) || 0;
+        h.currentStreak = Math.max(h.currentStreak || 0, strk);
+      }
+      if (inc.lastPuzzle !== null && inc.lastPuzzle !== undefined) {
+        h.lastPuzzle = Math.max(Number(h.lastPuzzle) || 0, Number(inc.lastPuzzle) || 0);
+      }
+    }
+
+    // 4. Pala Clicker: fusión de partida completa sin pérdida de progreso
+    if (incoming?.clicker && typeof incoming.clicker === "object") {
+      const inc = incoming.clicker;
+      const cur = current.clicker;
+
+      if (!cur) {
+        current.clicker = inc;
+      } else {
+        const curBrillo = Number(cur.brillo) || 0;
+        const incBrillo = Number(inc.brillo) || 0;
+        const bestBrillo = Math.max(curBrillo, incBrillo);
+
+        const curPalas = Number(cur.palas) || 0;
+        const incPalas = Number(inc.palas) || 0;
+        const bestPalas = incBrillo > curBrillo ? incPalas : (curBrillo > incBrillo ? curPalas : Math.max(curPalas, incPalas));
+
+        const mergedUpgrades = { ...(cur.upgrades || {}) };
+        for (const [k, v] of Object.entries(inc.upgrades || {})) {
+          mergedUpgrades[k] = Math.max(Number(mergedUpgrades[k]) || 0, Number(v) || 0);
+        }
+
+        const mergedTools = { ...(cur.tools || {}) };
+        for (const [k, v] of Object.entries(inc.tools || {})) {
+          mergedTools[k] = Math.max(Number(mergedTools[k]) || 0, Number(v) || 0);
+        }
+
+        const mergedInventory = { ...(cur.inventory || {}) };
+        for (const [k, v] of Object.entries(inc.inventory || {})) {
+          mergedInventory[k] = Math.max(Number(mergedInventory[k]) || 0, Number(v) || 0);
+        }
+
+        const mergedAchievements = { ...(cur.achievements || {}) };
+        for (const [k, v] of Object.entries(inc.achievements || {})) {
+          if (v) mergedAchievements[k] = true;
+        }
+
+        const mergedPrestigeUpgrades = { ...(cur.prestigeUpgrades || {}) };
+        for (const [k, v] of Object.entries(inc.prestigeUpgrades || {})) {
+          if (v) mergedPrestigeUpgrades[k] = true;
+        }
+
+        current.clicker = {
+          ...cur,
+          ...inc,
+          palas: bestPalas,
+          brillo: bestBrillo,
+          upgrades: mergedUpgrades,
+          tools: mergedTools,
+          inventory: mergedInventory,
+          achievements: mergedAchievements,
+          prestigeUpgrades: mergedPrestigeUpgrades,
+          updatedAt: Date.now(),
+        };
+      }
+    }
+
+    current.updatedAt = Date.now();
+    this.scheduleSave();
+
+    return {
+      ok: true,
+      records: this.getRecords(pId),
     };
   }
 }

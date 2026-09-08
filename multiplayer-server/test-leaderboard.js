@@ -347,9 +347,84 @@ const testDir = path.join(os.tmpdir(), `pela-test-leaderboard-${Date.now()}`);
   fs.rmSync(`${testDir}-rank`, { recursive: true, force: true });
 }
 
+// 13. Récords unificados por cuenta (EscapeCV, Agarrá, Pelardle, Clicker)
+{
+  const store = new LeaderboardStore({ dataDir: `${testDir}-records` });
+  await store.init();
+
+  const pid = "player_records_1";
+
+  // Estado inicial vacío devuelve estructura coherente
+  const inicial = store.getRecords(pid);
+  assert.strictEqual(inicial.escapecv.chase, 0);
+  assert.strictEqual(inicial.escapecv.dodge, 0);
+  assert.strictEqual(inicial.agarra.maxMass, 0);
+  assert.strictEqual(inicial.pelardle.played, 0);
+  assert.strictEqual(inicial.clicker, null);
+
+  // Primera actualización: local anónimo
+  const res1 = store.updateRecords(pid, {
+    escapecv: { chase: 250, dodge: 120 },
+    agarra: { maxMass: 400 },
+    pelardle: { played: 5, wins: 4, maxStreak: 3, currentStreak: 2 },
+    clicker: { palas: 1000, brillo: 0, upgrades: { pala_madera: 2 }, achievements: { primer_click: true } },
+  });
+  assert.strictEqual(res1.ok, true);
+  assert.strictEqual(res1.records.escapecv.chase, 250);
+  assert.strictEqual(res1.records.escapecv.dodge, 120);
+  assert.strictEqual(res1.records.agarra.maxMass, 400);
+  assert.strictEqual(res1.records.pelardle.wins, 4);
+  assert.strictEqual(res1.records.clicker.palas, 1000);
+
+  // Segunda actualización: se inicia sesión desde un dispositivo con menor progreso en unos juegos
+  // y mayor en otros -> gana SIEMPRE el mejor valor (máximo)
+  const res2 = store.updateRecords(pid, {
+    escapecv: { chase: 100, dodge: 300 }, // chase es menor (debe quedar 250), dodge es mayor (debe subir a 300)
+    agarra: { maxMass: 350 }, // menor (debe quedar 400)
+    pelardle: { played: 6, wins: 3, maxStreak: 4 }, // maxStreak sube a 4, wins queda en 4
+    clicker: {
+      palas: 500, // menor palas
+      brillo: 1,  // mayor brillo (prestigio ganado en el otro dispositivo)
+      upgrades: { pala_madera: 1, pala_hierro: 1 }, // debe unir mejoras
+      achievements: { segundo_click: true }, // debe unir logros
+    },
+  });
+
+  assert.strictEqual(res2.records.escapecv.chase, 250, "EscapeCV chase debe conservar el máximo previo");
+  assert.strictEqual(res2.records.escapecv.dodge, 300, "EscapeCV dodge debe actualizarse al nuevo máximo");
+  assert.strictEqual(res2.records.agarra.maxMass, 400, "Agarrá debe conservar la masa máxima alcanzada");
+  assert.strictEqual(res2.records.pelardle.wins, 4, "Pelardle debe conservar el máximo de victorias");
+  assert.strictEqual(res2.records.pelardle.maxStreak, 4, "Pelardle debe tomar la mayor racha");
+  assert.strictEqual(res2.records.clicker.brillo, 1, "Clicker debe tomar el mayor brillo");
+  assert.strictEqual(res2.records.clicker.upgrades.pala_madera, 2, "Clicker debe conservar nivel 2 de madera");
+  assert.strictEqual(res2.records.clicker.upgrades.pala_hierro, 1, "Clicker debe incluir nivel 1 de hierro");
+  assert.strictEqual(res2.records.clicker.achievements.primer_click, true, "Clicker conserva primer logro");
+  assert.strictEqual(res2.records.clicker.achievements.segundo_click, true, "Clicker incluye segundo logro");
+
+  // Forzar guardado a disco y reiniciar store desde disco
+  await store.flushToDisk();
+
+  const storeReiniciado = new LeaderboardStore({ dataDir: `${testDir}-records` });
+  await storeReiniciado.init();
+  const desdeDisco = storeReiniciado.getRecords(pid);
+
+  assert.strictEqual(desdeDisco.escapecv.chase, 250, "Persistencia en disco de EscapeCV");
+  assert.strictEqual(desdeDisco.escapecv.dodge, 300);
+  assert.strictEqual(desdeDisco.agarra.maxMass, 400, "Persistencia en disco de Agarrá");
+  assert.strictEqual(desdeDisco.pelardle.wins, 4, "Persistencia en disco de Pelardle");
+  assert.strictEqual(desdeDisco.clicker.brillo, 1, "Persistencia en disco de Clicker");
+  assert.strictEqual(desdeDisco.clicker.upgrades.pala_hierro, 1);
+
+  store.clearSaveTimer();
+  storeReiniciado.clearSaveTimer();
+  console.log("  ✓ Récords unificados se fusionan por el máximo y persisten a disco");
+  fs.rmSync(`${testDir}-records`, { recursive: true, force: true });
+}
+
 // Limpieza de testDir
 try {
   fs.rmSync(testDir, { recursive: true, force: true });
 } catch (e) {}
 
 console.log("\n¡Todos los tests de LeaderboardStore pasaron exitosamente!");
+

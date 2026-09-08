@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useEffect } from "react";
 import { quienSoy, entrarConGoogle, salir } from "../lib/sesionCliente";
 import { mensajeDeLoginError } from "../lib/erroresLogin";
+import { cargarRecords } from "../lib/recordsCliente";
 
 const routesConfig = [
   { path: "/", label: "Inicio / Pelado Random", desc: "Carga un pelado aleatorio con tu Reserva de Pala.", icon: "🥚" },
@@ -31,6 +32,7 @@ export default function MenuPage() {
   const [showSecret, setShowSecret] = useState(false);
   const [sesion, setSesion] = useState(null);
   const [errorLogin, setErrorLogin] = useState("");
+  const [records, setRecords] = useState(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -52,7 +54,18 @@ export default function MenuPage() {
       window.history.replaceState({}, "", window.location.pathname + (resto ? `?${resto}` : ""));
     }
 
-    quienSoy().then(setSesion);
+    quienSoy().then((yo) => {
+      setSesion(yo);
+      cargarRecords().then((res) => {
+        if (res?.records) setRecords(res.records);
+      });
+    });
+
+    const handleSync = (e) => {
+      if (e?.detail) setRecords(e.detail);
+    };
+    window.addEventListener("pela_records_sync", handleSync);
+    return () => window.removeEventListener("pela_records_sync", handleSync);
   }, []);
 
   const handleTitleDoubleClick = () => {
@@ -329,6 +342,63 @@ export default function MenuPage() {
           text-transform: uppercase;
           color: var(--gold);
         }
+
+        .menu-records-dashboard {
+          margin-top: 20px;
+          background: rgba(255, 235, 59, 0.04);
+          border: 1px solid rgba(255, 235, 59, 0.2);
+          border-radius: 14px;
+          padding: 14px 18px;
+          width: 100%;
+          box-sizing: border-box;
+          backdrop-filter: blur(8px);
+        }
+
+        .menu-records-title {
+          color: var(--gold);
+          font-size: 0.8rem;
+          font-weight: 800;
+          letter-spacing: 0.08em;
+          margin-bottom: 10px;
+          text-transform: uppercase;
+          text-align: center;
+        }
+
+        .menu-records-grid {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: center;
+          gap: 12px 20px;
+        }
+
+        .menu-record-item {
+          font-size: 0.85rem;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .menu-record-item .rec-label {
+          color: #fff;
+          font-weight: 600;
+        }
+
+        .menu-record-item .rec-val {
+          color: var(--gold);
+          font-weight: 700;
+        }
+
+        .menu-card-badge {
+          display: inline-block;
+          margin-top: 8px;
+          padding: 3px 8px;
+          border-radius: 6px;
+          background: rgba(255, 235, 59, 0.1);
+          border: 1px solid rgba(255, 235, 59, 0.25);
+          color: var(--gold);
+          font-size: 0.75rem;
+          font-weight: 700;
+        }
       `}</style>
 
       <div className="menu-content">
@@ -362,6 +432,34 @@ export default function MenuPage() {
               )}
             </div>
           )}
+
+          {records && (
+            <div className="menu-records-dashboard">
+              <div className="menu-records-title">🏆 TUS PUNTOS Y RÉCORDS EN LA CUENTA</div>
+              <div className="menu-records-grid">
+                <div className="menu-record-item">
+                  <span className="rec-label">🏃 EscapeCV:</span>
+                  <span className="rec-val">Chase {records.escapecv?.chase || 0} / Dodge {records.escapecv?.dodge || 0}</span>
+                </div>
+                <div className="menu-record-item">
+                  <span className="rec-label">🟩 Pelardle:</span>
+                  <span className="rec-val">{records.pelardle?.wins || 0} vic. (Racha: {records.pelardle?.currentStreak || 0})</span>
+                </div>
+                <div className="menu-record-item">
+                  <span className="rec-label">🦠 Agarrá.io:</span>
+                  <span className="rec-val">Masa {records.agarra?.maxMass || 0}</span>
+                </div>
+                {records.clicker && (
+                  <div className="menu-record-item">
+                    <span className="rec-label">⛏️ Clicker:</span>
+                    <span className="rec-val">
+                      {Math.floor(records.clicker.palas || 0).toLocaleString()} palas {records.clicker.brillo ? `(Brillo ${records.clicker.brillo})` : ""}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </header>
 
         <div className="menu-grid">
@@ -373,6 +471,18 @@ export default function MenuPage() {
                   <div className="menu-card-text">
                     <h2 className="menu-card-title">{route.label}</h2>
                     <p className="menu-card-desc">{route.desc}</p>
+                    {route.path === "/escapecv" && records?.escapecv && (records.escapecv.chase > 0 || records.escapecv.dodge > 0) && (
+                      <div className="menu-card-badge">🏆 Chase: {records.escapecv.chase} | Dodge: {records.escapecv.dodge}</div>
+                    )}
+                    {route.path === "/pelardle" && records?.pelardle && records.pelardle.played > 0 && (
+                      <div className="menu-card-badge">🏆 {records.pelardle.wins} vic. | Racha: {records.pelardle.currentStreak} (Máx: {records.pelardle.maxStreak})</div>
+                    )}
+                    {route.path === "/agarra" && records?.agarra && records.agarra.maxMass > 0 && (
+                      <div className="menu-card-badge">🏆 Récord Masa: {records.agarra.maxMass}</div>
+                    )}
+                    {route.path === "/clicker" && records?.clicker && (records.clicker.palas > 0 || records.clicker.brillo > 0) && (
+                      <div className="menu-card-badge">🏆 {Math.floor(records.clicker.palas || 0).toLocaleString()} palas {records.clicker.brillo ? `| Brillo: ${records.clicker.brillo}` : ""}</div>
+                    )}
                   </div>
                 </div>
                 <div className="menu-card-bottom">

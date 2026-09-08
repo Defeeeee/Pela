@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSocialCredit } from "../SocialCreditContext";
 import { quienSoy, entrarConGoogle } from "../lib/sesionCliente";
+import { sincronizarRecords } from "../lib/recordsCliente";
 
 const KEY_ROWS = [
   ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
@@ -102,8 +103,35 @@ export default function PelardlePage() {
           setPlayerName(yo.nombre);
           setNameDraft(yo.nombre);
         }
+        sincronizarRecords().then((res) => {
+          if (res?.records?.pelardle) {
+            setStats((prev) => ({
+              ...prev,
+              played: Math.max(prev.played, Number(res.records.pelardle.played) || 0),
+              wins: Math.max(prev.wins, Number(res.records.pelardle.wins) || 0),
+              streak: Math.max(prev.streak, Number(res.records.pelardle.currentStreak || res.records.pelardle.streak) || 0),
+              maxStreak: Math.max(prev.maxStreak, Number(res.records.pelardle.maxStreak) || 0),
+              lastPuzzle: res.records.pelardle.lastPuzzle !== null && res.records.pelardle.lastPuzzle !== undefined ? Number(res.records.pelardle.lastPuzzle) : prev.lastPuzzle,
+            }));
+          }
+        });
       }
     });
+
+    const handleSync = (e) => {
+      if (e?.detail?.pelardle) {
+        setStats((prev) => ({
+          ...prev,
+          played: Math.max(prev.played, Number(e.detail.pelardle.played) || 0),
+          wins: Math.max(prev.wins, Number(e.detail.pelardle.wins) || 0),
+          streak: Math.max(prev.streak, Number(e.detail.pelardle.currentStreak || e.detail.pelardle.streak) || 0),
+          maxStreak: Math.max(prev.maxStreak, Number(e.detail.pelardle.maxStreak) || 0),
+          lastPuzzle: e.detail.pelardle.lastPuzzle !== null && e.detail.pelardle.lastPuzzle !== undefined ? Number(e.detail.pelardle.lastPuzzle) : prev.lastPuzzle,
+        }));
+      }
+    };
+    window.addEventListener("pela_records_sync", handleSync);
+    return () => window.removeEventListener("pela_records_sync", handleSync);
   }, []);
 
   const fetchBoard = useCallback(async (pz) => {
@@ -244,6 +272,7 @@ export default function PelardlePage() {
       };
 
       try { localStorage.setItem(STATS_KEY, JSON.stringify(next)); } catch (e) { /* noop */ }
+      sincronizarRecords({ pelardle: next });
       return next;
     });
 

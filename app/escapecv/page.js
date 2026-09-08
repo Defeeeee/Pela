@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSocialCredit } from '../SocialCreditContext';
 import Link from 'next/link';
 import MultiplayerGame from './MultiplayerGame';
+import { sincronizarRecords, CLAVE_CHASE, CLAVE_DODGE, CLAVE_CHASE_LEGACY } from '../lib/recordsCliente';
 
 export default function EscapeCVPage() {
   const [gameOver, setGameOver] = useState(false);
@@ -24,9 +25,9 @@ export default function EscapeCVPage() {
     enemies: [],
     warnings: [],
     powerups: [],
-    startTime: 0,
-    lastEnemyTime: 0,
-    lastRewardTime: 0,
+    particles: [],
+    timeAlive: 0,
+    playerBaseSpeed: 3.5,
     enemyBaseSpeed: 1.5,
     enemySpawnRate: 3500,
     frozenTime: 0,
@@ -39,8 +40,30 @@ export default function EscapeCVPage() {
   useEffect(() => { addCreditRef.current = addCredit; }, [addCredit]);
 
   useEffect(() => {
-    setHighScoreChase(parseInt(localStorage.getItem('escapecv_highscore_chase') || localStorage.getItem('escapecv_highscore') || '0'));
-    setHighScoreDodge(parseInt(localStorage.getItem('escapecv_highscore_dodge') || '0'));
+    const updateScoresFromStorage = () => {
+      setHighScoreChase(parseInt(localStorage.getItem(CLAVE_CHASE) || localStorage.getItem(CLAVE_CHASE_LEGACY) || '0', 10));
+      setHighScoreDodge(parseInt(localStorage.getItem(CLAVE_DODGE) || '0', 10));
+    };
+
+    updateScoresFromStorage();
+
+    // Sincronizar récords con la cuenta de Google
+    sincronizarRecords().then((res) => {
+      if (res?.records?.escapecv) {
+        setHighScoreChase(res.records.escapecv.chase);
+        setHighScoreDodge(res.records.escapecv.dodge);
+      }
+    });
+
+    const handleSync = (e) => {
+      if (e?.detail?.escapecv) {
+        setHighScoreChase(Number(e.detail.escapecv.chase) || 0);
+        setHighScoreDodge(Number(e.detail.escapecv.dodge) || 0);
+      } else {
+        updateScoresFromStorage();
+      }
+    };
+    window.addEventListener('pela_records_sync', handleSync);
     
     const updateDimensions = () => {
       setDimensions({
@@ -60,6 +83,7 @@ export default function EscapeCVPage() {
     window.addEventListener('deviceorientation', handleOrientation);
 
     return () => {
+      window.removeEventListener('pela_records_sync', handleSync);
       window.removeEventListener('resize', updateDimensions);
       window.removeEventListener('deviceorientation', handleOrientation);
     };
@@ -356,12 +380,14 @@ export default function EscapeCVPage() {
         if (state.mode === 'chase') {
           if (currentScore > highScoreChase) {
             setHighScoreChase(currentScore);
-            localStorage.setItem('escapecv_highscore_chase', currentScore);
+            localStorage.setItem(CLAVE_CHASE, currentScore.toString());
+            sincronizarRecords({ escapecv: { chase: currentScore, dodge: highScoreDodge } });
           }
         } else {
           if (currentScore > highScoreDodge) {
             setHighScoreDodge(currentScore);
-            localStorage.setItem('escapecv_highscore_dodge', currentScore);
+            localStorage.setItem(CLAVE_DODGE, currentScore.toString());
+            sincronizarRecords({ escapecv: { chase: highScoreChase, dodge: currentScore } });
           }
         }
         return; 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { io } from "socket.io-client";
 import { useSocialCredit } from "../SocialCreditContext";
 import { ticketDeSocket, entrarConGoogle, quienSoy } from "../lib/sesionCliente";
+import { sincronizarRecords, CLAVE_AGARRA_MASS } from "../lib/recordsCliente";
 
 const WORLD_WIDTH = 4000;
 const WORLD_HEIGHT = 4000;
@@ -24,17 +25,14 @@ function multiplayerUrl() {
 
   const enLocal =
     window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+  if (enLocal) {
+    const puerto = process.env.NEXT_PUBLIC_MP_PORT || "9315";
+    return `http://${window.location.hostname}:${puerto}`;
+  }
 
-  if (!enLocal) return undefined; // en producción, mismo origen: Traefik rutea /socket.io
-
-  // Fuera del horario laboral proxy.js cierra el sitio en producción y no hay
-  // bypass posible (godMode y testDate están detrás de !isProd). Para poder
-  // probar contra la arena real igual, se levanta la página en local y con
-  // ?server=prod los sockets van al servidor de producción.
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("server") === "prod") return "https://pela.signai.ar";
-
-  return "http://localhost:9315";
+  // En producción Traefik rutea /socket.io hacia el servidor de sockets en el
+  // mismo dominio, así que no hace falta especificar puerto ni cambiar de host.
+  return undefined;
 }
 
 export default function AgarraGame() {
@@ -46,6 +44,8 @@ export default function AgarraGame() {
   const [sesion, setSesion] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [myPlayerInfo, setMyPlayerInfo] = useState({ mass: 20, kills: 0, alive: true });
+  const [recordMass, setRecordMass] = useState(0);
+  const recordMassRef = useRef(0);
 
   const { deductCredit } = useSocialCredit();
   const deductRef = useRef(deductCredit);
@@ -85,6 +85,27 @@ export default function AgarraGame() {
     const savedName = localStorage.getItem(NAME_KEY) || "";
     setName(savedName);
 
+    const localRecord = parseInt(localStorage.getItem(CLAVE_AGARRA_MASS) || "0", 10) || 0;
+    setRecordMass(localRecord);
+    recordMassRef.current = localRecord;
+
+    sincronizarRecords().then((res) => {
+      if (res?.records?.agarra) {
+        const best = Number(res.records.agarra.maxMass) || 0;
+        setRecordMass((prev) => Math.max(prev, best));
+        recordMassRef.current = Math.max(recordMassRef.current, best);
+      }
+    });
+
+    const handleSync = (e) => {
+      if (e?.detail?.agarra) {
+        const best = Number(e.detail.agarra.maxMass) || 0;
+        setRecordMass((prev) => Math.max(prev, best));
+        recordMassRef.current = Math.max(recordMassRef.current, best);
+      }
+    };
+    window.addEventListener("pela_records_sync", handleSync);
+
     const imgPelado = new Image();
     imgPelado.src = "/imgs/goat/Pelado%20Feliz.jpeg";
     imgPelado.onload = () => {
@@ -95,6 +116,10 @@ export default function AgarraGame() {
     imgShovel.src = "/imgs/labura/shovel.jpeg";
     imgShovel.onload = () => {
       shovelImgRef.current = imgShovel;
+    };
+
+    return () => {
+      window.removeEventListener("pela_records_sync", handleSync);
     };
   }, []);
 
@@ -177,6 +202,15 @@ export default function AgarraGame() {
           kills: me.kills || 0,
           alive: me.alive,
         });
+
+        if (me.mass > recordMassRef.current) {
+          recordMassRef.current = me.mass;
+          setRecordMass(me.mass);
+          try {
+            localStorage.setItem(CLAVE_AGARRA_MASS, me.mass.toString());
+          } catch (e) {}
+          sincronizarRecords({ agarra: { maxMass: me.mass } });
+        }
       }
     });
 
@@ -553,6 +587,10 @@ export default function AgarraGame() {
               onKeyDown={(e) => e.key === "Enter" && handleStartGame()}
             />
 
+            <div style={{ color: "#ffeb3b", fontSize: "0.85rem", fontWeight: 700, margin: "8px 0 4px", textAlign: "center" }}>
+              🏆 Tu récord de masa: {recordMass}
+            </div>
+
             {error && <div className="agarra-error">{error}</div>}
 
             {necesitaLogin ? (
@@ -633,6 +671,10 @@ export default function AgarraGame() {
               <span className="stat-value">{myPlayerInfo.mass}</span>
             </div>
             <div className="agarra-stat-item">
+              <span className="stat-label">RÉCORD MASA:</span>
+              <span className="stat-value" style={{ color: "#ffeb3b" }}>{recordMass}</span>
+            </div>
+            <div className="agarra-stat-item">
               <span className="stat-label">PELADOS MORFADOS:</span>
               <span className="stat-value">{myPlayerInfo.kills}</span>
             </div>
@@ -644,7 +686,7 @@ export default function AgarraGame() {
               <div className="agarra-death-modal">
                 <h2 className="agarra-death-title">¡TE MORFARON!</h2>
                 <p className="agarra-death-desc">
-                  Otro pelado con más masa te comió de un bocado. Respawnear no te descuenta Reserva.
+                  Otro pelado con más masa te comió de un bocado. Tu récord personal de masa es <strong>{recordMass}</strong>. Respawnear no te descuenta Reserva.
                 </p>
                 <button
                   type="button"
