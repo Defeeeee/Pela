@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useSocialCredit } from "../SocialCreditContext";
+import { quienSoy, entrarConGoogle } from "../lib/sesionCliente";
 
 const KEY_ROWS = [
   ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
@@ -52,6 +53,7 @@ export default function PelardlePage() {
   const [savingName, setSavingName] = useState(false);
   const [activeTab, setActiveTab] = useState("stats"); // 'stats' | 'daily' | 'history'
   const [boardData, setBoardData] = useState({ daily: [], history: [] });
+  const [sesion, setSesion] = useState(null);
   const [loadingBoard, setLoadingBoard] = useState(false);
 
   const toastTimer = useRef(null);
@@ -83,6 +85,25 @@ export default function PelardlePage() {
     const pname = localStorage.getItem(PLAYER_NAME_KEY) || "";
     setPlayerName(pname);
     setNameDraft(pname);
+
+    // Con sesión abierta manda la identidad de la cuenta, no la del navegador.
+    // Normalmente coinciden (la cuenta adopta el id anónimo al vincularse),
+    // pero no cuando ese id ya era de otra cuenta: dos personas en la misma
+    // computadora. Sin esto, la segunda jugaría bajo el id de la primera y sus
+    // partidas no contarían nunca para su propia cuenta.
+    quienSoy().then((yo) => {
+      setSesion(yo);
+      if (yo.autenticado && yo.playerId) {
+        if (yo.playerId !== pid) {
+          try { localStorage.setItem(PLAYER_ID_KEY, yo.playerId); } catch (e) {}
+          setPlayerId(yo.playerId);
+        }
+        if (yo.nombre) {
+          setPlayerName(yo.nombre);
+          setNameDraft(yo.nombre);
+        }
+      }
+    });
   }, []);
 
   const fetchBoard = useCallback(async (pz) => {
@@ -507,7 +528,15 @@ export default function PelardlePage() {
               </button>
             </div>
 
-            {/* Configuración de Nombre de Jugador */}
+            {/* Configuración de Nombre de Jugador. Con sesión abierta el nombre
+                es el apodo reservado, que se cambia desde la cuenta y no por
+                acá: el servidor rechaza este camino para quien tiene apodo, así
+                que mostrar el formulario sería ofrecer algo que no funciona. */}
+            {sesion?.autenticado ? (
+              <div className="pel-name-box pel-name-cuenta">
+                Jugás como <strong>{sesion.nombre || playerName}</strong>
+              </div>
+            ) : (
             <form className="pel-name-box" onSubmit={handleUpdateName}>
               <label className="pel-namelabel" htmlFor="pnameInput">Tu nombre de legajo:</label>
               <input
@@ -527,6 +556,7 @@ export default function PelardlePage() {
                 {savingName ? "..." : "Actualizar"}
               </button>
             </form>
+            )}
 
             {/* Pestaña 1: Estadísticas Personales */}
             {activeTab === "stats" && (
@@ -592,6 +622,15 @@ export default function PelardlePage() {
             {activeTab === "daily" && (
               <div className="pel-tab-content">
                 <h3 className="pel-board-title">Expediente #{meta?.puzzle || ""} — Día {meta?.fecha || ""}</h3>
+                {sesion && !sesion.autenticado && sesion.loginDisponible && (
+                  <div className="pel-board-aviso">
+                    Mirá el ranking todo lo que quieras. Para <strong>entrar</strong> en él hace
+                    falta una cuenta: es lo que hace que el puesto sea tuyo y no de un navegador.
+                    <button className="pel-board-login" onClick={() => entrarConGoogle("/pelardle")}>
+                      Entrar con Google
+                    </button>
+                  </div>
+                )}
                 {loadingBoard ? (
                   <div className="pel-board-loading">Consultando legajos...</div>
                 ) : boardData.daily.length === 0 ? (
@@ -624,6 +663,15 @@ export default function PelardlePage() {
             {activeTab === "history" && (
               <div className="pel-tab-content">
                 <h3 className="pel-board-title">Cuadro de Honor Folicular</h3>
+                {sesion && !sesion.autenticado && sesion.loginDisponible && (
+                  <div className="pel-board-aviso">
+                    Mirá el ranking todo lo que quieras. Para <strong>entrar</strong> en él hace
+                    falta una cuenta: es lo que hace que el puesto sea tuyo y no de un navegador.
+                    <button className="pel-board-login" onClick={() => entrarConGoogle("/pelardle")}>
+                      Entrar con Google
+                    </button>
+                  </div>
+                )}
                 {loadingBoard ? (
                   <div className="pel-board-loading">Consultando legajos...</div>
                 ) : boardData.history.length === 0 ? (
@@ -970,6 +1018,35 @@ function PelardleStyles() {
         color: rgba(255,255,255,0.7);
         margin: 0 0 12px;
         font-weight: 800;
+      }
+      .pel-name-cuenta {
+        font-size: 0.78rem;
+        color: rgba(255,255,255,0.6);
+      }
+      .pel-name-cuenta strong { color: #ffeb3b; }
+      .pel-board-aviso {
+        font-size: 0.75rem;
+        color: rgba(255,255,255,0.6);
+        line-height: 1.5;
+        text-align: left;
+        background: rgba(255,235,59,0.06);
+        border: 1px solid rgba(255,235,59,0.25);
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-bottom: 12px;
+      }
+      .pel-board-aviso strong { color: #ffeb3b; }
+      .pel-board-login {
+        display: block;
+        margin-top: 8px;
+        background: #fff;
+        color: #1f1f1f;
+        border: none;
+        border-radius: 6px;
+        padding: 7px 12px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        cursor: pointer;
       }
       .pel-board-loading, .pel-board-empty, .pel-ongoing-hint {
         font-size: 0.78rem;

@@ -24,6 +24,12 @@ export class LeaderboardStore {
     // Estado en memoria
     this.daily = {}; // puzzleId -> [ { playerId, playerName, attempts, solved, solvedAt } ]
     this.history = {}; // playerId -> { playerId, playerName, gamesPlayed, gamesWon, currentStreak, maxStreak, lastPuzzle }
+    this.cuentas = {}; // googleSub -> { playerId, email, vinculadaEn }
+    // apodo en minúsculas -> { playerId, apodo }. Guarda también la forma con
+    // mayúsculas porque ése es el nombre canónico que se muestra: leerlo del
+    // historial sería circular, ya que el historial es justo lo que el cliente
+    // puede intentar pisar.
+    this.apodos = {};
     this.inProgress = new Map(); // `${puzzle}_${playerId}` -> { attemptsCount, guesses, solved, finished }
 
     this.saveTimeout = null;
@@ -44,6 +50,8 @@ export class LeaderboardStore {
           if (parsed && typeof parsed === "object") {
             this.daily = parsed.daily || {};
             this.history = parsed.history || {};
+            this.cuentas = parsed.cuentas || {};
+            this.apodos = parsed.apodos || {};
           }
         } catch (parseErr) {
           console.error("[leaderboard] Archivo JSON corrupto. Creando respaldo y reiniciando...", parseErr);
@@ -55,6 +63,8 @@ export class LeaderboardStore {
           }
           this.daily = {};
           this.history = {};
+          this.cuentas = {};
+          this.apodos = {};
         }
       }
     } catch (err) {
@@ -121,6 +131,8 @@ export class LeaderboardStore {
         updatedAt: new Date().toISOString(),
         daily: this.daily,
         history: this.history,
+        cuentas: this.cuentas,
+        apodos: this.apodos,
       });
 
       const tempFile = `${this.filePath}.tmp.${Date.now()}`;
@@ -156,6 +168,157 @@ export class LeaderboardStore {
     }
   }
 
+  /**
+   * Ata una cuenta de Google a una identidad de jugador.
+   *
+   * Si el navegador ya venía jugando como anónimo, esa identidad se adopta en
+   * vez de crear una nueva: así la racha y las victorias que ya estaban
+   * guardadas bajo ese id pasan a ser de la cuenta. Es la migración.
+   *
+   * Reglas de conflicto:
+   * - Si la cuenta ya estaba vinculada, gana el vínculo existente. Entrar
+   *   desde otro navegador no te cambia de identidad ni te roba la del otro.
+   * - Un id anónimo que ya pertenece a otra cuenta no se adopta (dos personas
+   *   compartiendo una computadora); se crea una identidad nueva.
+   */
+  vincularCuenta({ googleSub, email, nombreGoogle, playerIdAnonimo }) {
+    if (!googleSub) return { error: "Falta googleSub" };
+    const sub = String(googleSub);
+
+    const yaVinculada = this.cuentas[sub];
+    if (yaVinculada) {
+      const h = this.history[yaVinculada.playerId];
+      return {
+        playerId: yaVinculada.playerId,
+        // El nombre de la sesión es el apodo RESERVADO, no el que quedó en el
+        // historial: ese pudo haberlo tipeado cualquiera desde el navegador y
+        // no es dueño de nada. Sin apodo reservado, la sesión arranca sin
+        // nombre y la UI obliga a elegir uno.
+        apodo: this.apodoDe(yaVinculada.playerId),
+        sugerencia: h?.playerName || null,
+        nueva: false,
+      };
+    }
+
+    const reclamadosPorOtros = new Set(Object.values(this.cuentas).map((c) => c.playerId));
+    const anonimo = playerIdAnonimo ? String(playerIdAnonimo) : null;
+    const puedeAdoptar = anonimo && !reclamadosPorOtros.has(anonimo);
+
+    const playerId = puedeAdoptar ? anonimo : `u_${sub}`;
+
+    this.cuentas[sub] = { playerId, email: email || null, vinculadaEn: Date.now() };
+
+    const h = this.history[playerId];
+    if (h && nombreGoogle && !h.playerName) h.playerName = sanitizeName(nombreGoogle);
+
+    this.scheduleSave();
+    return {
+      playerId,
+      apodo: this.apodoDe(playerId),
+      // Lo que venía usando en el navegador sirve como propuesta para el
+      // cuadro de elección, pero no se le adjudica solo.
+      sugerencia: h?.playerName || (nombreGoogle ? sanitizeName(nombreGoogle) : null),
+      nueva: !puedeAdoptar,
+      adoptoAnonimo: Boolean(puedeAdoptar),
+    };
+  }
+
+  /**
+   * Importa lo que el navegador tenía guardado, para quien venía jugando desde
+   * antes de que existiera el leaderboard: esas rachas sólo viven en su
+   * localStorage y el servidor no las tiene.
+   *
+   * La racha del cliente NO se puede verificar, así que sólo se acepta si está
+   * viva: el último puzzle jugado tiene que ser el de hoy o el del día hábil
+   * anterior. Una racha vieja ya estaba cortada igual, y fabricar una requiere
+   * haber venido jugando de verdad. Los contadores acumulados se toman por el
+   * máximo para no hacer perder nada a quien ya tenía historia en el servidor.
+   */
+  importarProgresoLocal({ playerId, puzzleActual, stats }) {
+    if (!playerId || !stats) return { error: "Faltan playerId o stats" };
+    const pId = String(playerId);
+    const actual = Number(puzzleActual);
+
+    const previo = this.history[pId] || {
+      playerId: pId,
+      playerName: null,
+      gamesPlayed: 0,
+      gamesWon: 0,
+      currentStreak: 0,
+      maxStreak: 0,
+      lastPuzzle: null,
+    };
+
+    const ultimo = Number(stats.lastPuzzle);
+    const rachaViva =
+      Number.isFinite(ultimo) && Number.isFinite(actual) && (ultimo === actual || ultimo === actual - 1);
+
+    const importada = rachaViva ? Math.max(0, Number(stats.streak) || 0) : 0;
+
+    previo.gamesPlayed = Math.max(previo.gamesPlayed, Number(stats.played) || 0);
+    previo.gamesWon = Math.max(previo.gamesWon, Number(stats.wins) || 0);
+    previo.maxStreak = Math.max(previo.maxStreak, Number(stats.maxStreak) || 0, importada);
+    previo.currentStreak = Math.max(previo.currentStreak, importada);
+    if (Number.isFinite(ultimo)) {
+      previo.lastPuzzle = Math.max(Number(previo.lastPuzzle) || 0, ultimo);
+    }
+
+    this.history[pId] = previo;
+    this.scheduleSave();
+    return { ok: true, rachaImportada: importada, rachaViva, historial: previo };
+  }
+
+  /**
+   * Reserva un apodo para una identidad. Un apodo tiene un solo dueño: es lo
+   * que impide que otro se haga pasar por vos en el ranking y en el multi.
+   */
+  reservarApodo({ playerId, apodo }) {
+    if (!playerId || !apodo) return { error: "Faltan playerId o apodo" };
+    const pId = String(playerId);
+    const limpio = sanitizeName(apodo);
+    const clave = limpio.toLowerCase();
+
+    const dueño = this.apodos[clave];
+    if (dueño && dueño.playerId !== pId) return { error: "Ese apodo ya está tomado.", apodo: limpio };
+
+    // Liberar el apodo anterior de este jugador, si cambió.
+    for (const [k, v] of Object.entries(this.apodos)) {
+      if (v.playerId === pId && k !== clave) delete this.apodos[k];
+    }
+
+    this.apodos[clave] = { playerId: pId, apodo: limpio };
+    if (!this.history[pId]) {
+      this.history[pId] = {
+        playerId: pId,
+        playerName: limpio,
+        gamesPlayed: 0,
+        gamesWon: 0,
+        currentStreak: 0,
+        maxStreak: 0,
+        lastPuzzle: null,
+      };
+    } else {
+      this.history[pId].playerName = limpio;
+    }
+
+    this.scheduleSave();
+    return { ok: true, apodo: limpio };
+  }
+
+  /** Apodo reservado por una identidad, o null si todavía no eligió ninguno. */
+  apodoDe(playerId) {
+    const pId = String(playerId);
+    for (const registro of Object.values(this.apodos)) {
+      if (registro.playerId === pId) return registro.apodo;
+    }
+    return null;
+  }
+
+  /** Una identidad tiene cuenta si algún googleSub la reclamó. */
+  tieneCuenta(playerId) {
+    return Object.values(this.cuentas).some((c) => c.playerId === playerId);
+  }
+
   registerAttempt({ puzzle, playerId, playerName, guess, solved }) {
     if (!puzzle || !playerId) {
       return { error: "Faltan puzzle o playerId", attempt: 1 };
@@ -163,7 +326,10 @@ export class LeaderboardStore {
 
     const pz = String(puzzle);
     const pId = String(playerId);
-    const cleanName = sanitizeName(playerName);
+    // Mismo criterio que en updatePlayerName: si la identidad tiene apodo
+    // reservado, ése es el nombre que vale, venga lo que venga en el cuerpo
+    // del pedido. Es lo que impide entrar al ranking con el nombre de otro.
+    const cleanName = this.apodoDe(pId) || sanitizeName(playerName);
     const key = `${pz}_${pId}`;
 
     let record = this.inProgress.get(key);
@@ -303,6 +469,16 @@ export class LeaderboardStore {
     const clean = sanitizeName(newName);
     const pId = String(playerId);
 
+    // Un apodo reservado no se cambia por acá. Este camino recibe el nombre
+    // que tipeó el navegador, sin sesión que lo respalde: si lo dejara pasar,
+    // el apodo con dueño se podría pisar mandando un POST, y reservarlo no
+    // significaría nada. Para cambiarlo está /cuentas/apodo, que sí exige
+    // sesión y vuelve a chequear que no lo tenga otro.
+    const reservado = this.apodoDe(pId);
+    if (reservado) {
+      return { ok: false, error: "Tu apodo lo cambiás desde tu cuenta.", playerName: reservado };
+    }
+
     let updated = false;
 
     // 1. Actualizar en historial
@@ -328,21 +504,48 @@ export class LeaderboardStore {
     return { ok: true, playerName: clean, updated };
   }
 
+  /**
+   * Identidades que pueden aparecer en el ranking: las que tienen cuenta de
+   * Google Y apodo reservado.
+   *
+   * Se piden las dos cosas porque cada una resuelve un problema distinto: la
+   * cuenta hace que el puesto sea de una persona y no de un localStorage que
+   * se limpia y vuelve a empezar; el apodo reservado hace que el nombre que se
+   * muestra tenga dueño y nadie pueda ponerse el de otro.
+   *
+   * Se arma el conjunto una vez por consulta: `tieneCuenta` recorre todas las
+   * cuentas, y llamarlo por cada fila sería cuadrático.
+   */
+  idsRankeables() {
+    const conApodo = new Set(Object.values(this.apodos).map((r) => r.playerId));
+    const rankeables = new Set();
+    for (const cuenta of Object.values(this.cuentas)) {
+      if (conApodo.has(cuenta.playerId)) rankeables.add(cuenta.playerId);
+    }
+    return rankeables;
+  }
+
   getBoard(puzzle) {
     const pz = String(puzzle || "");
+    const rankeables = this.idsRankeables();
     const dailyRaw = this.daily[pz] || [];
 
-    const daily = dailyRaw.map((entry, index) => ({
-      rank: index + 1,
-      playerId: entry.playerId,
-      playerName: entry.playerName,
-      attempts: entry.attempts,
-      solved: entry.solved,
-      solvedAt: entry.solvedAt,
-    }));
+    // El puesto se numera DESPUÉS de filtrar: si no, quedarían huecos (1, 3,
+    // 7...) donde estaban los anónimos y el ranking se leería mal.
+    const daily = dailyRaw
+      .filter((entry) => rankeables.has(entry.playerId))
+      .map((entry, index) => ({
+        rank: index + 1,
+        playerId: entry.playerId,
+        playerName: entry.playerName,
+        attempts: entry.attempts,
+        solved: entry.solved,
+        solvedAt: entry.solvedAt,
+      }));
 
     // Histórico ordenado: más victorias, luego mayor racha
     const history = Object.values(this.history)
+      .filter((entry) => rankeables.has(entry.playerId))
       .sort((a, b) => (b.gamesWon - a.gamesWon) || (b.maxStreak - a.maxStreak) || (b.gamesPlayed - a.gamesPlayed))
       .slice(0, 100)
       .map((entry, index) => ({

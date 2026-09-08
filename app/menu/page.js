@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
+import { quienSoy, entrarConGoogle, salir } from "../lib/sesionCliente";
+import { mensajeDeLoginError } from "../lib/erroresLogin";
 
 const routesConfig = [
   { path: "/", label: "Inicio / Pelado Random", desc: "Carga un pelado aleatorio con tu Reserva de Pala.", icon: "🥚" },
@@ -27,12 +29,30 @@ const routesConfig = [
 
 export default function MenuPage() {
   const [showSecret, setShowSecret] = useState(false);
+  const [sesion, setSesion] = useState(null);
+  const [errorLogin, setErrorLogin] = useState("");
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const active = localStorage.getItem("pela_secret") === "true";
       setShowSecret(active);
     }
+  }, []);
+
+  // El callback de Google vuelve a /menu, así que acá es donde se muestra si
+  // el ingreso falló. Se lee de la URL y se borra el parámetro para que no
+  // quede pegado si la persona recarga o comparte el link.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const codigo = params.get("loginError");
+    if (codigo) {
+      setErrorLogin(mensajeDeLoginError(codigo));
+      params.delete("loginError");
+      const resto = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (resto ? `?${resto}` : ""));
+    }
+
+    quienSoy().then(setSesion);
   }, []);
 
   const handleTitleDoubleClick = () => {
@@ -117,6 +137,48 @@ export default function MenuPage() {
           color: var(--text-muted);
           margin: 0;
           line-height: 1.5;
+        }
+
+        .menu-sesion {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          margin-top: 14px;
+          font-size: 0.8rem;
+          color: var(--text-muted);
+        }
+
+        .menu-sesion strong { color: var(--gold); }
+
+        .menu-sesion-btn {
+          background: transparent;
+          border: 1px solid var(--card-border-hover);
+          color: var(--gold);
+          border-radius: 6px;
+          padding: 6px 12px;
+          font-size: 0.75rem;
+          font-weight: 700;
+          cursor: pointer;
+        }
+
+        /* Blanco de Google: es el botón de un tercero y conviene que se lea así. */
+        .menu-sesion-google {
+          background: #fff;
+          border-color: #fff;
+          color: #1f1f1f;
+        }
+
+        .menu-login-error {
+          margin: 14px auto 0;
+          max-width: 420px;
+          border: 1px solid rgba(255, 82, 82, 0.4);
+          background: rgba(255, 82, 82, 0.08);
+          color: #ff8a80;
+          border-radius: 8px;
+          padding: 10px 14px;
+          font-size: 0.8rem;
         }
 
         .menu-grid {
@@ -275,6 +337,31 @@ export default function MenuPage() {
           <p className="menu-subtitle">
             Seleccioná tu destino dentro del ecosistema folicular de Pelados y Pala.
           </p>
+
+          {errorLogin && <div className="menu-login-error">{errorLogin}</div>}
+
+          {sesion?.loginDisponible && (
+            <div className="menu-sesion">
+              {sesion.autenticado ? (
+                <>
+                  <span>
+                    Entraste como <strong>{sesion.nombre || "sin apodo"}</strong>
+                  </span>
+                  <button className="menu-sesion-btn" onClick={salir}>Salir</button>
+                </>
+              ) : (
+                <>
+                  <span>Jugás sin cuenta: no entrás al ranking ni al multijugador.</span>
+                  <button
+                    className="menu-sesion-btn menu-sesion-google"
+                    onClick={() => entrarConGoogle("/menu")}
+                  >
+                    Entrar con Google
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </header>
 
         <div className="menu-grid">
