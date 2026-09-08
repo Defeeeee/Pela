@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 
 /**
  * Carga secretos a process.env desde un archivo de texto plano.
@@ -16,15 +17,20 @@ import path from "node:path";
  * magia, menos sorpresas con un secret que tenga caracteres raros.
  */
 
-const DIR_POR_DEFECTO = path.join(process.cwd(), "..", "pela-data");
+export function cargarSecretos(dir = process.env.PELA_DATA_DIR) {
+  const candidatos = [
+    dir ? path.join(dir, "secretos.env") : null,
+    path.join(process.cwd(), "secretos.env"),
+    path.join(process.cwd(), "..", "pela-data", "secretos.env"),
+    path.join(os.homedir(), "pela-data", "secretos.env"),
+  ].filter(Boolean);
 
-export function cargarSecretos(dir = process.env.PELA_DATA_DIR || DIR_POR_DEFECTO) {
-  const archivo = path.join(dir, "secretos.env");
+  const archivo = candidatos.find((p) => fs.existsSync(p));
 
-  if (!fs.existsSync(archivo)) {
+  if (!archivo) {
     // No es un error: en desarrollo se puede correr sin credenciales y las
     // features que las necesiten se apagan solas (ver authDisponible()).
-    return { cargado: false, archivo, claves: [] };
+    return { cargado: false, archivo: candidatos[1] || candidatos[0], claves: [] };
   }
 
   const claves = [];
