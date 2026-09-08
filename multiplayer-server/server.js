@@ -90,6 +90,15 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
+  // Consulta de récords unificados de la cuenta
+  if (url.pathname === "/cuentas/records" && req.method === "GET") {
+    const playerId = url.searchParams.get("playerId") || "";
+    const records = leaderboardStore.getRecords(playerId);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, records }));
+    return;
+  }
+
   // Endpoints que reciben un JSON y devuelven lo que responda el store. Todos
   // siguen el mismo molde, así que se resuelven con una tabla en vez de repetir
   // el manejo del cuerpo cinco veces.
@@ -98,6 +107,7 @@ const httpServer = createServer(async (req, res) => {
     "/cuentas/vincular": (body) => leaderboardStore.vincularCuenta(body),
     "/cuentas/importar": (body) => leaderboardStore.importarProgresoLocal(body),
     "/cuentas/apodo": (body) => leaderboardStore.reservarApodo(body),
+    "/cuentas/records": (body) => leaderboardStore.updateRecords(body.playerId, body.records),
   };
 
   const handler = postHandlers[url.pathname];

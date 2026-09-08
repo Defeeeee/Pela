@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSocialCredit } from "../SocialCreditContext";
+import { sincronizarRecords } from "../lib/recordsCliente";
 
 const UPGRADES_CONFIG = [
   { id: "madera", name: "Pala de Madera", baseCost: 15, increase: 1, desc: "Sencilla pero noble. Auto-genera +1 pala/s.", emoji: "🪵" },
@@ -354,10 +355,60 @@ export default function ClickerPage() {
       }
 
       setIsClientLoaded(true);
+
+      // Sincronizar y fusionar con la partida guardada en la nube
+      sincronizarRecords().then((res) => {
+        if (res?.records?.clicker && typeof res.records.clicker === "object") {
+          const s = res.records.clicker;
+          const sBrillo = Number(s.brillo) || 0;
+          const sPalas = Number(s.palas) || 0;
+
+          setBrillo((prev) => Math.max(prev, sBrillo));
+          setPalas((prev) => {
+            if (sBrillo > (Number(savedBrillo) || 0)) return sPalas;
+            return Math.max(prev, sPalas);
+          });
+
+          if (s.upgrades) {
+            setUpgrades((prev) => {
+              const m = { ...prev };
+              for (const [k, v] of Object.entries(s.upgrades)) {
+                m[k] = Math.max(Number(m[k]) || 0, Number(v) || 0);
+              }
+              return m;
+            });
+          }
+          if (s.tools) {
+            setTools((prev) => {
+              const m = { ...prev };
+              for (const [k, v] of Object.entries(s.tools)) {
+                m[k] = Math.max(Number(m[k]) || 0, Number(v) || 0);
+              }
+              return m;
+            });
+          }
+          if (s.inventory) {
+            setInventory((prev) => {
+              const m = { ...prev };
+              for (const [k, v] of Object.entries(s.inventory)) {
+                m[k] = Math.max(Number(m[k]) || 0, Number(v) || 0);
+              }
+              return m;
+            });
+          }
+          if (s.achievements) {
+            setAchievements((prev) => ({ ...prev, ...s.achievements }));
+          }
+          if (s.prestigeUpgrades) {
+            setPrestigeUpgrades((prev) => ({ ...prev, ...s.prestigeUpgrades }));
+          }
+        }
+      });
     }
   }, []);
 
-  // Save game to local storage
+  // Guardar partida en local storage y sincronizar a la nube
+  const lastCloudSyncRef = useRef(Date.now());
   useEffect(() => {
     if (isClientLoaded) {
       localStorage.setItem("clicker_palas_v6", palas.toString());
@@ -372,8 +423,52 @@ export default function ClickerPage() {
       localStorage.setItem("clicker_stock_prices_v6", JSON.stringify(stockPrices));
       localStorage.setItem("clicker_loan_v6", JSON.stringify(loan));
       localStorage.setItem("clicker_garnished_v6", isGarnished.toString());
+
+      // Auto-guardado en la nube con debounce de 15 segundos
+      const now = Date.now();
+      if (now - lastCloudSyncRef.current > 15000) {
+        lastCloudSyncRef.current = now;
+        sincronizarRecords({
+          clicker: {
+            palas,
+            upgrades,
+            tools,
+            inventory,
+            brillo,
+            prestigeUpgrades,
+            achievements,
+            shares,
+            stockPrices,
+            loan,
+            isGarnished,
+          },
+        });
+      }
     }
   }, [palas, upgrades, tools, inventory, brillo, prestigeUpgrades, achievements, muted, shares, stockPrices, loan, isGarnished, isClientLoaded]);
+
+  // Sincronizar antes de salir de la pestaña
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      sincronizarRecords({
+        clicker: {
+          palas,
+          upgrades,
+          tools,
+          inventory,
+          brillo,
+          prestigeUpgrades,
+          achievements,
+          shares,
+          stockPrices,
+          loan,
+          isGarnished,
+        },
+      });
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [palas, upgrades, tools, inventory, brillo, prestigeUpgrades, achievements, shares, stockPrices, loan, isGarnished]);
 
   // Compute passive modifiers from Gacha inventory
   const inventoryClickMultiplier = 1 + (inventory.gorra || 0) * 0.05 + (inventory.pala_jefe || 0) * 0.15;
