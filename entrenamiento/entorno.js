@@ -1,4 +1,6 @@
-import { Arena, TARGET_POPULATION, sincronizarAgregados, radiusForMass } from "../multiplayer-server/agarra.js";
+import {
+  Arena, TARGET_POPULATION, sincronizarAgregados, radiusForMass, MIN_SPLIT_MASS,
+} from "../multiplayer-server/agarra.js";
 import { codificar, aplanarPalas, TAM_OBS } from "./observacion.js";
 import { decodificar, mascara, NUM_ACCIONES } from "./acciones.js";
 
@@ -7,8 +9,20 @@ const DT = 1000 / 30;
 /** Cada cuántos ticks decide la política. */
 export const REPETIR_ACCION = 3; // 10 decisiones por segundo simulado
 
-/** Tope de una vida, en decisiones. A 10 Hz son 60 segundos simulados. */
-export const MAX_PASOS = 600;
+/**
+ * Tope de una vida, en decisiones. A 10 Hz son 180 segundos simulados.
+ *
+ * Eran 60 y era poco: llegar al tope terminaba la vida sin costo, así que
+ * "aguantar sin hacer nada" era una salida gratis y segura. Con vidas largas,
+ * el tiempo hay que usarlo para crecer.
+ */
+export const MAX_PASOS = 1800;
+
+/**
+ * Cuánto de lo construido se pierde al morir, como fracción de √masa.
+ * Con 0,5, morir cuesta la mitad del radio alcanzado.
+ */
+export const PENALIZACION_MUERTE = 0.5;
 
 /** Generador congruencial: barato, reproducible y suficiente para esto. */
 export function rngConSemilla(semilla) {
@@ -47,11 +61,20 @@ export class EntornoVectorial {
     // agente que reaparece con masa 20 no tiene ninguna chance: mide dificultad
     // creciente, no aprendizaje. Reciclarlas mantiene estacionaria la dificultad.
     reciclarCada = 2000,
-    // Fracción de reapariciones que arrancan con masa alta. Sin esto el agente
-    // muere siempre cerca de 25 y NUNCA ve el mínimo de división (36), así que
-    // no puede aprender a dividirse ni aunque quisiera: la mecánica no existe
-    // dentro de su experiencia.
-    fraccionGrande = 0.25,
+    // Fracción de reapariciones que arrancan con masa alta.
+    //
+    // En cero por decisión: **todos nacen con 20, como un jugador de verdad**.
+    // Se probó con 0,25 para que el agente viera el tramo del juego donde
+    // existe la división, pero trae dos problemas: entrena sobre una
+    // distribución de estados que en producción no existe, y ensucia toda
+    // medida de habilidad (una vida que nace con 400 tiene pico >= 400 sin
+    // haber hecho nada, lo que ya nos costó un diagnóstico equivocado).
+    //
+    // Lo que lo justificaba —que muriendo a los 25 nunca se llega al mínimo de
+    // división— se cae con vidas de 180s y una recompensa que paga crecer:
+    // llegar a 36 son 16 palas. La métrica `fraccionVidasDivisibles` está para
+    // comprobar que efectivamente se llega, en vez de suponerlo.
+    fraccionGrande = 0,
     masaGrandeMax = 400,
   } = {}) {
     this.nArenas = arenas;
@@ -99,6 +122,9 @@ export class EntornoVectorial {
       // Y aparte, sólo las vidas que nacieron chicas: ahí crecer es todo mérito.
       episodiosChicos: 0,
       picoChicosSuma: 0,
+      // Vidas cuyo pico superó el mínimo para dividirse: dice si la mecánica
+      // de división está siquiera al alcance de la política.
+      episodiosDivisibles: 0,
       reciclajes: 0,
       ticks: 0,
     };
@@ -186,6 +212,8 @@ export class EntornoVectorial {
       const masa = this.#masa(i);
       const vivo = Boolean(p && p.alive);
 
+      // Crecer paga la variación de la RAÍZ de la masa, que es proporcional al
+      // radio y mantiene la escala sana entre masa 20 y 20.000.
       let r = Math.sqrt(masa) - Math.sqrt(this.masaPrevia[i]);
 
       const kills = p ? (p.kills || 0) : this.killsPrevias[i];
@@ -199,7 +227,24 @@ export class EntornoVectorial {
       const porTiempo = this.pasos[i] >= MAX_PASOS;
       const murio = !vivo;
 
-      if (murio) r -= 5; // termina la vida: cuesta, pero no borra lo crecido
+      // Al morir, la recompensa del paso NO es la variación de masa: se
+      // reemplaza por un costo proporcional a lo que se había construido.
+      //
+      // Esto arregla un defecto de fondo, no sólo una constante mal elegida.
+      // Con el término denso de crecimiento, el paso de la muerte descuenta
+      // toda la masa acumulada (de M a 0 son −√M), así que la suma de una vida
+      // entera que termina muerta era `(√M − √m0) − √M = −√m0`: **el mismo
+      // número sin importar cuánto haya crecido**. Crecer no pagaba nada si al
+      // final te comían, y encima había un −5 fijo arriba, que para una vida
+      // típica valía ocho veces todo lo que ganaba creciendo. La política
+      // óptima bajo eso era escapar y no tocar a nadie, y fue exactamente lo
+      // que aprendió (ver entrenamiento/versiones/no-morir).
+      //
+      // Con este cambio, una vida que crece de 20 a 400 y muere suma +5,5,
+      // mientras que una que se queda en 20 y muere suma −2,2. Crecer conviene
+      // aunque termine mal; sobrevivir sigue siendo mejor que morir del mismo
+      // tamaño, pero ya no domina todo lo demás.
+      if (murio) r = -PENALIZACION_MUERTE * Math.sqrt(this.masaPrevia[i]);
 
       this.recompensas[i] = r;
       this.terminados[i] = murio || porTiempo ? 1 : 0;
@@ -219,6 +264,7 @@ export class EntornoVectorial {
           this.stats.episodiosChicos++;
           this.stats.picoChicosSuma += this.picoEpisodio[i];
         }
+        if (this.picoEpisodio[i] >= MIN_SPLIT_MASS) this.stats.episodiosDivisibles++;
         this.stats.pasosSuma += this.pasos[i];
         this.#reiniciarAgente(i);
       }
@@ -292,7 +338,7 @@ export class EntornoVectorial {
       masaPico: 0, pasosSuma: 0, killsTotales: 0,
       divisiones: 0, divisionesLegales: 0, picoEpisodioSuma: 0,
       crecimientoSuma: 0, episodiosChicos: 0, picoChicosSuma: 0,
-      reciclajes: 0, ticks: 0,
+      episodiosDivisibles: 0, reciclajes: 0, ticks: 0,
     };
     return s;
   }

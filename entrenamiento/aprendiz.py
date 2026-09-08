@@ -54,7 +54,7 @@ class Actor:
         if magia != 0x50454C41:
             raise RuntimeError(f"actor {idx}: cabecera inesperada")
 
-        self.n_stats = 15
+        self.n_stats = 16
         self.bytes_salida = (self.n * self.tam_obs * 4 + self.n * 4 + self.n
                              + self.n * self.n_acc + self.n_stats * 4)
         self.buf = bytearray(self.bytes_salida)
@@ -336,7 +336,7 @@ def main():
     acum = {k: 0.0 for k in ("episodios", "muertes", "porTiempo", "masaFinalSuma",
                              "pasosSuma", "kills", "divisiones", "divLegales",
                              "picoEpisodioSuma", "crecimientoSuma", "episodiosChicos",
-                             "picoChicosSuma", "reciclajes", "ticks")}
+                             "picoChicosSuma", "episodiosDivisibles", "reciclajes", "ticks")}
     masa_pico_global = 0.0
     ret_parcial = np.zeros(N, dtype=np.float64)
     histograma = np.zeros(NACC, dtype=np.int64)
@@ -436,8 +436,8 @@ def main():
             for k, v in zip(("episodios", "muertes", "porTiempo", "masaFinalSuma",
                              "masaPico", "pasosSuma", "kills", "divisiones",
                              "divLegales", "picoEpisodioSuma", "crecimientoSuma",
-                             "episodiosChicos", "picoChicosSuma", "reciclajes",
-                             "ticks"), sta):
+                             "episodiosChicos", "picoChicosSuma",
+                             "episodiosDivisibles", "reciclajes", "ticks"), sta):
                 if k == "masaPico":
                     masa_pico_ciclo = max(masa_pico_ciclo, float(v))
                 else:
@@ -511,6 +511,7 @@ def main():
             "crecimientoRelativo": round(acum_local["crecimientoSuma"] / eps, 3),
             "masaPicoNacidosChicos": round(
                 acum_local["picoChicosSuma"] / max(1, acum_local["episodiosChicos"]), 1),
+            "fraccionVidasDivisibles": round(acum_local["episodiosDivisibles"] / eps, 4),
             "reciclajes": int(acum["reciclajes"]),
             "masaPicoCiclo": round(masa_pico_ciclo, 1),
             "masaPicoGlobal": round(masa_pico_global, 1),

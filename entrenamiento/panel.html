@@ -223,7 +223,8 @@ async function refrescar() {
   <div class="grilla">
     ${caja("Crecimiento", fmt(m.crecimientoRelativo, 2), "x", "cuánto multiplicó su masa de nacimiento",
            null, m.crecimientoRelativo >= 1 ? "var(--verde)" : "var(--rojo)")}
-    ${caja("Masa pico naciendo chico", fmt(m.masaPicoNacidosChicos, 1), "", "sólo vidas que arrancaron en 20")}
+    ${caja("Llegan a poder dividirse", fmt((m.fraccionVidasDivisibles || 0) * 100, 1), "%",
+           "vidas cuyo pico superó masa 36", m.fraccionVidasDivisibles || 0, "var(--oro)")}
     ${caja("Masa pico por vida", fmt(m.masaPicoMediaEpisodio, 1), "", "incluye las que nacen grandes por currículum")}
     ${caja("Récord absoluto", fmt(m.masaPicoGlobal, 0), "", "mejor masa vista")}
     ${caja("Supervivencia", fmt(m.supervivenciaSeg, 1), "s", "de juego por vida")}
@@ -252,7 +253,7 @@ async function refrescar() {
   <div class="graficas">
     ${graf("Retorno por vida", col("retornoMedio"), "var(--oro)", "", { dec: 2 })}
     ${graf("Crecimiento (x masa inicial)", col("crecimientoRelativo"), "var(--verde)", "", { dec: 2, desdeCero: true })}
-    ${graf("Masa pico naciendo chico", col("masaPicoNacidosChicos"), "var(--verde)", "", { dec: 1, desdeCero: true })}
+    ${graf("Vidas que llegan a masa 36", col("fraccionVidasDivisibles"), "var(--oro)", "", { dec: 3, desdeCero: true })}
     ${graf("Récord absoluto", col("masaPicoGlobal"), "var(--verde)", "", { dec: 0, desdeCero: true })}
     ${graf("Supervivencia (s)", col("supervivenciaSeg"), "var(--azul)", "", { dec: 1, desdeCero: true })}
     ${graf("Tasa de muerte", col("tasaMuerte"), "var(--rojo)", "", { dec: 2, desdeCero: true })}
