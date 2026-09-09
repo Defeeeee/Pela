@@ -11,7 +11,8 @@ import {
   MAX_CELLS,
   crearCelula,
   sincronizarAgregados,
-  BOT_MAX_MASS
+  BOT_MAX_MASS,
+  REAPARICION_BOT_MS,
 } from "./agarra.js";
 
 console.log("Iniciando tests deterministas de Arena (Agarrá.io)...");
@@ -365,6 +366,92 @@ function ubicar(p, x, y, mass) {
   assert.strictEqual(arena2.drenarRecords().length, 0, "Un anónimo no encola récords");
 
   console.log("  ✓ La mejor masa la mide la arena y se encola contra la cuenta");
+}
+
+// El reloj de la simulación avanza con los dt, no con el reloj de pared
+{
+  // Sin esto, entrenar headless (cientos de veces más rápido que el tiempo
+  // real) dejaba las células partidas para siempre: el enfriamiento de 12s se
+  // medía contra Date.now(), que apenas se movía.
+  const arena = new Arena({ random: () => 0.5 });
+  arena.addPlayer("j", "Fede", "cuenta");
+  for (const p of [...arena.players.values()]) if (p.isBot) arena.players.delete(p.id);
+
+  const p = arena.players.get("j");
+  p.cells[0].mass = 200;
+  arena.setInput("j", 1, 0);
+  arena.tick(1000 / 30);
+  arena.splitPlayer("j");
+  assert.strictEqual(p.cells.length, 2, "Se dividió en dos");
+
+  const correr = (segundos) => {
+    const n = Math.round((segundos * 1000) / (1000 / 30));
+    for (let i = 0; i < n; i++) arena.tick(1000 / 30);
+  };
+
+  const relojReal = Date.now();
+  correr(11);
+  assert.strictEqual(p.cells.length, 2, "A los 11s simulados todavía no se fusionan");
+  correr(9);
+  assert.strictEqual(p.cells.length, 1, "A los 20s simulados ya se fusionaron");
+  assert.ok(Date.now() - relojReal < 3000,
+    "Y todo eso ocurrió en mucho menos tiempo de reloj real del que simuló");
+
+  console.log("  ✓ El enfriamiento de fusión se mide en tiempo simulado, no de pared");
+}
+
+// Con la misma semilla, dos partidas idénticas
+{
+  const semilla = (s) => {
+    let x = s;
+    return () => ((x = (Math.imul(x, 1664525) + 1013904223) >>> 0) / 4294967296);
+  };
+  const huella = (s) => {
+    const a = new Arena({ random: semilla(s) });
+    a.addPlayer("j", "Fede", "c");
+    for (let i = 0; i < 900; i++) {
+      if (i % 3 === 0) a.setInput("j", Math.sin(i / 17), Math.cos(i / 23));
+      if (i === 300) a.splitPlayer("j");
+      a.tick(1000 / 30);
+    }
+    return [...a.players.values()].map((p) => Math.round(p.mass)).join(",");
+  };
+
+  assert.strictEqual(huella(12345), huella(12345), "Misma semilla, misma partida");
+  assert.notStrictEqual(huella(12345), huella(999), "Semilla distinta, partida distinta");
+
+  console.log("  ✓ Con semilla, la arena es reproducible");
+}
+
+// Los bots vuelven usando el reloj simulado, no setTimeout
+{
+  // Con setTimeout, entrenar headless a 600x convertía los 2 segundos de
+  // espera en veinte minutos de juego: la arena se vaciaba de bots y el
+  // agente terminaba entrenando y siendo evaluado casi solo.
+  const arena = new Arena({ random: () => 0.5 });
+  const bot = [...arena.players.values()].find((p) => p.isBot);
+  // Se deja un solo bot: con random constante todos nacen en el mismo punto,
+  // y el que reaparece con masa 20 lo comería al instante otro de masa 27.
+  for (const p of [...arena.players.values()]) if (p !== bot) arena.players.delete(p.id);
+
+  bot.alive = false;
+  bot.cells = [];
+  bot.reapareceEn = arena.tiempo + REAPARICION_BOT_MS;
+
+  const relojReal = Date.now();
+  const correr = (seg) => {
+    const n = Math.round((seg * 1000) / (1000 / 30));
+    for (let i = 0; i < n; i++) arena.tick(1000 / 30);
+  };
+
+  correr(1);
+  assert.strictEqual(bot.alive, false, "Al segundo simulado todavía no volvió");
+  correr(2);
+  assert.strictEqual(bot.alive, true, "A los 3 segundos simulados ya volvió");
+  assert.ok(Date.now() - relojReal < 2000,
+    "Y todo eso pasó en menos tiempo de reloj real del que simuló");
+
+  console.log("  ✓ Los bots reaparecen en tiempo simulado, no de reloj de pared");
 }
 
 console.log("\n¡Todos los tests de Arena pasaron exitosamente!");

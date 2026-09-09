@@ -17,6 +17,17 @@ export const TARGET_POPULATION = 12;
 // 1500 es masa suficiente para ser el jefe de la arena (radio ~155px contra
 // los 18px de uno que recién entra) sin volverse un accidente geográfico.
 export const BOT_MAX_MASS = 1500;
+
+/** Cuánto tarda un bot en volver tras ser comido, en tiempo simulado. */
+export const REAPARICION_BOT_MS = 2000;
+
+/**
+ * Cuántos de los bots juegan con la red entrenada. El resto queda con la
+ * heurística. Medido en el ARM de producción, cada bot con red cuesta ~4,7% de
+ * un core; con los ocho eran 38%, demasiado para un proceso que además atiende
+ * el multijugador de /escapecv.
+ */
+export const BOTS_CON_RED = 4;
 export const BASE_SPEED = 260; // px/segundo a masa 1
 
 // División (barra espaciadora). Un jugador deja de ser un círculo y pasa a ser
@@ -55,6 +66,29 @@ export function radiusForMass(mass) {
 
 export function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * Calcula la velocidad de cada jugador por diferencia de posición y la deja
+ * anotada en el propio objeto (vxObs/vyObs).
+ *
+ * Se hace por diferencia y no leyendo cell.vx porque ése es sólo el impulso de
+ * la división, que se apaga en menos de un segundo: el movimiento normal del
+ * jugador no está en ninguna variable, se aplica directo a la posición.
+ */
+export function anotarVelocidades(arena, dtSeg) {
+  for (const p of arena.players.values()) {
+    if (!p.alive) continue;
+    if (p._px !== undefined) {
+      p.vxObs = (p.x - p._px) / dtSeg;
+      p.vyObs = (p.y - p._py) / dtSeg;
+    } else {
+      p.vxObs = 0;
+      p.vyObs = 0;
+    }
+    p._px = p.x;
+    p._py = p.y;
+  }
 }
 
 export function crearCelula(x, y, mass, mergeAt = 0) {
@@ -99,7 +133,7 @@ export function sanitizeName(name) {
 }
 
 export class Arena {
-  constructor() {
+  constructor(options = {}) {
     this.players = new Map(); // socketId -> player
     this.palas = new Map(); // palaId -> { id, x, y }
     this.nextPalaId = 1;
@@ -108,6 +142,38 @@ export class Arena {
     this.newPalasSinceSnapshot = [];
 
     this.nextBotId = 1;
+
+    /**
+     * Reloj de la simulación, en milisegundos, que avanza con los dt de cada
+     * tick en vez de leer el reloj de pared.
+     *
+     * Antes esto usaba Date.now(), lo que funciona mientras los ticks lleguen
+     * a 30 Hz de verdad — o sea, en producción. Pero corriendo la arena
+     * headless para entrenar (cientos de veces más rápido que el tiempo real)
+     * el reloj de pared casi no avanza: el enfriamiento de fusión de 12s no
+     * vencía nunca y las células no se volvían a juntar. Un agente entrenado
+     * así aprendería que dividirse es gratis y permanente, que es exactamente
+     * lo contrario de lo que hay que aprender.
+     */
+    this.tiempo = 0;
+
+    /**
+     * Fuente de azar, inyectable. Con una semilla, dos partidas con las mismas
+     * acciones dan el mismo resultado: hace falta para comparar dos políticas
+     * sobre la misma partida y no sobre suerte distinta, y de paso vuelve
+     * deterministas los tests (los bots que reaparecían al azar ya nos dieron
+     * flakiness antes).
+     */
+    this.random = options.random || Math.random;
+
+    /**
+     * Política entrenada para manejar a los bots. Opcional a propósito: si no
+     * viene, se usa la heurística de siempre. El entrenamiento NO la pasa —sus
+     * bots tienen que seguir siendo los heurísticos, que son el rival contra el
+     * que se mide el progreso— y producción sí.
+     */
+    this.politica = options.politica || null;
+    this.ticksDesdeDecision = 0;
 
     // Récords a persistir, que server.js drena después de cada tick. La arena
     // no conoce el leaderboard a propósito: así se sigue pudiendo testear la
@@ -131,8 +197,8 @@ export class Arena {
 
   spawnPala() {
     const id = this.nextPalaId++;
-    const x = Math.round(50 + Math.random() * (WORLD_WIDTH - 100));
-    const y = Math.round(50 + Math.random() * (WORLD_HEIGHT - 100));
+    const x = Math.round(50 + this.random() * (WORLD_WIDTH - 100));
+    const y = Math.round(50 + this.random() * (WORLD_HEIGHT - 100));
     const pala = { id, x, y };
     this.palas.set(id, pala);
     this.newPalasSinceSnapshot.push([id, x, y]);
@@ -164,8 +230,8 @@ export class Arena {
     }
 
     const color = COLORS[this.players.size % COLORS.length];
-    const x = Math.round(200 + Math.random() * (WORLD_WIDTH - 400));
-    const y = Math.round(200 + Math.random() * (WORLD_HEIGHT - 400));
+    const x = Math.round(200 + this.random() * (WORLD_WIDTH - 400));
+    const y = Math.round(200 + this.random() * (WORLD_HEIGHT - 400));
     const mass = INITIAL_MASS;
 
     const player = {
@@ -183,6 +249,7 @@ export class Arena {
       isBot: false,
       playerId,
       kills: 0,
+      masaRobada: 0,
       joinedAt: Date.now(),
       // Mejor masa de la sesión. La lleva el servidor porque el servidor es
       // quien simula: es el único récord del sitio que no hace falta creerle
@@ -199,8 +266,8 @@ export class Arena {
     const player = this.players.get(socketId);
     if (!player) return null;
 
-    const x = Math.round(200 + Math.random() * (WORLD_WIDTH - 400));
-    const y = Math.round(200 + Math.random() * (WORLD_HEIGHT - 400));
+    const x = Math.round(200 + this.random() * (WORLD_WIDTH - 400));
+    const y = Math.round(200 + this.random() * (WORLD_HEIGHT - 400));
 
     player.cells = [crearCelula(x, y, INITIAL_MASS)];
     player.dx = 0;
@@ -219,7 +286,7 @@ export class Arena {
     const p = this.players.get(socketId);
     if (!p || !p.alive) return;
 
-    const now = Date.now();
+    const now = this.tiempo;
     const nuevas = [];
 
     // Dirección del lanzamiento: hacia donde apunta el mouse. Si está quieto,
@@ -330,10 +397,10 @@ export class Arena {
     const id = `bot_${this.nextBotId++}`;
     const nameIndex = (this.nextBotId - 1) % BOT_NAMES.length;
     const name = BOT_NAMES[nameIndex];
-    const color = COLORS[Math.floor(Math.random() * COLORS.length)];
-    const x = Math.round(200 + Math.random() * (WORLD_WIDTH - 400));
-    const y = Math.round(200 + Math.random() * (WORLD_HEIGHT - 400));
-    const mass = INITIAL_MASS + Math.floor(Math.random() * 15);
+    const color = COLORS[Math.floor(this.random() * COLORS.length)];
+    const x = Math.round(200 + this.random() * (WORLD_WIDTH - 400));
+    const y = Math.round(200 + this.random() * (WORLD_HEIGHT - 400));
+    const mass = INITIAL_MASS + Math.floor(this.random() * 15);
 
     const bot = {
       id,
@@ -349,6 +416,7 @@ export class Arena {
       alive: true,
       isBot: true,
       kills: 0,
+      masaRobada: 0,
       joinedAt: Date.now(),
       maxMass: mass,
       botChangeTargetAt: 0,
@@ -358,9 +426,58 @@ export class Arena {
     return bot;
   }
 
-  updateBots(now) {
+  /**
+   * Bots manejados por la red entrenada.
+   *
+   * Deciden cada 3 ticks, igual que durante el entrenamiento: la política
+   * aprendió a 10 decisiones por segundo simulado, y hacerla decidir a 30 le
+   * cambiaría el significado a cada acción (los impulsos y las distancias se
+   * recorren en tres veces menos tiempo del que ella espera).
+   */
+  #updateBotsPolitica() {
+    const fase = this.ticksDesdeDecision % 3;
+    this.ticksDesdeDecision++;
+
+    anotarVelocidades(this, 1 / 30);
+
+    let nPalas = -1;
+    let i = 0;
     for (const bot of this.players.values()) {
       if (!bot.isBot || !bot.alive) continue;
+
+      // Sólo los primeros `botsConRed` usan la política; el resto sigue con la
+      // heurística. Es mitad presupuesto y mitad diseño: mezclar rivales duros
+      // con rivales torpes hace una arena más jugable que ocho máquinas
+      // perfectas, y deja margen de CPU en el proceso que además atiende el
+      // multijugador de /escapecv.
+      const conRed = i < BOTS_CON_RED;
+      i++;
+      if (!conRed) { this.botHeuristico(bot, this.tiempo); continue; }
+
+      // Escalonado por fase: cada bot decide cada 3 ticks (10 Hz, como en el
+      // entrenamiento) pero no todos en el mismo tick. Sin esto los ocho caían
+      // juntos y ese tick costaba 38 ms contra un presupuesto de 33: un tirón
+      // visible cada 100 ms.
+      if (bot.faseDecision === undefined) bot.faseDecision = i % 3;
+      if (bot.faseDecision !== fase) continue;
+
+      if (nPalas < 0) nPalas = this.politica.prepararPalas(this);
+      this.politica.jugar(this, bot.id, nPalas);
+    }
+  }
+
+  updateBots(now) {
+    if (this.politica) return this.#updateBotsPolitica();
+
+    for (const bot of this.players.values()) {
+      if (!bot.isBot || !bot.alive) continue;
+      this.botHeuristico(bot, now);
+    }
+  }
+
+  /** La IA de tres estados de siempre, para un bot. */
+  botHeuristico(bot, now) {
+    {
 
       let nearestThreat = null;
       let minThreatDist = Infinity;
@@ -394,7 +511,7 @@ export class Arena {
         bot.dx = vx / len;
         bot.dy = vy / len;
         bot.botChangeTargetAt = now + 400;
-        continue;
+        return;   // era `continue` del bucle de bots
       }
 
       if (nearestPrey) {
@@ -404,11 +521,11 @@ export class Arena {
         bot.dx = vx / len;
         bot.dy = vy / len;
         bot.botChangeTargetAt = now + 500;
-        continue;
+        return;   // era `continue` del bucle de bots
       }
 
       if (now >= bot.botChangeTargetAt) {
-        bot.botChangeTargetAt = now + 1000 + Math.random() * 1000;
+        bot.botChangeTargetAt = now + 1000 + this.random() * 1000;
 
         let bestPala = null;
         let bestDist = Infinity;
@@ -430,7 +547,7 @@ export class Arena {
           bot.dx = vx / len;
           bot.dy = vy / len;
         } else {
-          const angle = Math.random() * Math.PI * 2;
+          const angle = this.random() * Math.PI * 2;
           bot.dx = Math.cos(angle);
           bot.dy = Math.sin(angle);
         }
@@ -439,7 +556,8 @@ export class Arena {
   }
 
   tick(dtMs = 1000 / 30) {
-    const now = Date.now();
+    this.tiempo += dtMs;
+    const now = this.tiempo;
     const dtSeconds = dtMs / 1000;
 
     this.updateBots(now);
@@ -570,6 +688,11 @@ export class Arena {
 
             ca.mass += cb.mass;
             ca.radius = radiusForMass(ca.mass);
+            // Masa arrebatada a otros jugadores, acumulada aparte de la que
+            // viene de las palas. Para el juego es una curiosidad; para el
+            // entrenamiento es la diferencia entre premiar cazar y premiar
+            // juntar, que son dos formas muy distintas de crecer.
+            a.masaRobada = (a.masaRobada || 0) + cb.mass;
             b.cells.splice(j, 1);
             j--;
 
@@ -578,13 +701,15 @@ export class Arena {
               a.kills = (a.kills || 0) + 1;
               if (!b.isBot) this.anotarRecord(b);
 
-              if (b.isBot) {
-                setTimeout(() => {
-                  if (this.players.has(b.id)) {
-                    this.respawnPlayer(b.id);
-                  }
-                }, 2000);
-              }
+              // Reaparición del bot agendada en tiempo SIMULADO, no con
+              // setTimeout. Con el reloj de pared, entrenar headless a cientos
+              // de veces el tiempo real convertía estos 2 segundos en veinte
+              // minutos de juego: los bots caían y no volvían nunca, la arena
+              // se vaciaba (de 8 quedaban 3 al final de una vida) y tanto el
+              // entrenamiento como la evaluación terminaban midiendo a un
+              // agente casi solo. Es el mismo error que el enfriamiento de
+              // fusión, que ya se había corregido por esta misma razón.
+              if (b.isBot) b.reapareceEn = this.tiempo + REAPARICION_BOT_MS;
               break;
             }
           }
@@ -596,6 +721,14 @@ export class Arena {
     // 4. Recalcular los agregados una sola vez, ya con todo resuelto.
     for (const p of this.players.values()) {
       if (p.alive) sincronizarAgregados(p);
+    }
+
+    // 4a. Bots que ya cumplieron su espera y vuelven a la arena.
+    for (const p of this.players.values()) {
+      if (p.isBot && !p.alive && p.reapareceEn && now >= p.reapareceEn) {
+        p.reapareceEn = 0;
+        this.respawnPlayer(p.id);
+      }
     }
 
     // 4b. Mejor masa de la sesión y jubilación de los bots que se pasaron.
