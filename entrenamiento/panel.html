@@ -239,6 +239,16 @@ async function refrescar() {
     ${caja("Arenas recicladas", fmt(m.reciclajes || 0), "", "para que los bots no engorden sin freno")}
   </div>
 
+  <div class="seccion">Contra rival fijo · sólo bots heurísticos</div>
+  <div class="grilla">
+    ${caja("Masa pico", fmt(m.evalPico, 1), "", "jugando sola contra bots")}
+    ${caja("Crecimiento", fmt(m.evalCrecimiento, 2), "x", "el número que no miente",
+           null, (m.evalCrecimiento || 0) >= 2 ? "var(--verde)" : "var(--oro)")}
+    ${caja("Tasa de muerte", fmt(m.evalMuerte, 3), "", "", m.evalMuerte, "var(--rojo)")}
+    ${caja("Supervivencia", fmt(m.evalSupervivencia, 1), "s")}
+    ${caja("Kills por millón", fmt(m.evalKillsPorMillon, 2), "", `muestra: ${fmt(m.evalEpisodios)} vidas`)}
+  </div>
+
   <div class="seccion">Aprendizaje</div>
   <div class="grilla">
     ${caja("Retorno medio", fmt(m.retornoMedio, 2), "", "recompensa por vida completa",
@@ -256,6 +266,8 @@ async function refrescar() {
   <div class="seccion">Curvas</div>
   <div class="graficas">
     ${graf("Retorno por vida", col("retornoMedio"), "var(--oro)", "", { dec: 2 })}
+    ${graf("Crecimiento contra bots (rival fijo)", col("evalCrecimiento"), "var(--verde)", "", { dec: 2, desdeCero: true })}
+    ${graf("Muerte contra bots (rival fijo)", col("evalMuerte"), "var(--rojo)", "", { dec: 3, desdeCero: true })}
     ${graf("Crecimiento (x masa inicial)", col("crecimientoRelativo"), "var(--verde)", "", { dec: 2, desdeCero: true })}
     ${graf("Vidas que llegan a masa 36", col("fraccionVidasDivisibles"), "var(--oro)", "", { dec: 3, desdeCero: true })}
     ${graf("Récord absoluto", col("masaPicoGlobal"), "var(--verde)", "", { dec: 0, desdeCero: true })}

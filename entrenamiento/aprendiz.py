@@ -42,12 +42,15 @@ IDX_MASA_PICO = 4
 class Actor:
     """Un proceso de Node simulando muchas arenas."""
 
-    def __init__(self, idx, arenas, agentes, semilla, nodo="node", espectador=None):
+    def __init__(self, idx, arenas, agentes, semilla, nodo="node", espectador=None,
+                 max_pasos=None):
         self.idx = idx
         cmd = [nodo, os.path.join(AQUI, "actor.js"),
                f"--arenas={arenas}", f"--agentes={agentes}", f"--semilla={semilla}"]
         if espectador:
             cmd.append(f"--espectador={espectador}")
+        if max_pasos:
+            cmd.append(f"--maxPasos={max_pasos}")
         self.proc = subprocess.Popen(
             cmd,
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -265,7 +268,31 @@ def main():
     ap.add_argument("--gamma", type=float, default=0.998)
     ap.add_argument("--lam", type=float, default=0.95)
     ap.add_argument("--clip", type=float, default=0.2)
-    ap.add_argument("--entropia", type=float, default=0.01)
+    ap.add_argument("--entropia", type=float, default=0.02)
+    # A dónde baja el bono de exploración y en cuántos pasos. Con el valor fijo
+    # en 0,01 la entropía seguía en 2,32 de 3,50 después de 218 millones de
+    # transiciones: exploraba como el primer día en vez de explotar lo que ya
+    # sabía. Arranca más alto y baja.
+    ap.add_argument("--entropiaFinal", type=float, default=0.003)
+    ap.add_argument("--recocido", type=int, default=4000, help="pasos hasta el valor final")
+    # Corta las épocas de PPO si la política se alejó demasiado del lote. La
+    # fracción recortada llegó a 47%, que es señal de pasos demasiado grandes.
+    ap.add_argument("--klTope", type=float, default=0.03)
+    # Liga: cuántos de los agentes de cada arena juegan con una política vieja
+    # congelada en vez de la actual. Sin esto los cuatro son la misma política
+    # aprendiendo a la vez, así que puede especializarse en ganarle a su propia
+    # versión de hoy, y encima no hay forma de distinguir "empeoré" de "los
+    # rivales mejoraron".
+    ap.add_argument("--rivalesLiga", type=int, default=1)
+    ap.add_argument("--ligaCada", type=int, default=150, help="cada cuántos pasos se guarda una versión en la liga")
+    ap.add_argument("--ligaMax", type=int, default=6)
+    # Evaluador: un actor aparte donde la política juega SOLA contra bots
+    # heurísticos, que no cambian nunca. Es el único número que no se mueve
+    # porque los rivales hayan mejorado.
+    ap.add_argument("--evaluar", type=int, default=1)
+    ap.add_argument("--evalArenas", type=int, default=96)
+    ap.add_argument("--evalPasos", type=int, default=8, help="pasos de evaluación por ciclo")
+    ap.add_argument("--evalVida", type=int, default=1200, help="duración de una vida en la evaluación")
     ap.add_argument("--ancho", type=int, default=1024)
     ap.add_argument("--nodo", type=str, default="node")
     ap.add_argument("--salida", type=str, default=os.path.join(AQUI, "estado"))
@@ -281,6 +308,13 @@ def main():
     muestreador.start()
 
     enjambre = Enjambre(args.workers, args.arenas, args.agentes, args.nodo, args.salida)
+
+    # Actor de evaluación: un solo agente por arena, el resto bots heurísticos.
+    evaluador = None
+    if args.evaluar:
+        evaluador = Actor(99, args.evalArenas, 1, 777, args.nodo, max_pasos=args.evalVida)
+        evaluador.recibir()
+        print(f"[aprendiz] evaluador: {evaluador.n} agentes contra bots heurísticos", flush=True)
     N, TAM, NACC = enjambre.n, enjambre.tam_obs, enjambre.n_acc
     print(f"[aprendiz] {args.workers} actores x {enjambre.n_por_actor} agentes = {N} agentes",
           flush=True)
@@ -307,7 +341,9 @@ def main():
     politica_act.eval()
 
     ruta_ckpt = os.path.join(args.salida, "politica.pt")
+    ruta_mejor = os.path.join(args.salida, "mejor.pt")
     paso_global = 0
+    mejor_retorno = float("-inf")
     if os.path.exists(ruta_ckpt):
         ck = torch.load(ruta_ckpt, map_location=dispositivo, weights_only=False)
         if ck.get("tam_obs") == TAM and ck.get("n_acc") == NACC and ck.get("ancho") == args.ancho:
@@ -319,6 +355,22 @@ def main():
         else:
             print("[aprendiz] checkpoint incompatible con esta arquitectura; empiezo de cero",
                   flush=True)
+
+    # Qué agentes aprenden y cuáles son rivales de liga. El slot dentro de la
+    # arena decide: los últimos `rivalesLiga` de cada arena juegan congelados.
+    n_riv = max(0, min(args.agentes - 1, args.rivalesLiga))
+    slots = np.arange(N) % args.agentes
+    idx_aprendices = np.where(slots < args.agentes - n_riv)[0]
+    idx_rivales = np.where(slots >= args.agentes - n_riv)[0]
+    t_aprendices = torch.from_numpy(idx_aprendices).to(dispositivo)
+    print(f"[aprendiz] {len(idx_aprendices)} agentes aprenden, {len(idx_rivales)} son rivales de liga",
+          flush=True)
+
+    liga = []          # instantáneas congeladas
+    rival_actual = None
+    # Ventana de evaluación: ~40.000 pasos de decisión, suficientes para que
+    # terminen cientos de vidas de diez minutos.
+    vent_eval = deque(maxlen=10000)
 
     T = args.rollout
 
@@ -362,22 +414,33 @@ def main():
     ret_parcial = np.zeros(N, dtype=np.float64)
     histograma = np.zeros(NACC, dtype=np.int64)
 
+    def recocer(paso):
+        """Interpola linealmente entropía y learning rate hacia su valor final."""
+        t = min(1.0, paso / max(1, args.recocido))
+        ent = args.entropia + (args.entropiaFinal - args.entropia) * t
+        lr = args.lr * (1 - 0.9 * t)
+        for g in optim.param_groups:
+            g["lr"] = lr
+        return ent, lr
+
     def entrenar_lote(lote, salida):
         """Un paso de PPO sobre un lote ya cerrado. Corre en un hilo aparte;
         las operaciones de torch sueltan el GIL, así que el hilo principal
         sigue recolectando mientras esto ocupa la GPU."""
         t0 = time.time()
-        f_obs = lote.obs.reshape(-1, TAM)
-        f_msc = lote.msc.reshape(-1, NACC)
-        f_acc = lote.acc.reshape(-1)
-        f_lgp = lote.lgp.reshape(-1)
-        f_ven = lote.ven.reshape(-1)
-        f_ret = lote.ret.reshape(-1)
+        f_obs = lote.obs[:, t_aprendices].reshape(-1, TAM)
+        f_msc = lote.msc[:, t_aprendices].reshape(-1, NACC)
+        f_acc = lote.acc[:, t_aprendices].reshape(-1)
+        f_lgp = lote.lgp[:, t_aprendices].reshape(-1)
+        f_ven = lote.ven[:, t_aprendices].reshape(-1)
+        f_ret = lote.ret[:, t_aprendices].reshape(-1)
         f_ven = (f_ven - f_ven.mean()) / (f_ven.std() + 1e-8)
 
         total = f_obs.shape[0]
         p_loss = v_loss = ent = kl = clipf = 0.0
         n_lotes = 0
+        coef_ent, lr_actual = recocer(paso_global)
+        cortado = 0
         for _ in range(args.epocas):
             perm = torch.randperm(total, device=dispositivo)
             for i in range(0, total, args.minilote):
@@ -394,7 +457,7 @@ def main():
                 perdida_val = F.mse_loss(val, f_ret[idx])
                 entropia = dist.entropy().mean()
 
-                perdida = perdida_pol + 0.5 * perdida_val - args.entropia * entropia
+                perdida = perdida_pol + 0.5 * perdida_val - coef_ent * entropia
                 optim.zero_grad(set_to_none=True)
                 perdida.backward()
                 nn.utils.clip_grad_norm_(politica.parameters(), 0.5)
@@ -408,13 +471,23 @@ def main():
                     clipf += float(((ratio - 1).abs() > args.clip).float().mean())
                 n_lotes += 1
 
+            # Corte temprano: si la política ya se alejó del lote que la
+            # generó, seguir haciendo épocas sobre esos mismos datos empuja en
+            # una dirección que ya no corresponde.
+            if n_lotes and (kl / n_lotes) > args.klTope:
+                cortado = 1
+                break
+
         salida.clear()
         salida.update({
             "perdidaPolitica": p_loss / n_lotes, "perdidaValor": v_loss / n_lotes,
             "entropia": ent / n_lotes, "klAprox": kl / n_lotes,
             "fraccionRecortada": clipf / n_lotes,
             "varianzaExplicada": varianza_explicada(
-                lote.val.reshape(-1).cpu().numpy(), f_ret.cpu().numpy()),
+                lote.val[:, t_aprendices].reshape(-1).cpu().numpy(), f_ret.cpu().numpy()),
+            "coefEntropia": coef_ent,
+            "lr": lr_actual,
+            "epocasCortadas": cortado,
             "segundos": time.time() - t0,
         })
 
@@ -436,6 +509,16 @@ def main():
                 b.lgp[t] = dist.log_prob(acciones)
                 b.acc[t] = acciones
                 b.val[t] = valores
+
+                # Los slots de liga juegan con una versión vieja congelada. Sus
+                # transiciones igual se guardan en el lote pero después se
+                # descartan: entrenar sobre acciones que tomó otra política
+                # rompería el cociente de importancia de PPO.
+                if rival_actual is not None and len(idx_rivales):
+                    lg_r, _ = rival_actual(obs[idx_rivales], msc[idx_rivales])
+                    a_r = torch.distributions.Categorical(logits=lg_r).sample()
+                    acciones = acciones.clone()
+                    acciones[idx_rivales] = a_r
 
             acc_np = acciones.cpu().numpy()
             histograma += np.bincount(acc_np, minlength=NACC)
@@ -563,7 +646,9 @@ def main():
             "klAprox": round(kl, 5),
             "fraccionRecortada": round(clipf, 4),
             "varianzaExplicada": round(vc, 3),
-            "lr": args.lr,
+            "lr": round(apr.get("lr", args.lr), 7),
+            "coefEntropia": round(apr.get("coefEntropia", args.entropia), 5),
+            "epocasCortadas": apr.get("epocasCortadas", 0),
             # hardware
             "cargaCPU": round(os.getloadavg()[0], 2),
             "cores": os.cpu_count(),
@@ -575,6 +660,35 @@ def main():
             "loteRollout": transiciones,
             "distribucionAcciones": [round(float(x), 4) for x in dist_acc],
         }
+        # Evaluación contra rival fijo: la política juega sola contra bots
+        # heurísticos, que nunca cambian. Es el número que dice si mejoró de
+        # verdad, sin que lo contamine que los rivales de la liga también estén
+        # aprendiendo.
+        # Corre un poco en cada ciclo y acumula sobre una ventana larga, en vez
+        # de hacer una tanda corta cada tantos pasos. Sesenta pasos son seis
+        # segundos simulados: con vidas de diez minutos casi nunca termina un
+        # episodio ahí, y la evaluación reportaba ceros. Es el mismo error de
+        # denominador que ya arruinó tres métricas.
+        if evaluador is not None:
+            for _ in range(args.evalPasos):
+                o = torch.from_numpy(evaluador.obs.copy()).to(dispositivo)
+                mk = torch.from_numpy(evaluador.msc.copy()).to(dispositivo).bool()
+                with torch.no_grad():
+                    lg, _ = politica_act(o, mk)
+                    ac = torch.distributions.Categorical(logits=lg).sample()
+                evaluador.enviar(ac.cpu().numpy().astype(np.int32))
+                evaluador.recibir()
+                vent_eval.append(np.array(evaluador.stats, dtype=np.float64))
+
+            ev = np.sum(vent_eval, axis=0)
+            e_eps = max(1.0, ev[0])
+            m["evalPico"] = round(float(ev[9] / e_eps), 1)
+            m["evalCrecimiento"] = round(float(ev[10] / e_eps), 3)
+            m["evalMuerte"] = round(float(ev[1] / e_eps), 3)
+            m["evalSupervivencia"] = round(float(ev[5] / e_eps / 10), 1)
+            m["evalKillsPorMillon"] = round(float(ev[6] / max(1e-9, ev[15] / 1e6)), 2)
+            m["evalEpisodios"] = int(ev[0])
+
         métricas.write(json.dumps(m) + "\n")
         histograma[:] = 0
 
@@ -584,10 +698,34 @@ def main():
               f"H {m['entropia']:.2f}  gpu {m['gpuUso']:.0f}%  cpu {m['cargaCPU']:.1f}",
               flush=True)
 
+        # Se suma una instantánea a la liga cada tantos pasos, y se sortea con
+        # cuál se juega el rollout siguiente.
+        if len(idx_rivales) and paso_global % args.ligaCada == 0:
+            copia = Politica(TAM, NACC, args.ancho).to(dispositivo)
+            copia.load_state_dict(politica.state_dict())
+            copia.eval()
+            for q in copia.parameters():
+                q.requires_grad_(False)
+            liga.append(copia)
+            if len(liga) > args.ligaMax:
+                liga.pop(0)
+        if liga:
+            rival_actual = liga[np.random.randint(len(liga))]
+
+        estado_ckpt = {"politica": politica.state_dict(), "optim": optim.state_dict(),
+                       "paso": paso_global, "tam_obs": TAM, "n_acc": NACC,
+                       "ancho": args.ancho, "retorno": m["retornoMedio"]}
+
         if paso_global % 20 == 0:
-            torch.save({"politica": politica.state_dict(), "optim": optim.state_dict(),
-                        "paso": paso_global, "tam_obs": TAM, "n_acc": NACC,
-                        "ancho": args.ancho}, ruta_ckpt)
+            torch.save(estado_ckpt, ruta_ckpt)
+
+        # Y aparte, el mejor que hubo. El checkpoint normal se sobrescribe cada
+        # 20 pasos, así que cuando la política se pasa de agresiva y empeora,
+        # la buena se pierde: ya nos pasó con la del paso 1107, que tenía el
+        # retorno más alto de toda la corrida y hoy no existe.
+        if paso_global > 40 and m["retornoMedio"] > mejor_retorno:
+            mejor_retorno = m["retornoMedio"]
+            torch.save(estado_ckpt, ruta_mejor)
 
 
 if __name__ == "__main__":

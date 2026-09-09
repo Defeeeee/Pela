@@ -28,10 +28,10 @@ import {
 // sólo diluye la densidad de palas del anillo lejano hasta volverla constante.
 const ANILLOS = [300, 700, 1600];
 const SECTORES = 8;
-const CANALES = 6;
+const CANALES = 8;
 
 const BASE_PROPIA = 14;
-export const TAM_OBS = BASE_PROPIA + SECTORES * ANILLOS.length * CANALES; // 158
+export const TAM_OBS = BASE_PROPIA + SECTORES * ANILLOS.length * CANALES; // 206
 
 // Masa máxima que se espera ver. Se usa sólo para normalizar en log, así que
 // pasarse no rompe nada: sólo comprime un poco la parte alta de la escala.
@@ -45,6 +45,29 @@ const logMasa = (m) => Math.log(Math.max(1, m) / INITIAL_MASS) / Math.log(MASA_R
  * de 600 elementos cuatro veces (una por agente) era el costo dominante de la
  * codificación.
  */
+/**
+ * Calcula la velocidad de cada jugador por diferencia de posición y la deja
+ * anotada en el propio objeto (vxObs/vyObs).
+ *
+ * Se hace por diferencia y no leyendo cell.vx porque ése es sólo el impulso de
+ * la división, que se apaga en menos de un segundo: el movimiento normal del
+ * jugador no está en ninguna variable, se aplica directo a la posición.
+ */
+export function anotarVelocidades(arena, dtSeg) {
+  for (const p of arena.players.values()) {
+    if (!p.alive) continue;
+    if (p._px !== undefined) {
+      p.vxObs = (p.x - p._px) / dtSeg;
+      p.vyObs = (p.y - p._py) / dtSeg;
+    } else {
+      p.vxObs = 0;
+      p.vyObs = 0;
+    }
+    p._px = p.x;
+    p._py = p.y;
+  }
+}
+
 export function aplanarPalas(arena, destino) {
   let n = 0;
   for (const pala of arena.palas.values()) {
@@ -182,12 +205,33 @@ export function codificar(arena, id, destino, offset = 0, palas = null, nPalas =
       if (i === -1) continue;
 
       const dNorm = d / ANILLOS[ANILLOS.length - 1];
+
+      // Velocidad de acercamiento: cuánto de la velocidad relativa apunta
+      // hacia el agente. Positiva = se viene encima, negativa = se aleja.
+      //
+      // Sin esto la observación es una foto: dice dónde está cada uno pero no
+      // hacia dónde va, así que un bot enorme que se acerca y uno que se aleja
+      // se ven exactamente igual. Es la diferencia entre poder anticipar y
+      // sólo poder reaccionar cuando ya lo tenés encima.
+      let acerc = 0;
+      if (d > 1) {
+        const rvx = (otro.vxObs || 0) - vx;
+        const rvy = (otro.vyObs || 0) - vy;
+        acerc = Math.max(-1, Math.min(1, -(rvx * dx + rvy * dy) / d / 200));
+      }
+
       if (c.mass >= masaMayor * EAT_MASS_RATIO) {
         destino[i + 1] += logMasa(c.mass);                       // masa amenazante
-        destino[i + 4] = Math.min(destino[i + 4], dNorm);        // amenaza más cercana
+        if (dNorm < destino[i + 4]) {
+          destino[i + 4] = dNorm;                                // amenaza más cercana
+          destino[i + 6] = acerc;                                // y si se viene encima
+        }
       } else if (masaMayor >= c.mass * EAT_MASS_RATIO) {
         destino[i + 2] += logMasa(c.mass);                       // masa comestible
-        destino[i + 5] = Math.min(destino[i + 5], dNorm);        // presa más cercana
+        if (dNorm < destino[i + 5]) {
+          destino[i + 5] = dNorm;                                // presa más cercana
+          destino[i + 7] = acerc;                                // y si se escapa
+        }
       } else {
         destino[i + 3] += logMasa(c.mass);                       // ni una cosa ni la otra
       }

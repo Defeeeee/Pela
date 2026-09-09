@@ -33,7 +33,12 @@ const semilla = Number(args.semilla || 1);
 const rutaEspectador = args.espectador || null;
 const cadaMsEspectador = Number(args.espectadorMs || 400);
 
-const env = new EntornoVectorial({ arenas, agentesPorArena: porArena, semilla });
+const env = new EntornoVectorial({
+  arenas,
+  agentesPorArena: porArena,
+  semilla,
+  ...(args.maxPasos ? { maxPasos: Number(args.maxPasos) } : {}),
+});
 const N = env.nAgentes;
 
 const N_STATS = 17;

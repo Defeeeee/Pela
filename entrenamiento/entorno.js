@@ -1,7 +1,7 @@
 import {
   Arena, TARGET_POPULATION, sincronizarAgregados, radiusForMass, MIN_SPLIT_MASS,
 } from "../multiplayer-server/agarra.js";
-import { codificar, aplanarPalas, TAM_OBS } from "./observacion.js";
+import { codificar, aplanarPalas, anotarVelocidades, TAM_OBS } from "./observacion.js";
 import { decodificar, mascara, NUM_ACCIONES } from "./acciones.js";
 
 const DT = 1000 / 30;
@@ -119,10 +119,15 @@ export class EntornoVectorial {
     // comprobar que efectivamente se llega, en vez de suponerlo.
     fraccionGrande = 0,
     masaGrandeMax = 400,
+    // Duración de una vida, en decisiones. El evaluador usa vidas más cortas:
+    // no necesita el juego tardío para medir habilidad, y con 10 minutos casi
+    // no cierran episodios, así que la muestra tardaba horas en juntarse.
+    maxPasos = MAX_PASOS,
   } = {}) {
     this.nArenas = arenas;
     this.porArena = agentesPorArena;
     this.reciclarCada = reciclarCada;
+    this.maxPasos = maxPasos;
     this.fraccionGrande = fraccionGrande;
     this.masaGrandeMax = masaGrandeMax;
     this.semillaBase = semilla;
@@ -202,7 +207,7 @@ export class EntornoVectorial {
       // 70 episodios cerrados y otras con 5. Cualquier promedio por episodio
       // calculado sobre esas ventanas chicas es ruido, y además el lote de
       // entrenamiento queda correlacionado.
-      this.pasos[i] = Math.floor(this.rngCurriculo() * MAX_PASOS);
+      this.pasos[i] = Math.floor(this.rngCurriculo() * maxPasos);
     }
     this.#observarTodos();
   }
@@ -222,6 +227,7 @@ export class EntornoVectorial {
   #observarTodos() {
     for (let a = 0; a < this.nArenas; a++) {
       const arena = this.arenas[a];
+      anotarVelocidades(arena, (REPETIR_ACCION * DT) / 1000);
       const nPalas = aplanarPalas(arena, this.palasBuf);
       for (let k = 0; k < this.porArena; k++) {
         const i = a * this.porArena + k;
@@ -292,7 +298,7 @@ export class EntornoVectorial {
       this.killsPrevias[i] = kills;
 
       this.pasos[i]++;
-      const porTiempo = this.pasos[i] >= MAX_PASOS;
+      const porTiempo = this.pasos[i] >= this.maxPasos;
       const murio = !vivo;
 
       // Al morir, la recompensa del paso NO es la variación de masa: se
@@ -371,7 +377,7 @@ export class EntornoVectorial {
       arena.addPlayer(this.ids[i], `A${a}-${k}`, null);
       // Relojes escalonados otra vez: ponerlos en cero volvía a sincronizar a
       // todos y dejaba ventanas enteras sin episodios terminados por tiempo.
-      this.pasos[i] = Math.floor(this.rngCurriculo() * MAX_PASOS);
+      this.pasos[i] = Math.floor(this.rngCurriculo() * this.maxPasos);
       this.picoEpisodio[i] = 0;
       this.killsPrevias[i] = 0;
       this.robadaPrevia[i] = 0;
