@@ -233,6 +233,10 @@ async function refrescar() {
            null, (m.killsPorMillon || 0) > 0 ? "var(--verde)" : "var(--rojo)")}
     ${caja("Masa robada por millón", fmt(m.masaRobadaPorMillon, 0), "", "arrebatada a otros jugadores")}
     ${caja("Kills por vida", fmt(m.killsPorEpisodio, 3), "", "ojo: depende de cuántas vidas cierren")}
+    ${caja("Tiempo entero", fmt((m.fraccionTiempoEntero || 0) * 100, 1), "%", "en una sola célula",
+           m.fraccionTiempoEntero, "var(--verde)")}
+    ${caja("Concentración de masa", fmt(m.concentracionMasa, 2), "", "célula mayor / masa total; 1 = entero",
+           m.concentracionMasa, "var(--verde)")}
     ${caja("Divisiones por vida", fmt(m.divisionesPorEpisodio, 2), "", `${fmt(m.divisionesEfectivas*100,0)}% efectivas`)}
     ${caja("Vidas jugadas", fmt(m.episodios), "", `${fmt(m.episodiosPorSeg,1)} por segundo`)}
     ${caja("Muestra de los promedios", fmt(m.episodiosEnVentana || 0), "", "vidas detrás de las cifras de arriba")}
@@ -276,6 +280,7 @@ async function refrescar() {
     ${graf("Kills por millón de pasos", col("killsPorMillon"), "var(--rojo)", "", { dec: 2, desdeCero: true })}
     ${graf("Masa robada por millón", col("masaRobadaPorMillon"), "var(--rojo)", "", { dec: 0, desdeCero: true })}
     ${graf("Divisiones por millón de pasos", col("divisionesPorMillon"), "var(--oro)", "", { dec: 0, desdeCero: true })}
+    ${graf("Concentración de masa (1 = entero)", col("concentracionMasa"), "var(--verde)", "", { dec: 2, desdeCero: true })}
     ${graf("Exploración (entropía)", col("entropia"), "var(--violeta)", "", { dec: 3 })}
     ${graf("Varianza explicada", col("varianzaExplicada"), "var(--azul)", "", { dec: 3 })}
     ${graf("Pérdida de valor", col("perdidaValor"), "var(--violeta)", "", { dec: 3, desdeCero: true })}

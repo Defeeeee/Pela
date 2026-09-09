@@ -61,7 +61,7 @@ class Actor:
         if magia != 0x50454C41:
             raise RuntimeError(f"actor {idx}: cabecera inesperada")
 
-        self.n_stats = 17
+        self.n_stats = 20
         self.bytes_salida = (self.n * self.tam_obs * 4 + self.n * 4 + self.n
                              + self.n * self.n_acc + self.n_stats * 4)
         self.buf = bytearray(self.bytes_salida)
@@ -409,7 +409,8 @@ def main():
                              "pasosSuma", "kills", "divisiones", "divLegales",
                              "picoEpisodioSuma", "crecimientoSuma", "episodiosChicos",
                              "picoChicosSuma", "episodiosDivisibles", "reciclajes", "ticks",
-                             "masaRobada")}
+                             "masaRobada", "pasosVivos", "pasosEntero",
+                             "concentracionSuma")}
     masa_pico_global = 0.0
     ret_parcial = np.zeros(N, dtype=np.float64)
     histograma = np.zeros(NACC, dtype=np.int64)
@@ -542,7 +543,8 @@ def main():
                              "divLegales", "picoEpisodioSuma", "crecimientoSuma",
                              "episodiosChicos", "picoChicosSuma",
                              "episodiosDivisibles", "reciclajes", "ticks",
-                             "masaRobada"), sta):
+                             "masaRobada", "pasosVivos", "pasosEntero",
+                             "concentracionSuma"), sta):
                 if k == "masaPico":
                     masa_pico_ciclo = max(masa_pico_ciclo, float(v))
                 else:
@@ -634,6 +636,8 @@ def main():
             "killsPorMillon": round(suma["kills"] / millones, 2),
             "divisionesPorMillon": round(suma["divisiones"] / millones, 0),
             "masaRobadaPorMillon": round(suma["masaRobada"] / millones, 0),
+            "fraccionTiempoEntero": round(suma["pasosEntero"] / max(1, suma["pasosVivos"]), 3),
+            "concentracionMasa": round(suma["concentracionSuma"] / max(1, suma["pasosVivos"]), 3),
             "divisionesPorEpisodio": round(suma["divisiones"] / eps, 2),
             "divisionesEfectivas": round(suma["divLegales"] / max(1, suma["divisiones"]), 3),
             "retornoMedio": round(float(np.mean(hist_ret)) if hist_ret else 0.0, 2),

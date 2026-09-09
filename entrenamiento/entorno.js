@@ -167,6 +167,12 @@ export class EntornoVectorial {
       divisionesLegales: 0,
       picoEpisodioSuma: 0,
       masaRobada: 0,
+      // Cuánto tiempo pasa entero y qué tan concentrada tiene la masa. Es la
+      // medida directa de si aprendió a usar la división como herramienta en
+      // vez de vivir partido: dividido no puede comerse a nadie.
+      pasosVivos: 0,
+      pasosEntero: 0,
+      concentracionSuma: 0,
       // Crecimiento relativo: pico alcanzado dividido masa con la que nació.
       // Es la única de las tres que mide HABILIDAD. `masaPicoMediaEpisodio`
       // no sirve sola porque una vida que nace con 400 por el currículum tiene
@@ -324,6 +330,14 @@ export class EntornoVectorial {
       this.terminados[i] = murio || porTiempo ? 1 : 0;
       this.masaPrevia[i] = masa;
 
+      if (p && p.alive && p.cells.length) {
+        this.stats.pasosVivos++;
+        if (p.cells.length === 1) this.stats.pasosEntero++;
+        let mayor = 0;
+        for (const c of p.cells) if (c.mass > mayor) mayor = c.mass;
+        this.stats.concentracionSuma += mayor / Math.max(1, masa);
+      }
+
       if (masa > this.picoEpisodio[i]) this.picoEpisodio[i] = masa;
       if (masa > this.stats.masaPico) this.stats.masaPico = masa;
 
@@ -428,7 +442,8 @@ export class EntornoVectorial {
       masaPico: 0, pasosSuma: 0, killsTotales: 0,
       divisiones: 0, divisionesLegales: 0, picoEpisodioSuma: 0, masaRobada: 0,
       crecimientoSuma: 0, episodiosChicos: 0, picoChicosSuma: 0,
-      episodiosDivisibles: 0, reciclajes: 0, ticks: 0,
+      episodiosDivisibles: 0, pasosVivos: 0, pasosEntero: 0, concentracionSuma: 0,
+      reciclajes: 0, ticks: 0,
     };
     return s;
   }

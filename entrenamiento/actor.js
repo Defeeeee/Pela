@@ -41,7 +41,7 @@ const env = new EntornoVectorial({
 });
 const N = env.nAgentes;
 
-const N_STATS = 17;
+const N_STATS = 20;
 const bytesAcciones = N * 4;
 const bytesSalida = N * TAM_OBS * 4 + N * 4 + N + N * NUM_ACCIONES + N_STATS * 4;
 
@@ -109,6 +109,9 @@ function empaquetar() {
   salSta[14] = s.reciclajes;
   salSta[15] = s.ticks;
   salSta[16] = s.masaRobada;
+  salSta[17] = s.pasosVivos;
+  salSta[18] = s.pasosEntero;
+  salSta[19] = s.concentracionSuma;
 }
 
 /**

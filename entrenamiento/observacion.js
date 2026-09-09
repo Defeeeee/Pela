@@ -30,8 +30,8 @@ const ANILLOS = [300, 700, 1600];
 const SECTORES = 8;
 const CANALES = 8;
 
-const BASE_PROPIA = 14;
-export const TAM_OBS = BASE_PROPIA + SECTORES * ANILLOS.length * CANALES; // 206
+const BASE_PROPIA = 17;
+export const TAM_OBS = BASE_PROPIA + SECTORES * ANILLOS.length * CANALES; // 209
 
 // Masa máxima que se espera ver. Se usa sólo para normalizar en log, así que
 // pasarse no rompe nada: sólo comprime un poco la parte alta de la escala.
@@ -137,6 +137,38 @@ export function codificar(arena, id, destino, offset = 0, palas = null, nPalas =
   destino[offset + 11] = Math.max(-1, Math.min(1, vy / 520));
   destino[offset + 12] = Math.min(1, arena.tiempo / 180000); // cuánto lleva la partida
   destino[offset + 13] = Math.min(1, (p.kills || 0) / 10);
+
+  // Lo que podría comer SI ESTUVIERA ENTERO.
+  //
+  // Los canales de presa de la grilla se calculan contra la célula mayor
+  // propia, que es lo correcto para saber qué puede comer AHORA. Pero eso deja
+  // al agente ciego a la oportunidad: dividido en ocho, su célula mayor es
+  // chica y la grilla le dice que no hay presas, cuando la verdad es que las
+  // hay y lo único que las separa de él es volver a juntarse.
+  //
+  // Medido en producción: dividido podía comerse a 0,00 bots de 4,8; entero, a
+  // 0,96. Sin estos tres números no tiene forma de enterarse de esa diferencia,
+  // y "quedarse entero para poder cazar" es una estrategia que jamás podría
+  // descubrir porque su recompensa nunca aparece en lo que percibe.
+  let mejorPresaEntero = 0;
+  let cuantasPresasEntero = 0;
+  let distPresaEntero = 1;
+  for (const otro of arena.players.values()) {
+    if (otro.id === id || !otro.alive) continue;
+    let mayorOtro = 0;
+    for (const c of otro.cells) if (c.mass > mayorOtro) mayorOtro = c.mass;
+    if (mayorOtro <= 0) continue;
+    // Comible entero pero no como está: ésa es justo la oportunidad perdida.
+    if (masaTotal >= mayorOtro * EAT_MASS_RATIO && masaMayor < mayorOtro * EAT_MASS_RATIO) {
+      cuantasPresasEntero++;
+      if (mayorOtro > mejorPresaEntero) mejorPresaEntero = mayorOtro;
+      const d = Math.hypot(otro.x - cx, otro.y - cy) / ANILLOS[ANILLOS.length - 1];
+      if (d < distPresaEntero) distPresaEntero = Math.min(1, d);
+    }
+  }
+  destino[offset + 14] = mejorPresaEntero > 0 ? logMasa(mejorPresaEntero) : 0;
+  destino[offset + 15] = Math.min(1, cuantasPresasEntero / 6);
+  destino[offset + 16] = distPresaEntero;
 
   // 2. Grilla polar egocéntrica.
   const base = offset + BASE_PROPIA;
