@@ -14,20 +14,25 @@ export const TARGET_POPULATION = 12;
 // producción se lo vio en 160.851, un círculo que tapaba media pantalla y
 // contra el que ningún jugador nuevo tenía nada que hacer.
 //
-// 1500 es masa suficiente para ser el jefe de la arena (radio ~155px contra
-// los 18px de uno que recién entra) sin volverse un accidente geográfico.
-export const BOT_MAX_MASS = 1500;
+// 5000 es masa suficiente para seguirle el ritmo a un jugador bueno: se midió
+// una partida real donde el humano llegó a 1.136 y el mejor bot a 458, y el
+// techo de 1.500 jubilaba al bot justo cuando podía empezar a competirle.
+// Sigue siendo un techo: sin ninguno, el líder crecía hasta 160.000 y tapaba
+// media pantalla.
+export const BOT_MAX_MASS = 5000;
 
 /** Cuánto tarda un bot en volver tras ser comido, en tiempo simulado. */
 export const REAPARICION_BOT_MS = 2000;
 
 /**
  * Cuántos de los bots juegan con la red entrenada. El resto queda con la
- * heurística. Medido en el ARM de producción, cada bot con red cuesta ~4,7% de
- * un core; con los ocho eran 38%, demasiado para un proceso que además atiende
- * el multijugador de /escapecv.
+ * heurística.
+ *
+ * Empezó en 4 por presupuesto de CPU, pero con las decisiones escalonadas por
+ * fase el costo por bot bajó lo suficiente para poner los ocho. Con la mitad
+ * heurística, la mitad de los rivales eran tontos y la arena se ganaba fácil.
  */
-export const BOTS_CON_RED = 4;
+export const BOTS_CON_RED = 8;
 export const BASE_SPEED = 260; // px/segundo a masa 1
 
 // División (barra espaciadora). Un jugador deja de ser un círculo y pasa a ser
