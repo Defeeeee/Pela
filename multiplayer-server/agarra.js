@@ -177,7 +177,14 @@ export class Arena {
      * bots tienen que seguir siendo los heurísticos, que son el rival contra el
      * que se mide el progreso— y producción sí.
      */
-    this.politica = options.politica || null;
+    /**
+     * Puede venir más de una: para comparar dos versiones de la red hay que
+     * verlas jugar en la MISMA arena, contra las mismas palas y los mismos
+     * rivales. Comparar sus métricas históricas no sirve —se midieron con
+     * arenas distintas— y correrlas por separado tampoco, porque la suerte del
+     * spawn pesa más que la diferencia entre las dos.
+     */
+    this.politicas = options.politicas || (options.politica ? [{ etiqueta: "🧠", red: options.politica }] : []);
     this.ticksDesdeDecision = 0;
 
     // Récords a persistir, que server.js drena después de cada tick. La arena
@@ -409,16 +416,31 @@ export class Arena {
      * el conjunto de bots inteligentes iba mutando solo y en silencio, y no
      * había forma de saber desde afuera cuál era cuál.
      *
-     * Se cuentan los que ya hay para mantener exactamente BOTS_CON_RED.
+     * Se cuentan los que ya hay para mantener exactamente BOTS_CON_RED, y con
+     * varias redes en juego se cuenta por red: al bot nuevo le toca la que
+     * menos representantes vivos tiene. Sin esto el reparto se desbalancea
+     * solo —muere un bot de una versión y puede renacer con la otra— y a los
+     * diez minutos estarías comparando cuatro contra uno sin enterarte.
      */
+    const vivosPorRed = new Array(this.politicas.length).fill(0);
     let conRed = 0;
-    for (const p of this.players.values()) if (p.isBot && p.usaRed) conRed++;
-    const usaRed = Boolean(this.politica) && conRed < BOTS_CON_RED;
+    for (const p of this.players.values()) {
+      if (!p.isBot || !p.usaRed) continue;
+      conRed++;
+      if (p.iRed < vivosPorRed.length) vivosPorRed[p.iRed]++;
+    }
+
+    const usaRed = this.politicas.length > 0 && conRed < BOTS_CON_RED;
+    let iRed = -1;
+    if (usaRed) {
+      iRed = 0;
+      for (let i = 1; i < vivosPorRed.length; i++) if (vivosPorRed[i] < vivosPorRed[iRed]) iRed = i;
+    }
 
     // Los que juegan con la red se distinguen en la tabla. No es decoración:
     // sin esto no se puede saber si al que te está ganando lo maneja la red o
     // la heurística de tres estados.
-    const name = usaRed ? `${BOT_NAMES[nameIndex]} 🧠` : BOT_NAMES[nameIndex];
+    const name = usaRed ? `${BOT_NAMES[nameIndex]} ${this.politicas[iRed].etiqueta}` : BOT_NAMES[nameIndex];
     const color = COLORS[Math.floor(this.random() * COLORS.length)];
     const x = Math.round(200 + this.random() * (WORLD_WIDTH - 400));
     const y = Math.round(200 + this.random() * (WORLD_HEIGHT - 400));
@@ -438,6 +460,7 @@ export class Arena {
       alive: true,
       isBot: true,
       usaRed,
+      iRed,
       kills: 0,
       masaRobada: 0,
       joinedAt: Date.now(),
@@ -478,13 +501,15 @@ export class Arena {
       if (bot.faseDecision === undefined) bot.faseDecision = i % 3;
       if (bot.faseDecision !== fase) continue;
 
-      if (nPalas < 0) nPalas = this.politica.prepararPalas(this);
-      this.politica.jugar(this, bot.id, nPalas);
+      // Las palas se aplanan una sola vez por tick sobre un buffer que todas
+      // las redes comparten: el trabajo no depende de cuántas versiones haya.
+      if (nPalas < 0) nPalas = this.politicas[0].red.prepararPalas(this);
+      this.politicas[bot.iRed].red.jugar(this, bot.id, nPalas);
     }
   }
 
   updateBots(now) {
-    if (this.politica) return this.#updateBotsPolitica();
+    if (this.politicas.length > 0) return this.#updateBotsPolitica();
 
     for (const bot of this.players.values()) {
       if (!bot.isBot || !bot.alive) continue;
