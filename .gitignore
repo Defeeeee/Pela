@@ -40,3 +40,10 @@ next-env.d.ts
 # credenciales: viven en ~/pela-data/secretos.env, fuera del repo.
 # Esta línea es sólo un seguro por si alguna vez cae una copia acá adentro.
 secretos.env
+
+# Implementación de entrenamiento anterior (Antigravity), reemplazada por
+# entrenamiento/. Se deja en disco pero fuera del repo: `git add -A` la
+# arrastró una vez sin querer y habría viajado al paquete de deploy.
+/multiplayer-server/training/
+/multiplayer-server/train.py
+/test-merge*.js
