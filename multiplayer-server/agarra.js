@@ -17,6 +17,9 @@ export const TARGET_POPULATION = 12;
 // 1500 es masa suficiente para ser el jefe de la arena (radio ~155px contra
 // los 18px de uno que recién entra) sin volverse un accidente geográfico.
 export const BOT_MAX_MASS = 1500;
+
+/** Cuánto tarda un bot en volver tras ser comido, en tiempo simulado. */
+export const REAPARICION_BOT_MS = 2000;
 export const BASE_SPEED = 260; // px/segundo a masa 1
 
 // División (barra espaciadora). Un jugador deja de ser un círculo y pasa a ser
@@ -609,13 +612,15 @@ export class Arena {
               a.kills = (a.kills || 0) + 1;
               if (!b.isBot) this.anotarRecord(b);
 
-              if (b.isBot) {
-                setTimeout(() => {
-                  if (this.players.has(b.id)) {
-                    this.respawnPlayer(b.id);
-                  }
-                }, 2000);
-              }
+              // Reaparición del bot agendada en tiempo SIMULADO, no con
+              // setTimeout. Con el reloj de pared, entrenar headless a cientos
+              // de veces el tiempo real convertía estos 2 segundos en veinte
+              // minutos de juego: los bots caían y no volvían nunca, la arena
+              // se vaciaba (de 8 quedaban 3 al final de una vida) y tanto el
+              // entrenamiento como la evaluación terminaban midiendo a un
+              // agente casi solo. Es el mismo error que el enfriamiento de
+              // fusión, que ya se había corregido por esta misma razón.
+              if (b.isBot) b.reapareceEn = this.tiempo + REAPARICION_BOT_MS;
               break;
             }
           }
@@ -627,6 +632,14 @@ export class Arena {
     // 4. Recalcular los agregados una sola vez, ya con todo resuelto.
     for (const p of this.players.values()) {
       if (p.alive) sincronizarAgregados(p);
+    }
+
+    // 4a. Bots que ya cumplieron su espera y vuelven a la arena.
+    for (const p of this.players.values()) {
+      if (p.isBot && !p.alive && p.reapareceEn && now >= p.reapareceEn) {
+        p.reapareceEn = 0;
+        this.respawnPlayer(p.id);
+      }
     }
 
     // 4b. Mejor masa de la sesión y jubilación de los bots que se pasaron.
