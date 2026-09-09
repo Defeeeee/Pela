@@ -1,0 +1,29 @@
+{
+  "tamObs": 209,
+  "numAcciones": 33,
+  "ancho": 1024,
+  "paso": 9460,
+  "capas": [
+    {
+      "entrada": 209,
+      "salida": 1024,
+      "offset": 0
+    },
+    {
+      "entrada": 1024,
+      "salida": 1024,
+      "offset": 860160
+    },
+    {
+      "entrada": 1024,
+      "salida": 512,
+      "offset": 5058560
+    },
+    {
+      "entrada": 512,
+      "salida": 33,
+      "offset": 7157760
+    }
+  ],
+  "parametros": 1806369
+}

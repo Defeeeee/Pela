@@ -404,3 +404,23 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
   - Sigue sin resolverse si la política generalizaría contra un humano hábil: todo lo medido es contra bots o contra sí misma.
 
 - **Notas:** Esta entrada la pidió el usuario después de que la sesión ya hubiera mergeado a `master`; el changelog quedó atrasado respecto del código. Conviene escribirlo junto con el merge y no después.
+
+---
+
+## Dos versiones de la red jugando juntas en producción
+
+- **Pedido:** *"deployea los agentes de ahora a prod, mezclados con los que estan deployeados ahora, asi los puedo ver como juegan en prod"*.
+
+- **Por qué mezcladas y no reemplazando.** Comparar dos políticas por sus métricas históricas **no sirve**: la vara cambió. El bug del respawn por `setTimeout` hacía que las arenas de entrenamiento se drenaran de bots, así que todo lo medido antes del paso ~8300 —velocidad de simulación *y* números del evaluador— está inflado contra una arena semivacía. Correrlas por separado tampoco alcanza: la suerte del spawn pesa más que la diferencia entre las dos. La única comparación válida es la misma arena, las mismas palas y los mismos rivales.
+
+- **Medido antes de desplegar** (36 arenas de 6 minutos, 4 bots por versión, alternando ranuras de spawn, ~103.500 muestras de masa por lado): en crecimiento son **indistinguibles** (77,87 contra 77,71 de masa media, y los tres workers no coinciden ni en el signo). La nueva muere menos (18 contra 32 muertes sobre 144 vidas) pero eso es **1,98 sigma sobre 50 eventos**: sugerente, no probado. La vieja llega a picos más altos (492 contra 429). O sea que 1.400 pasos más de entrenamiento no compraron una mejora visible jugando — razón de más para mirarlas juntas en vivo en vez de reemplazar a ciegas.
+
+- **Cómo quedó:** `Arena` acepta `options.politicas`, una lista de `{etiqueta, red}`. Los `BOTS_CON_RED` bots con red se reparten entre las versiones y **cada bot se queda con la suya de por vida**. El reparto se recompone al nacer cada bot: al nuevo le toca la versión con menos representantes vivos. Sin eso alcanza con que muera un bot de una versión y renazca con la otra para terminar comparando 6 contra 2 sin que ninguna métrica lo delate. La etiqueta va pegada al nombre (`Bot Yeyo 🧠v1`), que es lo que hace mirable la comparación desde la tabla.
+
+- **Costo:** 3,64 ms por tick contra un presupuesto de 33,3 a 30 Hz. Las palas se aplanan una sola vez por tick sobre un buffer que todas las redes comparten, así que agregar versiones no multiplica ese trabajo.
+
+- **Degradación:** una variante cuyo archivo de pesos no está se saltea en silencio. Con una sola red se comporta igual que antes (`options.politica` sigue andando); sin ninguna, vuelve a la heurística. Un modelo que falta nunca puede romper el multijugador.
+
+- **Verificado:** el `pesos-bots.bin` del repo es idéntico byte a byte (md5 `73ba37a0…`) al que estaba corriendo en el VPS, así que `🧠v1` es genuinamente la política que ya jugaba y no una reconstrucción. Disco del VPS: 2,0 GB libres, los 7,2 MB del segundo modelo no lo mueven.
+
+- **Pendiente:** juntar masa y muertes por etiqueta desde producción para tener el duelo con jugadores humanos adentro, que es la parte que ninguna simulación cubre. Cuando se decida ganadora, el ciclo se cierra dejando una sola variante en `server.js`.

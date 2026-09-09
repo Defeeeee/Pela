@@ -144,3 +144,30 @@ export function cargarPolitica(base = path.join(AQUI, "pesos-bots")) {
     return null;
   }
 }
+
+/**
+ * Carga varias versiones de la red para que convivan en la misma arena.
+ *
+ * Cada `variante` es `{ etiqueta, archivo }`: la etiqueta se le cuelga al
+ * nombre del bot para poder distinguirlas mirando la tabla, que es el punto de
+ * tenerlas juntas. Las que falten se saltean en silencio, así que borrar un
+ * archivo de pesos degrada a una sola red —o a la heurística si no queda
+ * ninguna— en vez de romper el multijugador.
+ */
+export function cargarPoliticas(variantes) {
+  const cargadas = [];
+  for (const v of variantes) {
+    const red = cargarPolitica(path.join(AQUI, v.archivo));
+    if (red) cargadas.push({ etiqueta: v.etiqueta, red });
+  }
+
+  // Todas escriben y leen el MISMO buffer de palas. Aplanar las ~600 palas es
+  // trabajo por tick, no por red: si cada una tuviera el suyo, el costo se
+  // multiplicaría por la cantidad de versiones sin que nadie lo pida.
+  for (let i = 1; i < cargadas.length; i++) cargadas[i].red.palas = cargadas[0].red.palas;
+
+  if (cargadas.length) {
+    console.log(`[politica] en juego: ${cargadas.map((c) => `${c.etiqueta} paso ${c.red.paso}`).join(" | ")}`);
+  }
+  return cargadas;
+}

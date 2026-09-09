@@ -12,7 +12,7 @@ import {
   WORLD_WIDTH as AGARRA_WORLD_W,
   WORLD_HEIGHT as AGARRA_WORLD_H,
 } from "./agarra.js";
-import { cargarPolitica } from "./politica-bots.js";
+import { cargarPoliticas } from "./politica-bots.js";
 import { LeaderboardStore } from "./leaderboard.js";
 
 const PORT = process.env.MP_PORT || 9315;
@@ -315,8 +315,15 @@ const agarraIo = io.of("/agarra");
 // están presentes; si no, con la heurística de siempre. Medido en la misma
 // arena contra bots heurísticos, la red junta 69 de masa contra 46 y muere
 // cinco veces menos.
-const politicaBots = cargarPolitica();
-const agarraArena = new Arena({ politica: politicaBots });
+// Dos versiones de la red conviviendo en la arena pública: la que venía
+// jugando y la candidata recién entrenada, mitad y mitad de los bots con red.
+// Es la única comparación que vale —misma arena, mismas palas, mismos
+// rivales— y de paso se puede mirar en vivo cuál juega mejor.
+const politicasBots = cargarPoliticas([
+  { etiqueta: "🧠v1", archivo: "pesos-bots" },
+  { etiqueta: "🧠v2", archivo: "pesos-nueva" },
+]);
+const agarraArena = new Arena({ politicas: politicasBots });
 
 agarraIo.use(async (socket, next) => {
   const identidad = await identidadDeSocket(socket);

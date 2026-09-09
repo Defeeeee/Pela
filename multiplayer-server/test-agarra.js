@@ -13,6 +13,7 @@ import {
   sincronizarAgregados,
   BOT_MAX_MASS,
   REAPARICION_BOT_MS,
+  BOTS_CON_RED,
 } from "./agarra.js";
 
 console.log("Iniciando tests deterministas de Arena (Agarrá.io)...");
@@ -452,6 +453,114 @@ function ubicar(p, x, y, mass) {
     "Y todo eso pasó en menos tiempo de reloj real del que simuló");
 
   console.log("  ✓ Los bots reaparecen en tiempo simulado, no de reloj de pared");
+}
+
+// --- Varias versiones de la red conviviendo en la misma arena ---------------
+{
+  // Redes de mentira: alcanza con que registren a quién les tocó jugar. Cargar
+  // los pesos de verdad haría el test lento y dependiente de un archivo de 7 MB.
+  const jugadas = { v1: [], v2: [] };
+  const falsa = (k) => ({
+    palas: new Float32Array(16),
+    prepararPalas: () => 0,
+    jugar: (arena, id) => { jugadas[k].push(id); return false; },
+  });
+
+  const politicas = [
+    { etiqueta: "🧠v1", red: falsa("v1") },
+    { etiqueta: "🧠v2", red: falsa("v2") },
+  ];
+  const arena = new Arena({ politicas });
+
+  const conRed = () => [...arena.players.values()].filter((p) => p.isBot && p.usaRed);
+  assert.strictEqual(conRed().length, BOTS_CON_RED,
+    `Tiene que haber exactamente ${BOTS_CON_RED} bots con red`);
+
+  const porRed = () => {
+    const c = [0, 0];
+    for (const b of conRed()) c[b.iRed]++;
+    return c;
+  };
+  assert.deepStrictEqual(porRed(), [BOTS_CON_RED / 2, BOTS_CON_RED / 2],
+    "Los bots con red se reparten mitad y mitad entre las dos versiones");
+
+  for (const b of conRed()) {
+    assert.ok(b.name.endsWith(politicas[b.iRed].etiqueta),
+      `El bot ${b.name} tiene que llevar la etiqueta de su red`);
+  }
+
+  console.log("  ✓ Dos redes conviven repartidas y etiquetadas en la misma arena");
+}
+
+{
+  // El reparto tiene que recomponerse solo. Si no, alcanza con que muera un
+  // bot de una versión y renazca con la otra para terminar comparando 6 contra
+  // 2 sin que ninguna métrica lo delate.
+  const falsa = () => ({ palas: new Float32Array(16), prepararPalas: () => 0, jugar: () => false });
+  const arena = new Arena({
+    politicas: [{ etiqueta: "🧠v1", red: falsa() }, { etiqueta: "🧠v2", red: falsa() }],
+  });
+
+  const conRed = () => [...arena.players.values()].filter((p) => p.isBot && p.usaRed);
+  for (const b of conRed().filter((b) => b.iRed === 0).slice(0, 3)) arena.players.delete(b.id);
+
+  const antes = conRed().filter((b) => b.iRed === 0).length;
+  for (let i = 0; i < 3; i++) arena.spawnBot();
+  const despues = conRed().filter((b) => b.iRed === 0).length;
+
+  assert.strictEqual(despues, antes + 3,
+    "Los bots nuevos van a la versión que quedó con menos representantes");
+  assert.deepStrictEqual(
+    [conRed().filter((b) => b.iRed === 0).length, conRed().filter((b) => b.iRed === 1).length],
+    [BOTS_CON_RED / 2, BOTS_CON_RED / 2],
+    "Y el reparto vuelve a quedar parejo");
+
+  console.log("  ✓ El reparto entre versiones se recompone tras morir bots de una sola");
+}
+
+{
+  // Cada bot tiene que decidir con SU red, no con la primera de la lista.
+  const vistos = { v1: new Set(), v2: new Set() };
+  const falsa = (k) => ({
+    palas: new Float32Array(16),
+    prepararPalas: () => 0,
+    jugar: (arena, id) => { vistos[k].add(id); return false; },
+  });
+  const arena = new Arena({
+    politicas: [{ etiqueta: "🧠v1", red: falsa("v1") }, { etiqueta: "🧠v2", red: falsa("v2") }],
+  });
+
+  const esperado = { v1: new Set(), v2: new Set() };
+  for (const b of arena.players.values()) {
+    if (b.isBot && b.usaRed) esperado[b.iRed === 0 ? "v1" : "v2"].add(b.id);
+  }
+  for (let i = 0; i < 3; i++) arena.tick(1000 / 30); // las 3 fases de decisión
+
+  assert.deepStrictEqual([...vistos.v1].sort(), [...esperado.v1].sort(),
+    "La v1 decide exactamente por sus bots");
+  assert.deepStrictEqual([...vistos.v2].sort(), [...esperado.v2].sort(),
+    "La v2 decide exactamente por los suyos");
+
+  console.log("  ✓ Cada bot decide con la red que le tocó al nacer");
+}
+
+{
+  // Compatibilidad: una sola red por `politica` tiene que seguir andando, y
+  // sin ninguna la arena vuelve a la heurística en vez de romperse.
+  const arena1 = new Arena({
+    politica: { palas: new Float32Array(16), prepararPalas: () => 0, jugar: () => false },
+  });
+  const unaRed = [...arena1.players.values()].filter((p) => p.isBot && p.usaRed);
+  assert.strictEqual(unaRed.length, BOTS_CON_RED, "Con una sola red sigue habiendo bots con red");
+  assert.ok(unaRed.every((b) => b.name.endsWith("🧠")), "Y conservan la etiqueta de siempre");
+
+  const arena0 = new Arena({});
+  assert.ok([...arena0.players.values()].every((p) => !p.usaRed),
+    "Sin redes no hay ningún bot con red");
+  arena0.tick(1000 / 30); // no tiene que tirar
+  assert.ok([...arena0.players.values()].some((p) => p.isBot), "Y la arena sigue con sus bots");
+
+  console.log("  ✓ Una sola red y ninguna red siguen funcionando igual");
 }
 
 console.log("\n¡Todos los tests de Arena pasaron exitosamente!");
