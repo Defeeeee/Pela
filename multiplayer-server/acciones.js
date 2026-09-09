@@ -1,4 +1,4 @@
-import { MAX_CELLS, MIN_SPLIT_MASS } from "../multiplayer-server/agarra.js";
+import { MAX_CELLS, MIN_SPLIT_MASS } from "./agarra.js";
 
 /**
  * Espacio de acciones discreto sobre lo único que el servidor acepta:

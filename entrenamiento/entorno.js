@@ -1,8 +1,9 @@
 import {
   Arena, TARGET_POPULATION, sincronizarAgregados, radiusForMass, MIN_SPLIT_MASS,
+  anotarVelocidades,
 } from "../multiplayer-server/agarra.js";
-import { codificar, aplanarPalas, anotarVelocidades, TAM_OBS } from "./observacion.js";
-import { decodificar, mascara, NUM_ACCIONES } from "./acciones.js";
+import { codificar, aplanarPalas, TAM_OBS } from "../multiplayer-server/observacion.js";
+import { decodificar, mascara, NUM_ACCIONES } from "../multiplayer-server/acciones.js";
 
 const DT = 1000 / 30;
 

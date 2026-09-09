@@ -20,6 +20,14 @@ export const BOT_MAX_MASS = 1500;
 
 /** Cuánto tarda un bot en volver tras ser comido, en tiempo simulado. */
 export const REAPARICION_BOT_MS = 2000;
+
+/**
+ * Cuántos de los bots juegan con la red entrenada. El resto queda con la
+ * heurística. Medido en el ARM de producción, cada bot con red cuesta ~4,7% de
+ * un core; con los ocho eran 38%, demasiado para un proceso que además atiende
+ * el multijugador de /escapecv.
+ */
+export const BOTS_CON_RED = 4;
 export const BASE_SPEED = 260; // px/segundo a masa 1
 
 // División (barra espaciadora). Un jugador deja de ser un círculo y pasa a ser
@@ -58,6 +66,29 @@ export function radiusForMass(mass) {
 
 export function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * Calcula la velocidad de cada jugador por diferencia de posición y la deja
+ * anotada en el propio objeto (vxObs/vyObs).
+ *
+ * Se hace por diferencia y no leyendo cell.vx porque ése es sólo el impulso de
+ * la división, que se apaga en menos de un segundo: el movimiento normal del
+ * jugador no está en ninguna variable, se aplica directo a la posición.
+ */
+export function anotarVelocidades(arena, dtSeg) {
+  for (const p of arena.players.values()) {
+    if (!p.alive) continue;
+    if (p._px !== undefined) {
+      p.vxObs = (p.x - p._px) / dtSeg;
+      p.vyObs = (p.y - p._py) / dtSeg;
+    } else {
+      p.vxObs = 0;
+      p.vyObs = 0;
+    }
+    p._px = p.x;
+    p._py = p.y;
+  }
 }
 
 export function crearCelula(x, y, mass, mergeAt = 0) {
@@ -134,6 +165,15 @@ export class Arena {
      * flakiness antes).
      */
     this.random = options.random || Math.random;
+
+    /**
+     * Política entrenada para manejar a los bots. Opcional a propósito: si no
+     * viene, se usa la heurística de siempre. El entrenamiento NO la pasa —sus
+     * bots tienen que seguir siendo los heurísticos, que son el rival contra el
+     * que se mide el progreso— y producción sí.
+     */
+    this.politica = options.politica || null;
+    this.ticksDesdeDecision = 0;
 
     // Récords a persistir, que server.js drena después de cada tick. La arena
     // no conoce el leaderboard a propósito: así se sigue pudiendo testear la
@@ -386,9 +426,58 @@ export class Arena {
     return bot;
   }
 
-  updateBots(now) {
+  /**
+   * Bots manejados por la red entrenada.
+   *
+   * Deciden cada 3 ticks, igual que durante el entrenamiento: la política
+   * aprendió a 10 decisiones por segundo simulado, y hacerla decidir a 30 le
+   * cambiaría el significado a cada acción (los impulsos y las distancias se
+   * recorren en tres veces menos tiempo del que ella espera).
+   */
+  #updateBotsPolitica() {
+    const fase = this.ticksDesdeDecision % 3;
+    this.ticksDesdeDecision++;
+
+    anotarVelocidades(this, 1 / 30);
+
+    let nPalas = -1;
+    let i = 0;
     for (const bot of this.players.values()) {
       if (!bot.isBot || !bot.alive) continue;
+
+      // Sólo los primeros `botsConRed` usan la política; el resto sigue con la
+      // heurística. Es mitad presupuesto y mitad diseño: mezclar rivales duros
+      // con rivales torpes hace una arena más jugable que ocho máquinas
+      // perfectas, y deja margen de CPU en el proceso que además atiende el
+      // multijugador de /escapecv.
+      const conRed = i < BOTS_CON_RED;
+      i++;
+      if (!conRed) { this.botHeuristico(bot, this.tiempo); continue; }
+
+      // Escalonado por fase: cada bot decide cada 3 ticks (10 Hz, como en el
+      // entrenamiento) pero no todos en el mismo tick. Sin esto los ocho caían
+      // juntos y ese tick costaba 38 ms contra un presupuesto de 33: un tirón
+      // visible cada 100 ms.
+      if (bot.faseDecision === undefined) bot.faseDecision = i % 3;
+      if (bot.faseDecision !== fase) continue;
+
+      if (nPalas < 0) nPalas = this.politica.prepararPalas(this);
+      this.politica.jugar(this, bot.id, nPalas);
+    }
+  }
+
+  updateBots(now) {
+    if (this.politica) return this.#updateBotsPolitica();
+
+    for (const bot of this.players.values()) {
+      if (!bot.isBot || !bot.alive) continue;
+      this.botHeuristico(bot, now);
+    }
+  }
+
+  /** La IA de tres estados de siempre, para un bot. */
+  botHeuristico(bot, now) {
+    {
 
       let nearestThreat = null;
       let minThreatDist = Infinity;
@@ -422,7 +511,7 @@ export class Arena {
         bot.dx = vx / len;
         bot.dy = vy / len;
         bot.botChangeTargetAt = now + 400;
-        continue;
+        return;   // era `continue` del bucle de bots
       }
 
       if (nearestPrey) {
@@ -432,7 +521,7 @@ export class Arena {
         bot.dx = vx / len;
         bot.dy = vy / len;
         bot.botChangeTargetAt = now + 500;
-        continue;
+        return;   // era `continue` del bucle de bots
       }
 
       if (now >= bot.botChangeTargetAt) {

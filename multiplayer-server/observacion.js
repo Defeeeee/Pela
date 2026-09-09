@@ -6,7 +6,7 @@ import {
   MERGE_COOLDOWN_MS,
   EAT_MASS_RATIO,
   INITIAL_MASS,
-} from "../multiplayer-server/agarra.js";
+} from "./agarra.js";
 
 /**
  * Codificador de observación: de la arena a un vector fijo de números.
@@ -45,29 +45,6 @@ const logMasa = (m) => Math.log(Math.max(1, m) / INITIAL_MASS) / Math.log(MASA_R
  * de 600 elementos cuatro veces (una por agente) era el costo dominante de la
  * codificación.
  */
-/**
- * Calcula la velocidad de cada jugador por diferencia de posición y la deja
- * anotada en el propio objeto (vxObs/vyObs).
- *
- * Se hace por diferencia y no leyendo cell.vx porque ése es sólo el impulso de
- * la división, que se apaga en menos de un segundo: el movimiento normal del
- * jugador no está en ninguna variable, se aplica directo a la posición.
- */
-export function anotarVelocidades(arena, dtSeg) {
-  for (const p of arena.players.values()) {
-    if (!p.alive) continue;
-    if (p._px !== undefined) {
-      p.vxObs = (p.x - p._px) / dtSeg;
-      p.vyObs = (p.y - p._py) / dtSeg;
-    } else {
-      p.vxObs = 0;
-      p.vyObs = 0;
-    }
-    p._px = p.x;
-    p._py = p.y;
-  }
-}
-
 export function aplanarPalas(arena, destino) {
   let n = 0;
   for (const pala of arena.palas.values()) {

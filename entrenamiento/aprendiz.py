@@ -692,6 +692,12 @@ def main():
             m["evalSupervivencia"] = round(float(ev[5] / e_eps / 10), 1)
             m["evalKillsPorMillon"] = round(float(ev[6] / max(1e-9, ev[15] / 1e6)), 2)
             m["evalEpisodios"] = int(ev[0])
+            # Masa por minuto: la única medida de crecimiento sin techo. El
+            # cociente pico/inicial se satura solo cuando el agente sobrevive
+            # toda la vida, y nos hizo creer que se había amesetado cuando lo
+            # que se había amesetado era la ventana de medición.
+            seg = float(ev[5] / e_eps / 10)
+            m["evalMasaPorMinuto"] = round((float(ev[9] / e_eps) - 20) / (seg / 60), 2) if seg > 0 else 0
 
         métricas.write(json.dumps(m) + "\n")
         histograma[:] = 0

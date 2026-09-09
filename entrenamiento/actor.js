@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { EntornoVectorial, REPETIR_ACCION } from "./entorno.js";
-import { TAM_OBS } from "./observacion.js";
-import { NUM_ACCIONES } from "./acciones.js";
+import { TAM_OBS } from "../multiplayer-server/observacion.js";
+import { NUM_ACCIONES } from "../multiplayer-server/acciones.js";
 
 /**
  * Un worker de simulación. Lo lanza el aprendiz de Python, uno por core.

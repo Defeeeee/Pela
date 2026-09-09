@@ -1,6 +1,6 @@
 import { EntornoVectorial, REPETIR_ACCION } from "./entorno.js";
-import { NUM_ACCIONES } from "./acciones.js";
-import { TAM_OBS } from "./observacion.js";
+import { NUM_ACCIONES } from "../multiplayer-server/acciones.js";
+import { TAM_OBS } from "../multiplayer-server/observacion.js";
 
 /**
  * Mide el techo del entorno con una política al azar y deja una línea de base.
