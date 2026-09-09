@@ -396,7 +396,24 @@ export class Arena {
   spawnBot() {
     const id = `bot_${this.nextBotId++}`;
     const nameIndex = (this.nextBotId - 1) % BOT_NAMES.length;
-    const name = BOT_NAMES[nameIndex];
+
+    /**
+     * Si este bot usa la red o la heurística se decide acá, al nacer, y no se
+     * vuelve a mirar. Antes se tomaban "los primeros N en orden de iteración
+     * del Map", y ese orden cambia cada vez que un bot se jubila y entra otro:
+     * el conjunto de bots inteligentes iba mutando solo y en silencio, y no
+     * había forma de saber desde afuera cuál era cuál.
+     *
+     * Se cuentan los que ya hay para mantener exactamente BOTS_CON_RED.
+     */
+    let conRed = 0;
+    for (const p of this.players.values()) if (p.isBot && p.usaRed) conRed++;
+    const usaRed = Boolean(this.politica) && conRed < BOTS_CON_RED;
+
+    // Los que juegan con la red se distinguen en la tabla. No es decoración:
+    // sin esto no se puede saber si al que te está ganando lo maneja la red o
+    // la heurística de tres estados.
+    const name = usaRed ? `${BOT_NAMES[nameIndex]} 🧠` : BOT_NAMES[nameIndex];
     const color = COLORS[Math.floor(this.random() * COLORS.length)];
     const x = Math.round(200 + this.random() * (WORLD_WIDTH - 400));
     const y = Math.round(200 + this.random() * (WORLD_HEIGHT - 400));
@@ -415,6 +432,7 @@ export class Arena {
       dy: 0,
       alive: true,
       isBot: true,
+      usaRed,
       kills: 0,
       masaRobada: 0,
       joinedAt: Date.now(),
@@ -445,14 +463,8 @@ export class Arena {
     for (const bot of this.players.values()) {
       if (!bot.isBot || !bot.alive) continue;
 
-      // Sólo los primeros `botsConRed` usan la política; el resto sigue con la
-      // heurística. Es mitad presupuesto y mitad diseño: mezclar rivales duros
-      // con rivales torpes hace una arena más jugable que ocho máquinas
-      // perfectas, y deja margen de CPU en el proceso que además atiende el
-      // multijugador de /escapecv.
-      const conRed = i < BOTS_CON_RED;
       i++;
-      if (!conRed) { this.botHeuristico(bot, this.tiempo); continue; }
+      if (!bot.usaRed) { this.botHeuristico(bot, this.tiempo); continue; }
 
       // Escalonado por fase: cada bot decide cada 3 ticks (10 Hz, como en el
       // entrenamiento) pero no todos en el mismo tick. Sin esto los ocho caían
