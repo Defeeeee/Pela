@@ -46,17 +46,38 @@ function sanitizeName(name) {
 }
 
 export class Room {
-  constructor(code, { isPublic = false, mode = "coop" } = {}) {
+  constructor(code, { isPublic = false, mode = "coop", random } = {}) {
     this.code = code;
     this.isPublic = isPublic;
     this.mode = mode; // 'coop' | 'battle'
+
+    /**
+     * Reloj de la partida, en milisegundos simulados, que avanza SOLO en
+     * `tick()`. Todo lo de adentro de la simulación —velocidades, oleadas,
+     * inmunidad, tiempo sobrevivido— se mide contra esto y nunca contra
+     * `Date.now()`.
+     *
+     * Es lo que permite correr la sala mil veces más rápido que el tiempo real
+     * para entrenar. Con el reloj de pared, simular un tick tras otro sin
+     * esperar deja los temporizadores clavados: para el código pasaron 33 ms y
+     * para el reloj cero, así que las oleadas no entran nunca y la inmunidad no
+     * se termina jamás. Ya rompió tres veces el entrenamiento del Agarrá.
+     *
+     * El lobby y la cuenta regresiva siguen en reloj de pared a propósito: los
+     * maneja el loop del servidor, no la simulación, y en entrenamiento no
+     * existen porque las salas arrancan ya jugando.
+     */
+    this.tiempo = 0;
+
+    // Inyectable para que una sala con semilla sea reproducible. Sin esto no se
+    // puede comparar dos políticas sobre las mismas oleadas.
+    this.random = random || Math.random;
     this.state = "lobby"; // 'lobby' | 'countdown' | 'playing' | 'ended'
     this.hostId = null;
     this.players = new Map(); // socketId -> player
     this.enemies = [];
     this.warnings = [];
     this.countdownEndsAt = null;
-    this.startTime = null;
     this.lastEnemyTime = 0;
     this.enemySpawnRate = ENEMY_SPAWN_RATE_START;
     this.interval = null;
@@ -136,8 +157,8 @@ export class Room {
   beginPlaying() {
     this.state = "playing";
     this.roundId++;
-    this.startTime = Date.now();
-    this.lastEnemyTime = this.startTime;
+    this.tiempo = 0;
+    this.lastEnemyTime = 0;
     this.enemySpawnRate = ENEMY_SPAWN_RATE_START;
     this.enemies = [];
     this.warnings = [];
@@ -147,15 +168,16 @@ export class Room {
       p.reviveProgressMs = 0;
       p.isBeingRevived = false;
       p.immuneUntil = 0;
-      p.x = CORRAL_X + CORRAL_W / 2 + (Math.random() - 0.5) * 100;
-      p.y = CORRAL_Y + CORRAL_H / 2 + (Math.random() - 0.5) * 100;
+      p.x = CORRAL_X + CORRAL_W / 2 + (this.random() - 0.5) * 100;
+      p.y = CORRAL_Y + CORRAL_H / 2 + (this.random() - 0.5) * 100;
     }
   }
 
   /** Un tick de simulación. Devuelve true si la partida terminó en este tick. */
   tick(dtMs) {
-    const now = Date.now();
-    const elapsedS = (now - this.startTime) / 1000;
+    this.tiempo += dtMs;
+    const now = this.tiempo;
+    const elapsedS = now / 1000;
 
     // Movimiento de jugadores vivos, con velocidad creciente igual que el
     // modo solitario (ver app/escapecv/page.js): así se siente parecido.
@@ -167,7 +189,7 @@ export class Room {
       p.y += p.dy * p.speed;
       p.x = clamp(p.x, CORRAL_X + p.size / 2, CORRAL_X + CORRAL_W - p.size / 2);
       p.y = clamp(p.y, CORRAL_Y + p.size / 2, CORRAL_Y + CORRAL_H - p.size / 2);
-      p.survivedMs = now - this.startTime;
+      p.survivedMs = now;
     }
 
     // Battle royale: los jugadores se empujan entre sí, así que te pueden
@@ -242,29 +264,29 @@ export class Room {
     // desde afuera del mundo apuntando a un punto random del corral.
     if (now - this.lastEnemyTime > this.enemySpawnRate) {
       this.lastEnemyTime = now;
-      const numToSpawn = 1 + Math.floor(Math.random() * (1 + elapsedS / 15));
+      const numToSpawn = 1 + Math.floor(this.random() * (1 + elapsedS / 15));
       for (let i = 0; i < numToSpawn; i++) {
         let ex, ey;
-        const side = Math.floor(Math.random() * 4);
-        if (side === 0) { ex = Math.random() * WORLD_WIDTH; ey = -60; }
-        else if (side === 1) { ex = WORLD_WIDTH + 60; ey = Math.random() * WORLD_HEIGHT; }
-        else if (side === 2) { ex = Math.random() * WORLD_WIDTH; ey = WORLD_HEIGHT + 60; }
-        else { ex = -60; ey = Math.random() * WORLD_HEIGHT; }
+        const side = Math.floor(this.random() * 4);
+        if (side === 0) { ex = this.random() * WORLD_WIDTH; ey = -60; }
+        else if (side === 1) { ex = WORLD_WIDTH + 60; ey = this.random() * WORLD_HEIGHT; }
+        else if (side === 2) { ex = this.random() * WORLD_WIDTH; ey = WORLD_HEIGHT + 60; }
+        else { ex = -60; ey = this.random() * WORLD_HEIGHT; }
 
-        const tx = CORRAL_X + Math.random() * CORRAL_W;
-        const ty = CORRAL_Y + Math.random() * CORRAL_H;
+        const tx = CORRAL_X + this.random() * CORRAL_W;
+        const ty = CORRAL_Y + this.random() * CORRAL_H;
         const dx = tx - ex, dy = ty - ey;
         const dist = Math.hypot(dx, dy) || 1;
 
-        const isGiant = Math.random() < 0.1 + elapsedS / 200;
-        const size = isGiant ? 60 + Math.random() * 40 : 20 + Math.random() * 20;
-        const speedFactor = isGiant ? 0.8 + Math.random() * 0.5 : 1 + Math.random();
+        const isGiant = this.random() < 0.1 + elapsedS / 200;
+        const size = isGiant ? 60 + this.random() * 40 : 20 + this.random() * 20;
+        const speedFactor = isGiant ? 0.8 + this.random() * 0.5 : 1 + this.random();
         const espeed = Math.max(2, enemyBaseSpeed * speedFactor);
 
         this.warnings.push({
           x: ex, y: ey,
           vx: (dx / dist) * espeed, vy: (dy / dist) * espeed,
-          spawnAt: now + 900 + Math.random() * 500,
+          spawnAt: now + 900 + this.random() * 500,
           size,
         });
       }
@@ -291,7 +313,7 @@ export class Room {
         const d = Math.hypot(p.x - e.x, p.y - e.y);
         if (d < p.size / 2 + hitboxR) {
           p.alive = false;
-          p.survivedMs = now - this.startTime;
+          p.survivedMs = now;
           p.reviveProgressMs = 0;
           p.isBeingRevived = false;
         }
@@ -318,7 +340,11 @@ export class Room {
   }
 
   snapshot() {
-    const now = Date.now();
+    // `now` es el reloj simulado porque con él se comparan `immuneUntil` y
+    // `spawnAt`, que ahora viven en esa línea de tiempo. `serverTime` en
+    // cambio sigue siendo de pared: es la marca que el cliente usa para
+    // interpolar entre snapshots, y tiene que ser comparable con su reloj.
+    const now = this.tiempo;
     return {
       code: this.code,
       isPublic: this.isPublic,
@@ -327,9 +353,9 @@ export class Room {
       hostId: this.hostId,
       roundId: this.roundId,
       countdownEndsAt: this.countdownEndsAt,
-      countdownRemainingSec: this.countdownEndsAt ? Math.max(0, Math.ceil((this.countdownEndsAt - now) / 1000)) : null,
-      serverTime: now,
-      elapsedMs: this.startTime ? now - this.startTime : 0,
+      countdownRemainingSec: this.countdownEndsAt ? Math.max(0, Math.ceil((this.countdownEndsAt - Date.now()) / 1000)) : null,
+      serverTime: Date.now(),
+      elapsedMs: this.state === "playing" || this.state === "ended" ? this.tiempo : 0,
       players: [...this.players.values()].map((p) => ({
         id: p.id, name: p.name, color: p.color,
         x: p.x, y: p.y, size: p.size, alive: p.alive, survivedMs: p.survivedMs,
