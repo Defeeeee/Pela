@@ -23,6 +23,21 @@ const INTERP_DELAY_MS = 120;
 function multiplayerUrl() {
   if (typeof window === "undefined") return undefined;
 
+  /**
+   * En desarrollo se puede apuntar el socket a OTRO servidor con `?mp=`, para
+   * jugar en la arena de producción sirviendo la página desde acá. Es la forma
+   * de entrar cuando `proxy.js` tapa la página por horario: el bloqueo es de
+   * páginas y exime `/api`, y `/socket.io` ni pasa por Next.
+   *
+   * Va apagado en producción a propósito. Un `?mp=` vivo ahí sería un agujero:
+   * bastaría mandarle a alguien un link con otro host para que su cliente se
+   * conecte ahí y le entregue un ticket de sesión firmado por este sitio.
+   */
+  if (process.env.NODE_ENV !== "production") {
+    const destino = new URLSearchParams(window.location.search).get("mp");
+    if (destino) return destino;
+  }
+
   const enLocal =
     window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
   if (enLocal) {
