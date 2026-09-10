@@ -315,14 +315,15 @@ const agarraIo = io.of("/agarra");
 // están presentes; si no, con la heurística de siempre. Medido en la misma
 // arena contra bots heurísticos, la red junta 69 de masa contra 46 y muere
 // cinco veces menos.
-// Dos versiones de la red conviviendo en la arena pública: la que venía
-// jugando y la candidata recién entrenada, mitad y mitad de los bots con red.
-// Es la única comparación que vale —misma arena, mismas palas, mismos
-// rivales— y de paso se puede mirar en vivo cuál juega mejor.
-const politicasBots = cargarPoliticas([
-  { etiqueta: "🧠v1", archivo: "pesos-bots" },
-  { etiqueta: "🧠v2", archivo: "pesos-nueva" },
-]);
+// Los ocho bots con red juegan todos la misma política, la ganadora del duelo
+// cara a cara: contra la que venía desplegada saca 24% más de masa, 39% más de
+// kills y muere la mitad.
+//
+// `cargarPoliticas` acepta varias entradas justamente para volver a poner dos
+// en la misma arena cuando haya otra candidata que medir. Comparar por métricas
+// históricas no sirve —la vara cambia— y la única comparación válida es la
+// misma arena, con las mismas palas y los mismos rivales.
+const politicasBots = cargarPoliticas([{ etiqueta: "🧠", archivo: "pesos-bots" }]);
 const agarraArena = new Arena({ politicas: politicasBots });
 
 agarraIo.use(async (socket, next) => {
