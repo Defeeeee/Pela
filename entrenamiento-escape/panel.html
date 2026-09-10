@@ -1,0 +1,417 @@
+<meta charset="utf-8">
+<title>escapecv · entrenamiento</title>
+<style>
+  :root {
+    --fondo: #0b0d10;
+    --panel: #14181e;
+    --borde: #232a33;
+    --texto: #e6ebf2;
+    --suave: #8b97a8;
+    --bien: #4ade80;
+    --mal: #f87171;
+    --ojo: #fbbf24;
+    --azul: #60a5fa;
+    --violeta: #c084fc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--fondo); color: var(--texto);
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  header {
+    padding: 14px 20px; border-bottom: 1px solid var(--borde);
+    display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap;
+    position: sticky; top: 0; background: var(--fondo); z-index: 10;
+  }
+  h1 { margin: 0; font-size: 15px; letter-spacing: .5px; font-weight: 600; }
+  .estado { color: var(--suave); font-size: 12px; }
+  .vivo { color: var(--bien); }
+  .muerto { color: var(--mal); }
+  main { padding: 18px 20px 60px; display: grid; gap: 18px; }
+  .fila { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+  .caja {
+    background: var(--panel); border: 1px solid var(--borde);
+    border-radius: 8px; padding: 12px 14px;
+  }
+  .caja h2 {
+    margin: 0 0 10px; font-size: 11px; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--suave); font-weight: 600;
+  }
+  .num { font-size: 26px; font-weight: 600; line-height: 1.1; }
+  .num small { font-size: 12px; color: var(--suave); font-weight: 400; }
+  .sub { color: var(--suave); font-size: 11px; margin-top: 4px; }
+  .delta { font-size: 11px; margin-left: 6px; }
+  .up { color: var(--bien); } .down { color: var(--mal); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: right; padding: 3px 6px; }
+  th:first-child, td:first-child { text-align: left; color: var(--suave); }
+  th { color: var(--suave); font-weight: 500; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+  tr + tr td { border-top: 1px solid var(--borde); }
+  canvas { width: 100%; display: block; }
+  .grande { grid-column: 1 / -1; }
+  .aviso {
+    background: #2a1f10; border-color: #5a4520; color: var(--ojo);
+    font-size: 12px; padding: 10px 14px;
+  }
+  #arena { background: #05070a; border-radius: 6px; }
+  .leyenda { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--suave); margin-top: 8px; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; }
+  .punto { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+</style>
+
+<header>
+  <h1>escapecv · entrenamiento</h1>
+  <span class="estado" id="cabecera">conectando…</span>
+</header>
+
+<main>
+  <div id="aviso"></div>
+
+  <!-- La supervivencia es LA métrica de este juego. Va primero y sola. -->
+  <div class="fila">
+    <div class="caja">
+      <h2>Evaluación · solo, sin curriculum</h2>
+      <div class="num" id="evalSup">—<small>s</small><span class="delta" id="evalSupD"></span></div>
+      <div class="sub" id="evalSub">—</div>
+    </div>
+    <div class="caja">
+      <h2>Supervivencia en entrenamiento</h2>
+      <div class="num" id="sup">—<small>s</small><span class="delta" id="supD"></span></div>
+      <div class="sub" id="supSub">—</div>
+    </div>
+    <div class="caja">
+      <h2>Récord</h2>
+      <div class="num" id="record">—<small>s</small></div>
+      <div class="sub" id="recordSub">—</div>
+    </div>
+    <div class="caja">
+      <h2>Ritmo</h2>
+      <div class="num" id="ritmo">—<small>/s</small></div>
+      <div class="sub" id="ritmoSub">—</div>
+    </div>
+  </div>
+
+  <div class="fila">
+    <div class="caja grande">
+      <h2>Supervivencia · evaluación (solo) vs entrenamiento</h2>
+      <canvas id="gSup" height="150"></canvas>
+      <div class="leyenda">
+        <span class="pill"><span class="punto" style="background:var(--bien)"></span>evaluación (el número de verdad)</span>
+        <span class="pill"><span class="punto" style="background:var(--azul)"></span>entrenamiento (mezcla modos y curriculum)</span>
+        <span class="pill"><span class="punto" style="background:var(--suave)"></span>azar 14,9 s · heurística 24,6 s</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="fila">
+    <div class="caja">
+      <h2>Por modo</h2>
+      <table id="tModos"></table>
+    </div>
+    <div class="caja">
+      <h2>Calidad del juego</h2>
+      <table id="tCalidad"></table>
+    </div>
+    <div class="caja">
+      <h2>Aprendizaje</h2>
+      <table id="tAprender"></table>
+    </div>
+    <div class="caja">
+      <h2>Máquina</h2>
+      <table id="tMaquina"></table>
+    </div>
+  </div>
+
+  <div class="fila">
+    <div class="caja grande">
+      <h2>El que más está aguantando ahora <span id="arenaInfo" class="sub" style="display:inline"></span></h2>
+      <canvas id="arena" height="380"></canvas>
+      <div class="leyenda">
+        <span class="pill"><span class="punto" style="background:var(--bien)"></span>agente vivo</span>
+        <span class="pill"><span class="punto" style="background:var(--mal)"></span>caído</span>
+        <span class="pill"><span class="punto" style="background:#fff"></span>pala</span>
+        <span class="pill"><span class="punto" style="background:var(--ojo);opacity:.5"></span>aviso (todavía no existe)</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="fila">
+    <div class="caja grande">
+      <h2>Recompensa y entropía</h2>
+      <canvas id="gApr" height="130"></canvas>
+      <div class="leyenda">
+        <span class="pill"><span class="punto" style="background:var(--violeta)"></span>retorno medio</span>
+        <span class="pill"><span class="punto" style="background:var(--ojo)"></span>entropía (exploración)</span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Referencias medidas con medir.js. Están acá para que ninguna curva se lea
+// como progreso sin tener contra qué compararla: en este proyecto ya pasó
+// varias veces que un número subía y no significaba nada.
+const AZAR = 14.9;
+const HEURISTICA = 24.6;
+
+// Mínimo de episodios para creerle a un cociente de evaluación. Es la regla de
+// oro del proyecto: cuatro veces nos engañaron cocientes sobre muestras de 5 a
+// 15 episodios. Por debajo de esto el panel lo dice en vez de mostrar el número
+// como si valiera.
+const MIN_EPISODIOS = 190;
+
+let filas = [];
+
+const $ = (id) => document.getElementById(id);
+const fmt = (v, d = 1) => (v === undefined || v === null || Number.isNaN(v) ? "—" : Number(v).toFixed(d));
+const pct = (v) => (v === undefined ? "—" : (v * 100).toFixed(1) + "%");
+const miles = (v) => (v === undefined ? "—" : Math.round(v).toLocaleString("es"));
+
+function delta(el, actual, previo, mejorEsMas = true) {
+  if (previo === undefined || actual === undefined || !previo) { el.textContent = ""; return; }
+  const d = ((actual - previo) / Math.abs(previo)) * 100;
+  if (Math.abs(d) < 0.5) { el.textContent = ""; return; }
+  const bueno = mejorEsMas ? d > 0 : d < 0;
+  el.textContent = (d > 0 ? "+" : "") + d.toFixed(1) + "%";
+  el.className = "delta " + (bueno ? "up" : "down");
+}
+
+function tabla(el, pares) {
+  el.innerHTML = pares
+    .map((p) => (p.length === 3
+      ? `<tr><td>${p[0]}</td><td>${p[1]}</td><td style="color:var(--suave)">${p[2]}</td></tr>`
+      : `<tr><td>${p[0]}</td><td colspan="2">${p[1]}</td></tr>`))
+    .join("");
+}
+
+/** Media de un campo sobre las últimas n filas que lo tengan. */
+function media(campo, n, desde = 0) {
+  const v = filas.slice(filas.length - n - desde, filas.length - desde)
+    .map((f) => f[campo]).filter((x) => typeof x === "number");
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : undefined;
+}
+
+function linea(canvas, series, refs = []) {
+  const c = canvas.getContext("2d");
+  const w = canvas.width = canvas.clientWidth * devicePixelRatio;
+  const h = canvas.height = canvas.clientHeight * devicePixelRatio;
+  c.clearRect(0, 0, w, h);
+
+  const todos = series.flatMap((s) => s.datos).filter((v) => typeof v === "number");
+  if (!todos.length) return;
+  let min = Math.min(...todos, ...refs.map((r) => r.v));
+  let max = Math.max(...todos, ...refs.map((r) => r.v));
+  if (max === min) { max += 1; min -= 1; }
+  const pad = (max - min) * 0.12;
+  min -= pad; max += pad;
+
+  const n = Math.max(...series.map((s) => s.datos.length));
+  const X = (i) => (i / Math.max(1, n - 1)) * (w - 8) + 4;
+  const Y = (v) => h - 6 - ((v - min) / (max - min)) * (h - 12);
+
+  for (const r of refs) {
+    c.strokeStyle = "#3a424e"; c.lineWidth = devicePixelRatio; c.setLineDash([5 * devicePixelRatio, 5 * devicePixelRatio]);
+    c.beginPath(); c.moveTo(0, Y(r.v)); c.lineTo(w, Y(r.v)); c.stroke();
+    c.setLineDash([]);
+    c.fillStyle = "#5c6675"; c.font = `${10 * devicePixelRatio}px ui-monospace, monospace`;
+    c.fillText(r.etiqueta, 6 * devicePixelRatio, Y(r.v) - 4 * devicePixelRatio);
+  }
+
+  for (const s of series) {
+    c.strokeStyle = s.color; c.lineWidth = 1.6 * devicePixelRatio;
+    c.beginPath();
+    let primero = true;
+    s.datos.forEach((v, i) => {
+      if (typeof v !== "number") return;
+      if (primero) { c.moveTo(X(i), Y(v)); primero = false; }
+      else c.lineTo(X(i), Y(v));
+    });
+    c.stroke();
+  }
+
+  c.fillStyle = "#5c6675"; c.font = `${10 * devicePixelRatio}px ui-monospace, monospace`;
+  c.fillText(max.toFixed(1), w - 42 * devicePixelRatio, 12 * devicePixelRatio);
+  c.fillText(min.toFixed(1), w - 42 * devicePixelRatio, h - 4 * devicePixelRatio);
+}
+
+function pintar() {
+  if (!filas.length) return;
+  const u = filas[filas.length - 1];
+
+  // Cabecera
+  const edadS = (Date.now() / 1000) - (u._recibido || 0);
+  const vivo = edadS < 90;
+  $("cabecera").innerHTML =
+    `<span class="${vivo ? "vivo" : "muerto"}">${vivo ? "● entrenando" : "○ sin datos nuevos"}</span> · ` +
+    `paso ${miles(u.paso)} · ${miles(u.transicionesTotales / 1e6)}M transiciones · ` +
+    `${fmt(u.tiempo / 3600, 1)} h`;
+
+  // Evaluación: el número de verdad, con su tamaño de muestra siempre visible.
+  const eps = u.evalEpisodios || 0;
+  $("evalSup").firstChild.textContent = fmt(u.evalSupervivenciaSeg, 2);
+  delta($("evalSupD"), media("evalSupervivenciaSeg", 20), media("evalSupervivenciaSeg", 20, 20));
+  const conf = eps >= MIN_EPISODIOS;
+  $("evalSub").innerHTML = `${miles(eps)} episodios ` +
+    (conf ? `· máx ${fmt(u.evalSupervivenciaMaxSeg)}s · muerte ${fmt(u.evalMuerte, 3)}`
+          : `<span style="color:var(--ojo)">— muestra chica, el número todavía no dice nada</span>`);
+
+  $("sup").firstChild.textContent = fmt(u.supervivenciaSeg, 2);
+  delta($("supD"), media("supervivenciaSeg", 20), media("supervivenciaSeg", 20, 20));
+  $("supSub").textContent = `${miles(u.episodiosEnVentana)} episodios en ventana · muerte ${fmt(u.tasaMuerte, 3)}`;
+
+  $("record").firstChild.textContent = fmt(u.supervivenciaRecordSeg);
+  $("recordSub").textContent = `máximo del ciclo ${fmt(u.supervivenciaMaxSeg)}s`;
+
+  $("ritmo").firstChild.textContent = miles(u.transicionesPorSeg);
+  $("ritmoSub").textContent = `${miles(u.vecesTiempoReal)}x tiempo real · ${miles(u.episodiosPorSeg)} episodios/s`;
+
+  // Aviso cuando la muestra de evaluación no alcanza.
+  $("aviso").className = conf ? "" : "caja aviso";
+  $("aviso").innerHTML = conf ? "" :
+    `La ventana de evaluación tiene ${miles(eps)} episodios y el piso para creerle es ${MIN_EPISODIOS}. ` +
+    `Se está llenando: sus cocientes no significan nada todavía.`;
+
+  tabla($("tModos"), [
+    ["", "supervivencia", "episodios"],
+    ["coop", fmt(u.supervivenciaCoopSeg, 2) + " s", miles(u.episodiosCoop)],
+    ["battle", fmt(u.supervivenciaBattleSeg, 2) + " s", miles(u.episodiosBattle)],
+    ["solo (eval)", fmt(u.evalSupervivenciaSeg, 2) + " s", miles(eps)],
+    ["rivales sobrevividos", fmt(u.rivalesSobrevividos, 2), "de 3"],
+    ["reanimaciones / ep coop", fmt(u.reanimacionesPorEpisodioCoop, 3), ""],
+    ["reanimaciones / millón", fmt(u.reanimacionesPorMillon, 1), ""],
+  ]);
+
+  tabla($("tCalidad"), [
+    ["en peligro", pct(u.fraccionEnPeligro), "con choque proyectado"],
+    ["contra la pared", pct(u.fraccionEnPared), "trampa clásica"],
+    ["quieto", pct(u.fraccionQuieto), "a veces es lo óptimo"],
+    ["esquives al límite", miles(u.esquivesAlLimitePorMillon), "por millón"],
+    ["enemigos en pantalla", fmt(u.enemigosEnPantalla, 1), "media"],
+    ["fin por tope", pct(u.fraccionPorTope), "sobrevivió 10 min"],
+  ]);
+
+  tabla($("tAprender"), [
+    ["retorno medio", fmt(u.retornoMedio, 2), ""],
+    ["recompensa/paso", fmt(u.recompensaPorPaso, 4), ""],
+    ["entropía", fmt(u.entropia, 3), `de ${fmt(u.entropiaMax, 2)}`],
+    ["KL aprox", fmt(u.klAprox, 5), u.epocasCortadas ? "época cortada" : ""],
+    ["varianza explicada", fmt(u.varianzaExplicada, 3), ""],
+    ["recorte", pct(u.fraccionRecortada), ""],
+    ["lr", (u.lr || 0).toExponential(1), ""],
+    ["coef. entropía", fmt(u.coefEntropia, 5), ""],
+  ]);
+
+  tabla($("tMaquina"), [
+    ["GPU", fmt(u.gpuUso, 0) + "%", `pico ${fmt(u.gpuPico, 0)}%`],
+    ["VRAM", miles(u.gpuMemMB) + " MB", `de ${miles(u.gpuMemTotalMB)}`],
+    ["GPU temp", fmt(u.gpuTemp, 0) + "°", ""],
+    ["carga CPU", fmt(u.cargaCPU, 2), `de ${u.cores}`],
+    ["simulando", pct(u.fraccionSimulando), ""],
+    ["aprendiendo", pct(u.fraccionAprendiendo), ""],
+    ["agentes", miles(u.agentes), `${u.workers} workers`],
+    ["lote", miles(u.loteRollout), `minilote ${miles(u.minilote)}`],
+  ]);
+
+  const N = 240;
+  const cola = filas.slice(-N);
+  linea($("gSup"), [
+    { datos: cola.map((f) => f.evalSupervivenciaSeg), color: "#4ade80" },
+    { datos: cola.map((f) => f.supervivenciaSeg), color: "#60a5fa" },
+  ], [{ v: AZAR, etiqueta: "azar" }, { v: HEURISTICA, etiqueta: "heurística" }]);
+
+  linea($("gApr"), [
+    { datos: cola.map((f) => f.retornoMedio), color: "#c084fc" },
+    { datos: cola.map((f) => f.entropia), color: "#fbbf24" },
+  ]);
+}
+
+let espectador = null;
+
+function pintarArena() {
+  const cv = $("arena");
+  const c = cv.getContext("2d");
+  const w = cv.width = cv.clientWidth * devicePixelRatio;
+  const h = cv.height = cv.clientHeight * devicePixelRatio;
+  c.clearRect(0, 0, w, h);
+  if (!espectador || espectador.vacio) {
+    c.fillStyle = "#5c6675"; c.font = `${12 * devicePixelRatio}px ui-monospace, monospace`;
+    c.fillText("sin volcado del espectador", 10 * devicePixelRatio, 20 * devicePixelRatio);
+    return;
+  }
+
+  const [MW, MH] = espectador.mundo || [1600, 900];
+  const esc = Math.min(w / MW, h / MH);
+  const ox = (w - MW * esc) / 2;
+  const oy = (h - MH * esc) / 2;
+  const X = (x) => ox + x * esc;
+  const Y = (y) => oy + y * esc;
+
+  // El corral, que es donde están confinados los jugadores. Dibujarlo importa:
+  // sin él no se entiende por qué el agente no se va del centro.
+  const CW = MW * 0.707, CH = MH * 0.707;
+  c.strokeStyle = "#232a33"; c.lineWidth = devicePixelRatio;
+  c.strokeRect(X((MW - CW) / 2), Y((MH - CH) / 2), CW * esc, CH * esc);
+
+  // Avisos primero, debajo de todo.
+  for (const [x, y, size, falta] of espectador.avisos || []) {
+    const alfa = Math.max(0.12, 1 - falta / 1500);
+    c.fillStyle = `rgba(251,191,36,${alfa * 0.45})`;
+    c.beginPath(); c.arc(X(x), Y(y), Math.max(3, size * 0.35 * esc), 0, 7); c.fill();
+  }
+
+  for (const [x, y, size, vx, vy] of espectador.enemigos || []) {
+    c.fillStyle = size >= 60 ? "#ffffff" : "#cbd5e1";
+    c.beginPath(); c.arc(X(x), Y(y), Math.max(1.5, size * 0.35 * esc), 0, 7); c.fill();
+    // La velocidad como una raya: es lo que hace legible por dónde va a pasar.
+    c.strokeStyle = "rgba(203,213,225,0.35)"; c.lineWidth = devicePixelRatio;
+    c.beginPath(); c.moveTo(X(x), Y(y)); c.lineTo(X(x + vx * 12), Y(y + vy * 12)); c.stroke();
+  }
+
+  for (const p of espectador.jugadores || []) {
+    const s = p.size * esc;
+    c.fillStyle = p.vivo ? (p.inmune ? "#fbbf24" : "#4ade80") : "#f87171";
+    c.globalAlpha = p.vivo ? 1 : 0.5;
+    c.fillRect(X(p.x) - s / 2, Y(p.y) - s / 2, s, s);
+    c.globalAlpha = 1;
+    if (!p.vivo && p.progresoReanim > 0) {
+      c.strokeStyle = "#4ade80"; c.lineWidth = 2 * devicePixelRatio;
+      c.beginPath();
+      c.arc(X(p.x), Y(p.y), s * 0.8, -Math.PI / 2, -Math.PI / 2 + p.progresoReanim * Math.PI * 2);
+      c.stroke();
+    }
+    c.fillStyle = "#8b97a8"; c.font = `${9 * devicePixelRatio}px ui-monospace, monospace`;
+    c.fillText(`${(p.vividoMs / 1000).toFixed(0)}s`, X(p.x) - s / 2, Y(p.y) - s / 2 - 3 * devicePixelRatio);
+  }
+
+  $("arenaInfo").textContent =
+    `· modo ${espectador.modo} · el mejor lleva ${(espectador.vividoMs / 1000).toFixed(1)}s ` +
+    `· minuto ${(espectador.tiempoMs / 60000).toFixed(1)} de la partida ` +
+    `· ${(espectador.enemigos || []).length} palas`;
+}
+
+async function cargarMetricas() {
+  try {
+    const r = await fetch("/metricas?n=600");
+    const d = await r.json();
+    const ahora = Date.now() / 1000;
+    filas = d.filas.map((f, i) => ({ ...f, _recibido: i === d.filas.length - 1 ? ahora : 0 }));
+    if (filas.length) filas[filas.length - 1]._recibido = ahora;
+    pintar();
+  } catch (e) {
+    $("cabecera").innerHTML = `<span class="muerto">○ el panel no puede leer las métricas</span>`;
+  }
+}
+
+async function cargarEspectador() {
+  try {
+    espectador = await (await fetch("/espectador")).json();
+  } catch (e) { espectador = null; }
+  pintarArena();
+}
+
+cargarMetricas();
+cargarEspectador();
+setInterval(cargarMetricas, 4000);
+setInterval(cargarEspectador, 500);
+addEventListener("resize", () => { pintar(); pintarArena(); });
+</script>
