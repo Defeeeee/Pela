@@ -28,6 +28,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# Episodios mínimos en la ventana de evaluación para que su número cuente como
+# evidencia. Es el piso que separa "la política mejoró" de "salieron tres
+# episodios con suerte": ya nos engañaron cuatro cocientes calculados sobre
+# muestras de 3 a 15 episodios.
+MIN_EPISODIOS_MEJOR = 190
+
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
 # Posición de masaPico dentro del bloque de estadísticas que manda el actor
@@ -343,7 +349,7 @@ def main():
     ruta_ckpt = os.path.join(args.salida, "politica.pt")
     ruta_mejor = os.path.join(args.salida, "mejor.pt")
     paso_global = 0
-    mejor_retorno = float("-inf")
+    mejor_eval = float("-inf")
     if os.path.exists(ruta_ckpt):
         ck = torch.load(ruta_ckpt, map_location=dispositivo, weights_only=False)
         if ck.get("tam_obs") == TAM and ck.get("n_acc") == NACC and ck.get("ancho") == args.ancho:
@@ -733,8 +739,26 @@ def main():
         # 20 pasos, así que cuando la política se pasa de agresiva y empeora,
         # la buena se pierde: ya nos pasó con la del paso 1107, que tenía el
         # retorno más alto de toda la corrida y hoy no existe.
-        if paso_global > 40 and m["retornoMedio"] > mejor_retorno:
-            mejor_retorno = m["retornoMedio"]
+        #
+        # Se elige por la EVALUACIÓN, no por `retornoMedio`. El retorno es la
+        # recompensa contra los rivales del momento —que son la propia política
+        # y la liga, o sea que se mueven— y encima salta entre 12 y 18 de un
+        # ciclo a otro. Quedarse con su máximo es quedarse con un máximo de
+        # ruido: el checkpoint "mejor" terminaba siendo el del ciclo más
+        # afortunado, no el de la mejor política, y restaurarlo podía devolver
+        # una peor. La evaluación es contra bots heurísticos que no cambian
+        # nunca, y se promedia sobre cientos de episodios.
+        #
+        # El piso de episodios es la misma regla de siempre: al arrancar, y
+        # después de cada reinicio, el buffer de evaluación viene casi vacío y
+        # su cociente no dice nada. Sin este piso, el primer ciclo con tres
+        # episodios afortunados se llevaría el puesto para toda la corrida.
+        eval_actual = m.get("evalMasaPorMinuto", 0.0)
+        if (paso_global > 40 and m.get("evalEpisodios", 0) >= MIN_EPISODIOS_MEJOR
+                and eval_actual > mejor_eval):
+            mejor_eval = eval_actual
+            estado_ckpt["evalMasaPorMinuto"] = eval_actual
+            estado_ckpt["evalEpisodios"] = m.get("evalEpisodios", 0)
             torch.save(estado_ckpt, ruta_mejor)
 
 

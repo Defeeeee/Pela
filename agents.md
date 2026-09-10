@@ -424,3 +424,38 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
 - **Verificado:** el `pesos-bots.bin` del repo es idéntico byte a byte (md5 `73ba37a0…`) al que estaba corriendo en el VPS, así que `🧠v1` es genuinamente la política que ya jugaba y no una reconstrucción. Disco del VPS: 2,0 GB libres, los 7,2 MB del segundo modelo no lo mueven.
 
 - **Pendiente:** juntar masa y muertes por etiqueta desde producción para tener el duelo con jugadores humanos adentro, que es la parte que ninguna simulación cubre. Cuando se decida ganadora, el ciclo se cierra dejando una sola variante en `server.js`.
+
+- **El checkpoint "mejor" se elegía por la métrica equivocada** (quinta aparición del mismo error). `mejor.pt` se guardaba cuando `retornoMedio` superaba su máximo histórico, pero el retorno es la recompensa contra los rivales del momento —la propia política y la liga, que se mueven— y salta entre 12 y 18 de un ciclo a otro. Quedarse con su máximo es quedarse con **un máximo de ruido**: el checkpoint "mejor" era el del ciclo más afortunado, no el de la mejor política. Y como la regla de operación dice *"si empeora, restaurá `mejor.pt`"*, el error estaba armado para devolver una política peor justo cuando más importaba. Ahora se elige por `evalMasaPorMinuto` —contra bots heurísticos que no cambian nunca, promediado sobre cientos de episodios— con un piso de `evalEpisodios >= 190`, porque tras cada reinicio el buffer viene casi vacío y sin ese piso el primer ciclo con tres episodios con suerte se llevaría el puesto para toda la corrida. Tests en `entrenamiento/test-mejor.py`. El `mejor.pt` viejo quedó archivado en `entrenamiento/versiones/`, sin borrar.
+
+---
+
+## El evaluador medía el 14% del juego, y con el signo al revés
+
+- **Disparador:** el usuario, mirando las métricas: *"me da pinta a que aprendio a defenderse y comer a los bots heuristicos nomas"*. La intuición era correcta pero apuntaba al instrumento, no a la política.
+
+- **Lo que medía el evaluador.** Vidas de 120 s (`--evalVida 1200`) contra bots heurísticos. En el último ciclo: **7,5 kills en 855 episodios enteros** — 0,0087 por vida. O sea que el evaluador **no ve cazar**. Su `evalCrecimiento` de 2,44 es crecer de 20 a 48 comiendo palas y sin morir durante dos minutos.
+
+- **Lo que hace la política en el juego real.** En entrenamiento (vidas de 10 min, con otros aprendices como presa): 1,62 kills por episodio y **218 de las 254 unidades de masa ganada vienen de comerse jugadores — el 86%**. La habilidad de caza es dominante; la ventana de medición terminaba antes de que empezara.
+
+- **El evaluador no sólo era estrecho: invertía el signo de la mortalidad.** Decía que el paso 20680 muere 2,5 veces más que el 9460 (0,031 contra 0,012). Cara a cara en la misma arena, muere **la mitad** (0,36 contra 0,77 por vida, 4,2 σ). Dos meses de decisiones se tomaron mirando ese número.
+
+- **El duelo, que es el instrumento que sí mide.** 30 arenas de 12 minutos, 4 bots por versión alternando ranuras, ~172.500 muestras de masa por lado. El paso 20680 contra el 9460 desplegado:
+
+  | | v2 prod (9460) | actual (20680) | |
+  |---|---|---|---|
+  | masa media | 161,0 | 200,4 | +24% |
+  | masa pico | 1.889 | 3.200 | +69% |
+  | kills | 190 | 265 | +39%, 3,52 σ |
+  | masa robada | 37.447 | 46.266 | +24% |
+  | muertes por vida | 0,77 | 0,36 | −53%, 4,22 σ |
+  | mediana de masa final | 93 | 262 | 2,8× |
+
+  Los tres workers coinciden en el signo. 455 kills y 135 muertes reales detrás de los cocientes.
+
+- **Por qué el duelo anterior había dado empate.** Arenas de 6 minutos y sólo medía masa y muertes. Sin `masaRobada` no se puede distinguir un farmeador de palas de un cazador —los dos "crecen"— y con vidas cortas la caza casi no ocurre. El empate era del instrumento, igual que antes.
+
+- **Detalle de implementación del duelo:** `kills` y `masaRobada` se acumulan **por delta** en el muestreo, no leyendo el total al final. `jubilarBotsGordos()` borra al bot que pasa `BOT_MAX_MASS` y se lleva sus acumuladores — justo los del cazador más exitoso, que es el que más pesa en la comparación.
+
+- **Desplegado:** `pesos-nueva` pasa del paso 9460 al 20680. Se conserva `pesos-bots` (7680) como línea de base congelada, así `🧠v1` contra `🧠v2` en la arena pública queda como un A/B permanente entre la primera política desplegada y la mejor que haya. Costo 3,86 ms por tick contra 33,3 de presupuesto.
+
+- **Pendiente, y es lo importante:** arreglar el evaluador. Vidas de 2 minutos no pueden medir un juego cuyo 86% ocurre después. Subir `--evalVida` cuesta que el buffer se llene ~5 veces más lento, así que hay que bajar el piso de 190 episodios o esperar mucho más entre lecturas confiables. Y hace falta un segundo evaluador contra un checkpoint viejo de la liga: los heurísticos ya no son rival para medir progreso.
