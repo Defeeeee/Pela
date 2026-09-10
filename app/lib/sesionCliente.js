@@ -28,7 +28,43 @@ export function idAnonimo() {
 }
 
 /** Quién soy según el servidor. Nunca tira: si algo falla, devuelve anónimo. */
+/**
+ * Identidad que declara el ticket pasado a mano con `?ticket=`, para el camino
+ * de desarrollo que juega contra el multiplayer de otro servidor.
+ *
+ * Se lee el payload sin verificar la firma, y está bien: es sólo para saber que
+ * NO hay que pedir login ni handle, y para mostrar el nombre. Quien valida de
+ * verdad es el servidor de destino, que es el único que tiene el secreto — acá
+ * un ticket falsificado no compra nada más que ver un nombre inventado en la
+ * propia pantalla antes de que el socket lo rechace.
+ */
+export function identidadDeTicketManual() {
+  if (process.env.NODE_ENV === "production" || typeof window === "undefined") return null;
+  const bruto = new URLSearchParams(window.location.search).get("ticket");
+  if (!bruto) return null;
+  try {
+    const payload = bruto.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+    const datos = JSON.parse(atob(payload));
+    if (!datos?.pid) return null;
+    return {
+      loginDisponible: true,
+      autenticado: true,
+      playerId: datos.pid,
+      nombre: datos.nombre || null,
+      expiraEn: datos.exp || null,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 export async function quienSoy() {
+  // Con un ticket a mano la sesión local no importa: la identidad es la del
+  // ticket, y las rutas /api de acá pertenecen a otro servidor que no conoce
+  // a este usuario (y encima el servicio del handle ni corre en desarrollo).
+  const manual = identidadDeTicketManual();
+  if (manual) return manual;
+
   try {
     const res = await fetch("/api/auth/me", { cache: "no-store" });
     if (!res.ok) throw new Error("no ok");
