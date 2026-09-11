@@ -28,6 +28,50 @@ const ENEMY_SPAWN_RATE_MIN = 700;
 
 const COLORS = ["#ffeb3b", "#4caf50", "#2196f3", "#ff5722", "#e91e63", "#00bcd4", "#ff9800", "#9c27b0"];
 
+const BOT_NAMES = [
+  "Bot Yeyo", "AFIP-ela", "Peluca Fake", "Monotributo B", "DNI Folicular",
+  "Piquete Capilar", "Don Barba", "Sirase Bot", "Pelado Sindical", "Gremialista",
+];
+
+/**
+ * Niveles de dificultad de los bots, como frecuencia de decisión.
+ *
+ * `cada` es cada cuántos pasos de decisión vuelve a pensar: la política se
+ * entrenó decidiendo a 10 Hz, y hacerla decidir menos seguido la hace reaccionar
+ * más tarde sin mentirle sobre el mundo ni romperle la física. Es el handicap
+ * honesto — no es un bot tonto, es un bot lento, que es exactamente en qué es
+ * peor un jugador humano.
+ *
+ * El espaciado NO es lineal en `cada` porque la supervivencia no lo es: con
+ * 9/6/4/1 los dos primeros niveles daban lo mismo (27,8 y 28,1 s) y entre los
+ * dos últimos había un salto de 40 a 124. Con 9/4/2/1 queda repartido.
+ *
+ * Los segundos de cada nivel NO se cablean acá ni se muestran en la interfaz:
+ * la política sigue entrenando y mejora, así que cualquier número absoluto
+ * envejece. Lo que no envejece es el orden.
+ *
+ * Un solo checkpoint sirve toda la escalera, así que el entrenamiento puede
+ * seguir mejorando sin que haya que archivar versiones por nivel.
+ */
+export const DIFICULTADES = {
+  facil: { cada: 9, etiqueta: "Fácil" },
+  normal: { cada: 4, etiqueta: "Normal" },
+  dificil: { cada: 2, etiqueta: "Difícil" },
+  imposible: { cada: 1, etiqueta: "Imposible" },
+};
+export const MAX_BOTS = MAX_PLAYERS - 1; // siempre queda lugar para un humano
+
+/**
+ * Ticks por decisión de un bot al nivel más alto.
+ *
+ * La política se entrenó decidiendo a 10 Hz y la sala tickea a 30, así que son
+ * tres. Hacerla decidir a 30 Hz no la mejora: la saca de la distribución con la
+ * que aprendió —los impulsos y las distancias se recorren en un tercio del
+ * tiempo que ella espera— y encima triplica el costo. Medido: con un tick por
+ * decisión el nivel "Imposible" rendía PEOR que "Difícil".
+ */
+const TICKS_POR_DECISION = 3;
+
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sin 0/O ni 1/I, se confunden al dictar por WhatsApp
 
 function randomCode(len = 4) {
@@ -46,7 +90,7 @@ function sanitizeName(name) {
 }
 
 export class Room {
-  constructor(code, { isPublic = false, mode = "coop", random } = {}) {
+  constructor(code, { isPublic = false, mode = "coop", random, politica = null } = {}) {
     this.code = code;
     this.isPublic = isPublic;
     this.mode = mode; // 'coop' | 'battle'
@@ -72,6 +116,19 @@ export class Room {
     // Inyectable para que una sala con semilla sea reproducible. Sin esto no se
     // puede comparar dos políticas sobre las mismas oleadas.
     this.random = random || Math.random;
+
+    /**
+     * Política entrenada para manejar a los bots. Opcional a propósito: si no
+     * viene, la sala no puede tener bots y el multijugador funciona igual. Un
+     * modelo que falta nunca rompe el juego.
+     *
+     * El entrenamiento NO la pasa: sus agentes son los que aprenden.
+     */
+    this.politica = politica || null;
+    this.bots = 0;                 // cuántos quiere el host
+    this.dificultad = "normal";
+    this.proximoBot = 1;
+    this.ticksBot = 0;
     this.state = "lobby"; // 'lobby' | 'countdown' | 'playing' | 'ended'
     this.hostId = null;
     this.players = new Map(); // socketId -> player
@@ -90,6 +147,17 @@ export class Room {
 
   get playerCount() {
     return this.players.size;
+  }
+
+  /**
+   * Cuántas personas hay. Es lo que decide si la sala sigue existiendo: con
+   * bots, `playerCount` nunca llega a cero cuando se va el último humano, y una
+   * sala abandonada quedaría tickeando bots para siempre.
+   */
+  get humanCount() {
+    let n = 0;
+    for (const p of this.players.values()) if (!p.esBot) n++;
+    return n;
   }
 
   addPlayer(socketId, name) {
@@ -112,13 +180,93 @@ export class Room {
     };
     this.players.set(socketId, player);
     if (!this.hostId) this.hostId = socketId;
+    // Un humano que entra puede desplazar a un bot: su lugar vale más.
+    this.sincronizarBots();
     return player;
+  }
+
+  /**
+   * Ajusta la cantidad de bots que pide el host.
+   *
+   * Se llama desde el lobby y en cada alta o baja de humano: los bots ceden el
+   * lugar, porque una persona que entra vale más que un bot que ya está.
+   */
+  configurarBots(cantidad, dificultad) {
+    if (DIFICULTADES[dificultad]) this.dificultad = dificultad;
+    this.bots = Math.max(0, Math.min(MAX_BOTS, Math.floor(Number(cantidad) || 0)));
+    this.sincronizarBots();
+  }
+
+  sincronizarBots() {
+    const humanos = [...this.players.values()].filter((p) => !p.esBot).length;
+    const actuales = [...this.players.values()].filter((p) => p.esBot);
+    // Sin política no hay bots posibles, y el lugar de los humanos manda.
+    const quiero = this.politica ? Math.min(this.bots, MAX_PLAYERS - humanos) : 0;
+
+    for (let i = actuales.length; i > quiero; i--) this.players.delete(actuales[i - 1].id);
+    for (let i = actuales.length; i < quiero; i++) this.#altaBot();
+  }
+
+  #altaBot() {
+    const n = this.proximoBot++;
+    const id = `bot_${this.code}_${n}`;
+    const dif = DIFICULTADES[this.dificultad] || DIFICULTADES.normal;
+    const bot = {
+      id,
+      // El nivel va en el nombre: sin esto no se puede saber si al que te está
+      // ganando lo maneja un bot lento o el de 10 Hz.
+      name: `${BOT_NAMES[(n - 1) % BOT_NAMES.length]} · ${dif.etiqueta}`,
+      color: COLORS[this.players.size % COLORS.length],
+      x: CORRAL_X + CORRAL_W / 2,
+      y: CORRAL_Y + CORRAL_H / 2,
+      size: PLAYER_SIZE,
+      speed: PLAYER_BASE_SPEED,
+      dx: 0, dy: 0,
+      alive: true,
+      survivedMs: 0,
+      reviveProgressMs: 0,
+      isBeingRevived: false,
+      immuneUntil: 0,
+      esBot: true,
+      // Cada bot juega en su propio espejo, sorteado al nacer. La política se
+      // entrenó con los cuatro, así que le da igual — y en la cancha hace que
+      // unos se vayan a una pared y otros a otra, en vez de amontonarse todos
+      // en el mismo borde.
+      espejo: this.politica.espejoAlAzar(this.random()),
+      // En ticks, no en pasos de decisión: la sala cuenta ticks.
+      cada: dif.cada * TICKS_POR_DECISION,
+      // Fase para que no piensen todos en el mismo tick: con ocho bots y una
+      // red de 1,75M de parámetros, hacerlos coincidir mete un tirón visible.
+      fase: (n * TICKS_POR_DECISION) % Math.max(1, dif.cada * TICKS_POR_DECISION),
+      accion: 0,
+    };
+    this.players.set(id, bot);
+    return bot;
+  }
+
+  /** Deja que la política elija el rumbo de cada bot que le toque pensar. */
+  #pensarBots() {
+    if (!this.politica) return;
+    const paso = this.ticksBot;
+    for (const b of this.players.values()) {
+      if (!b.esBot || !b.alive) continue;
+      if (paso % b.cada !== b.fase % b.cada) continue;
+      b.accion = this.politica.accionEnEspejo(this, b.id, b.espejo);
+    }
+    for (const b of this.players.values()) {
+      if (!b.esBot || !b.alive) continue;
+      const { dx, dy } = this.politica.vectorDe(b.accion);
+      b.dx = dx; b.dy = dy;
+    }
+    this.ticksBot++;
   }
 
   removePlayer(socketId) {
     this.players.delete(socketId);
+    // Se liberó un lugar: si el host pidió bots, entra uno.
+    this.sincronizarBots();
     if (this.hostId === socketId) {
-      const next = this.players.keys().next();
+      const next = [...this.players.values()].filter((p) => !p.esBot).map((p) => p.id)[Symbol.iterator]().next();
       this.hostId = next.done ? null : next.value;
     }
   }
@@ -139,7 +287,10 @@ export class Room {
   }
 
   canStart() {
-    return this.playerCount >= 1 && (this.state === "lobby" || this.state === "ended");
+    // Hace falta al menos un humano: una sala de puros bots no le sirve a nadie
+    // y el fin de ronda depende de que haya alguien a quien le importe.
+    const humanos = [...this.players.values()].filter((p) => !p.esBot).length;
+    return humanos >= 1 && (this.state === "lobby" || this.state === "ended");
   }
 
   startCountdown() {
@@ -177,6 +328,10 @@ export class Room {
   tick(dtMs) {
     this.tiempo += dtMs;
     const now = this.tiempo;
+
+    // Los bots deciden antes de que se mueva nadie, igual que un humano cuyo
+    // input llegó entre dos ticks.
+    this.#pensarBots();
     const elapsedS = now / 1000;
 
     // Movimiento de jugadores vivos, con velocidad creciente igual que el
@@ -324,12 +479,32 @@ export class Room {
       }
     }
 
-    // Fin de partida: coop termina cuando no queda nadie vivo; battle royale
-    // también corta apenas queda un único sobreviviente (ganó).
-    const aliveCount = this.alivePlayers().length;
+    /**
+     * Fin de partida. Coop termina cuando no queda nadie vivo; battle también
+     * corta apenas queda un único sobreviviente.
+     *
+     * Con bots hay una regla más, y es de RITMO, no de reglas del juego: la
+     * ronda termina cuando no queda ningún HUMANO en pie. Un bot en "Imposible"
+     * aguanta 96 segundos y un jugador promedio bastante menos, así que sin
+     * esto la partida seguiría con vos muerto mirando cómo esquivan.
+     *
+     * La excepción es estar siendo reanimado: si un bot ya está parado encima de
+     * un humano caído, se le da la chance de levantarlo. Sin esa excepción, los
+     * bots no podrían nunca reanimar al último humano vivo, que es justamente
+     * la mecánica del modo cooperativo.
+     */
+    const vivos = this.alivePlayers();
+    const aliveCount = vivos.length;
+    const humanos = [...this.players.values()].filter((p) => !p.esBot);
+    const hayHumanos = humanos.length > 0;
+    const humanoEnPie = humanos.some((p) => p.alive);
+    const humanoLevantandose = humanos.some((p) => !p.alive && p.isBeingRevived);
+
     const shouldEnd =
       this.playerCount > 0 &&
-      (aliveCount === 0 || (this.mode === "battle" && this.playerCount > 1 && aliveCount <= 1));
+      (aliveCount === 0 ||
+        (this.mode === "battle" && this.playerCount > 1 && aliveCount <= 1) ||
+        (hayHumanos && !humanoEnPie && !humanoLevantandose));
 
     if (shouldEnd) {
       this.state = "ended";
@@ -352,6 +527,10 @@ export class Room {
       state: this.state,
       hostId: this.hostId,
       roundId: this.roundId,
+      bots: this.bots,
+      dificultad: this.dificultad,
+      botsDisponibles: !!this.politica,
+      maxBots: MAX_BOTS,
       countdownEndsAt: this.countdownEndsAt,
       countdownRemainingSec: this.countdownEndsAt ? Math.max(0, Math.ceil((this.countdownEndsAt - Date.now()) / 1000)) : null,
       serverTime: Date.now(),
@@ -372,16 +551,19 @@ export class Room {
 
   results() {
     return [...this.players.values()]
-      .map((p) => ({ id: p.id, name: p.name, color: p.color, survivedMs: p.survivedMs, alive: p.alive }))
+      .map((p) => ({ id: p.id, name: p.name, color: p.color, survivedMs: p.survivedMs, alive: p.alive, esBot: !!p.esBot }))
       .sort((a, b) => (b.alive - a.alive) || (b.survivedMs - a.survivedMs));
   }
 }
 
 export class RoomManager {
-  constructor() {
+  constructor(politica = null) {
+    this.politica = politica;
     this.rooms = new Map();
     // Dos lobbies públicos fijos, uno por modo. Evita tener que negociar el
     // modo entre desconocidos que ni se conocen entre sí.
+    // Las públicas no llevan bots a propósito: nadie es dueño de la decisión y
+    // los bots dispararían el arranque automático por cantidad de jugadores.
     this.rooms.set("PUBLIC-COOP", new Room("PUBLIC-COOP", { isPublic: true, mode: "coop" }));
     this.rooms.set("PUBLIC-BATTLE", new Room("PUBLIC-BATTLE", { isPublic: true, mode: "battle" }));
   }
@@ -393,7 +575,7 @@ export class RoomManager {
   createPrivateRoom(mode) {
     let code;
     do { code = randomCode(4); } while (this.rooms.has(code));
-    const room = new Room(code, { isPublic: false, mode });
+    const room = new Room(code, { isPublic: false, mode, politica: this.politica });
     this.rooms.set(code, room);
     return room;
   }
@@ -404,7 +586,9 @@ export class RoomManager {
 
   /** Sala privada vacía: se borra. Las dos públicas son permanentes. */
   cleanupIfEmpty(room) {
-    if (!room.isPublic && room.playerCount === 0) {
+    // Por humanos: una sala con bots pero sin nadie que los mire es basura que
+    // sigue consumiendo un forward de 1,75M de parámetros por tick.
+    if (!room.isPublic && room.humanCount === 0) {
       if (room.interval) clearInterval(room.interval);
       this.rooms.delete(room.code);
     }

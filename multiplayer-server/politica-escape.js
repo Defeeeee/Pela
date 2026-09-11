@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { codificar, TAM_OBS } from "./observacion-escape.js";
 import { decodificar, mascara, NUM_ACCIONES } from "./acciones-escape.js";
+import { espejarObs, espejarMascara, desespejarAccion, espejoAlAzar } from "./simetria-escape.js";
 
 /**
  * Inferencia de la política entrenada, para los bots opcionales de escapecv.
@@ -107,6 +108,41 @@ export class PoliticaBots {
     if (msc) this.msc.set(msc.subarray(base ? 0 : 0, NUM_ACCIONES));
     else this.msc.fill(1);
     return this.#elegirAccion();
+  }
+
+  /**
+   * Elige la acción de un jugador viendo el mundo a través de `espejo`, y la
+   * devuelve ya traducida al marco del mundo.
+   *
+   * La política se entrenó con los cuatro espejos, así que le da igual cuál le
+   * toque. Darle uno propio a cada bot hace que unos se vayan a una pared y
+   * otros a otra en vez de amontonarse todos contra el mismo borde.
+   *
+   * Estos tres métodos —más `espejoAlAzar`— son los que la sala usa, y existen
+   * para que `rooms.js` NO tenga que importar la simetría: la cadena
+   * rooms → simetria → observacion → rooms es un ciclo de importación, y ya
+   * rompió el arranque una vez en el Agarrá. La política se inyecta y trae
+   * todo lo que hace falta.
+   */
+  accionEnEspejo(sala, id, espejo) {
+    codificar(sala, id, this.obs, 0);
+    mascara(sala, id, this.msc, 0);
+    if (espejo && (espejo.sx !== 1 || espejo.sy !== 1)) {
+      espejarObs(this.obs, 0, espejo);
+      espejarMascara(this.msc, 0, espejo);
+    }
+    const a = this.#elegirAccion();
+    return espejo ? desespejarAccion(a, espejo) : a;
+  }
+
+  /** El vector de movimiento de una acción del marco del mundo. */
+  vectorDe(a) {
+    return decodificar(a);
+  }
+
+  /** Un espejo al azar, para asignarle uno a cada bot al nacer. */
+  espejoAlAzar(r) {
+    return espejoAlAzar(r);
   }
 
   jugar(sala, id) {
