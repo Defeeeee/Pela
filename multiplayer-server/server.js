@@ -15,7 +15,10 @@ import {
 import { cargarPoliticas } from "./politica-bots.js";
 import { cargarPolitica as cargarPoliticaEscape } from "./politica-escape.js";
 import { LeaderboardStore } from "./leaderboard.js";
-import { escenaPublica, registrarIntento } from "./palas.js";
+import { escenaPublica, registrarIntento as registrarPalas } from "./palas.js";
+import { puzzleDelDia, registrarIntento as registrarBitGolf } from "./bitgolf.js";
+import { secuenciaPublica, registrarIntento as registrarPila } from "./pila.js";
+import { funcionPublica, registrarIntento as registrarAsm } from "./asm.js";
 
 const PORT = process.env.MP_PORT || 9315;
 // Override por si hace falta probar desde otro dispositivo de la LAN (por
@@ -78,11 +81,27 @@ palasStore.init().catch((err) => {
   console.error("[pela-multiplayer] Error iniciando el store de palas:", err);
 });
 
+/**
+ * Los dos juegos de Orga, cada uno con su archivo y compartiendo identidades por
+ * el mismo motivo que palas: el ranking es del juego, la cuenta es de la persona.
+ */
+const bitgolfStore = new LeaderboardStore({ archivo: "bitgolf.json", identidades: leaderboardStore });
+const pilaStore = new LeaderboardStore({ archivo: "pila.json", identidades: leaderboardStore });
+const asmStore = new LeaderboardStore({ archivo: "asm.json", identidades: leaderboardStore });
+for (const [nombre, store] of [["bitgolf", bitgolfStore], ["pila", pilaStore], ["asm", asmStore]]) {
+  store.init().catch((err) => {
+    console.error(`[pela-multiplayer] Error iniciando el store de ${nombre}:`, err);
+  });
+}
+
 // Guardar a disco de inmediato al recibir señales de apagado
 const gracefulShutdown = async () => {
   console.log("[pela-multiplayer] Guardando leaderboard antes de apagar...");
   await leaderboardStore.flushToDisk().catch(() => {});
   await palasStore.flushToDisk().catch(() => {});
+  await bitgolfStore.flushToDisk().catch(() => {});
+  await pilaStore.flushToDisk().catch(() => {});
+  await asmStore.flushToDisk().catch(() => {});
   process.exit(0);
 };
 process.on("SIGTERM", gracefulShutdown);
@@ -110,9 +129,23 @@ const httpServer = createServer(async (req, res) => {
     return;
   }
 
-  // ¿Cuántas palas? — la escena del día, SIN el total. El total se queda acá
-  // porque es la respuesta.
-  if (url.pathname === "/palas/escena" && req.method === "GET") {
+  /**
+   * Los puzzles del día. Los tres tienen exactamente la misma forma —validar el
+   * día y devolver lo generado— así que van por tabla: repetir el bloque tres
+   * veces es tres lugares donde arreglar el mismo bug.
+   *
+   * Cada uno devuelve SÓLO lo que el jugador puede ver antes de contestar. En
+   * palas eso excluye el total; en la pila, el estado final. En bit golf no
+   * excluye nada, y está documentado en el módulo: ahí no hay nada secreto.
+   */
+  const puzzlesDelDia = {
+    "/palas/escena": (dia) => ({ escena: escenaPublica(dia) }),
+    "/bitgolf/hoyo": (dia) => ({ hoyo: puzzleDelDia(dia) }),
+    "/pila/secuencia": (dia) => ({ secuencia: secuenciaPublica(dia) }),
+    "/asm/funcion": (dia) => ({ funcion: funcionPublica(dia) }),
+  };
+  const generador = puzzlesDelDia[url.pathname];
+  if (generador && req.method === "GET") {
     const dia = Number(url.searchParams.get("dia"));
     if (!Number.isFinite(dia) || dia < 1) {
       res.writeHead(400, { "Content-Type": "application/json" });
@@ -120,12 +153,20 @@ const httpServer = createServer(async (req, res) => {
       return;
     }
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ ok: true, escena: escenaPublica(dia) }));
+    res.end(JSON.stringify({ ok: true, ...generador(dia) }));
     return;
   }
 
-  if (url.pathname === "/palas/board" && req.method === "GET") {
-    const board = palasStore.getBoard(url.searchParams.get("dia") || "");
+  // Y sus rankings, por la misma razón.
+  const boardsDiarios = {
+    "/palas/board": palasStore,
+    "/bitgolf/board": bitgolfStore,
+    "/pila/board": pilaStore,
+    "/asm/board": asmStore,
+  };
+  const storeDelBoard = boardsDiarios[url.pathname];
+  if (storeDelBoard && req.method === "GET") {
+    const board = storeDelBoard.getBoard(url.searchParams.get("dia") || "");
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true, ...board }));
     return;
@@ -157,7 +198,10 @@ const httpServer = createServer(async (req, res) => {
     "/cuentas/importar": (body) => leaderboardStore.importarProgresoLocal(body),
     "/cuentas/apodo": (body) => leaderboardStore.reservarApodo(body),
     "/cuentas/records": (body) => leaderboardStore.updateRecords(body.playerId, body.records),
-    "/palas/intento": (body) => registrarIntento(palasStore, body),
+    "/palas/intento": (body) => registrarPalas(palasStore, body),
+    "/bitgolf/intento": (body) => registrarBitGolf(bitgolfStore, body),
+    "/pila/intento": (body) => registrarPila(pilaStore, body),
+    "/asm/intento": (body) => registrarAsm(asmStore, body),
   };
 
   const handler = postHandlers[url.pathname];
