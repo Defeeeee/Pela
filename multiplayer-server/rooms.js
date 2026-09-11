@@ -36,41 +36,45 @@ const BOT_NAMES = [
 /**
  * Niveles de dificultad de los bots, como frecuencia de decisión.
  *
- * `cada` es cada cuántos pasos de decisión vuelve a pensar: la política se
- * entrenó decidiendo a 10 Hz, y hacerla decidir menos seguido la hace reaccionar
- * más tarde sin mentirle sobre el mundo ni romperle la física. Es el handicap
- * honesto — no es un bot tonto, es un bot lento, que es exactamente en qué es
- * peor un jugador humano.
+ * `cadaTicks` es cada cuántos ticks de simulación vuelve a pensar el bot. La
+ * sala tickea a 30 Hz, así que 3 ticks son los 10 Hz con los que se entrenó la
+ * política y 1 tick es el máximo que el juego permite: no se puede decidir más
+ * seguido de lo que el mundo se actualiza.
  *
- * El espaciado NO es lineal en `cada` porque la supervivencia no lo es: con
- * 9/6/4/1 los dos primeros niveles daban lo mismo (27,8 y 28,1 s) y entre los
- * dos últimos había un salto de 40 a 124. Con 9/4/2/1 queda repartido.
+ * Es el handicap honesto: no se le miente sobre el mundo ni se le rompe la
+ * física, sólo reacciona más tarde. No es un bot tonto, es un bot lento, que es
+ * exactamente en qué es peor una persona.
+ *
+ * CORRECCIÓN IMPORTANTE. Una versión anterior de este comentario afirmaba que
+ * decidir a 30 Hz la hacía RENDIR PEOR por quedar fuera de la distribución con
+ * la que aprendió. Era falso, y venía de una medición sobre SEIS rondas por
+ * nivel: con vidas que van de 30 a 250 segundos, seis muestras son ruido. Medido
+ * con 30 rondas, decidir más seguido la mejora de forma clara —105,5 s a 10 Hz
+ * contra 130,4 s a 30— porque su latencia de reacción baja de 100 a 33 ms y eso
+ * pesa más que el desajuste de distribución.
+ *
+ * El espaciado no es lineal porque la supervivencia no lo es: con 27/18/12/3
+ * ticks los dos primeros niveles daban lo mismo (27,8 y 28,1 s).
+ *
+ * `maxBots` existe porque el costo es lineal en las decisiones por segundo y el
+ * servidor es mono-hilo. Medido en el VPS: siete bots a 30 Hz piden unos 36 ms
+ * por tick contra un presupuesto de 33,3 — más que todo el presupuesto de una
+ * sala, y el loop atiende /agarra y /escapecv a la vez.
  *
  * Los segundos de cada nivel NO se cablean acá ni se muestran en la interfaz:
  * la política sigue entrenando y mejora, así que cualquier número absoluto
  * envejece. Lo que no envejece es el orden.
- *
- * Un solo checkpoint sirve toda la escalera, así que el entrenamiento puede
- * seguir mejorando sin que haya que archivar versiones por nivel.
  */
 export const DIFICULTADES = {
-  facil: { cada: 9, etiqueta: "Fácil" },
-  normal: { cada: 4, etiqueta: "Normal" },
-  dificil: { cada: 2, etiqueta: "Difícil" },
-  imposible: { cada: 1, etiqueta: "Imposible" },
+  facil: { cadaTicks: 27, etiqueta: "Fácil", maxBots: 7 },
+  normal: { cadaTicks: 12, etiqueta: "Normal", maxBots: 7 },
+  dificil: { cadaTicks: 6, etiqueta: "Difícil", maxBots: 7 },
+  imposible: { cadaTicks: 3, etiqueta: "Imposible", maxBots: 7 },
+  // El techo que el juego permite. Limitado en cantidad por costo, no por
+  // diseño: tres a 30 Hz entran cómodos en el presupuesto del tick.
+  sobrehumano: { cadaTicks: 1, etiqueta: "Sobrehumano", maxBots: 3 },
 };
 export const MAX_BOTS = MAX_PLAYERS - 1; // siempre queda lugar para un humano
-
-/**
- * Ticks por decisión de un bot al nivel más alto.
- *
- * La política se entrenó decidiendo a 10 Hz y la sala tickea a 30, así que son
- * tres. Hacerla decidir a 30 Hz no la mejora: la saca de la distribución con la
- * que aprendió —los impulsos y las distancias se recorren en un tercio del
- * tiempo que ella espera— y encima triplica el costo. Medido: con un tick por
- * decisión el nivel "Imposible" rendía PEOR que "Difícil".
- */
-const TICKS_POR_DECISION = 3;
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sin 0/O ni 1/I, se confunden al dictar por WhatsApp
 
@@ -193,7 +197,11 @@ export class Room {
    */
   configurarBots(cantidad, dificultad) {
     if (DIFICULTADES[dificultad]) this.dificultad = dificultad;
-    this.bots = Math.max(0, Math.min(MAX_BOTS, Math.floor(Number(cantidad) || 0)));
+    const dif = DIFICULTADES[this.dificultad] || DIFICULTADES.normal;
+    // El tope depende del nivel: los que deciden más seguido cuestan más, y el
+    // servidor es mono-hilo.
+    const tope = Math.min(MAX_BOTS, dif.maxBots ?? MAX_BOTS);
+    this.bots = Math.max(0, Math.min(tope, Math.floor(Number(cantidad) || 0)));
     this.sincronizarBots();
   }
 
@@ -215,8 +223,8 @@ export class Room {
     for (const b of this.players.values()) {
       if (!b.esBot) continue;
       i++;
-      b.cada = dif.cada * TICKS_POR_DECISION;
-      b.fase = (i * TICKS_POR_DECISION) % Math.max(1, b.cada);
+      b.cada = dif.cadaTicks;
+      b.fase = i % Math.max(1, b.cada);
       b.name = `${b.nombreBase} · ${dif.etiqueta}`;
     }
   }
@@ -249,11 +257,10 @@ export class Room {
       // unos se vayan a una pared y otros a otra, en vez de amontonarse todos
       // en el mismo borde.
       espejo: this.politica.espejoAlAzar(this.random()),
-      // En ticks, no en pasos de decisión: la sala cuenta ticks.
-      cada: dif.cada * TICKS_POR_DECISION,
+      cada: dif.cadaTicks,
       // Fase para que no piensen todos en el mismo tick: con ocho bots y una
       // red de 1,75M de parámetros, hacerlos coincidir mete un tirón visible.
-      fase: (n * TICKS_POR_DECISION) % Math.max(1, dif.cada * TICKS_POR_DECISION),
+      fase: n % Math.max(1, dif.cadaTicks),
       accion: 0,
     };
     this.players.set(id, bot);
@@ -543,7 +550,7 @@ export class Room {
       bots: this.bots,
       dificultad: this.dificultad,
       botsDisponibles: !!this.politica,
-      maxBots: MAX_BOTS,
+      maxBots: Math.min(MAX_BOTS, (DIFICULTADES[this.dificultad] || DIFICULTADES.normal).maxBots ?? MAX_BOTS),
       countdownEndsAt: this.countdownEndsAt,
       countdownRemainingSec: this.countdownEndsAt ? Math.max(0, Math.ceil((this.countdownEndsAt - Date.now()) / 1000)) : null,
       serverTime: Date.now(),

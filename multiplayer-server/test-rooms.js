@@ -214,15 +214,21 @@ console.log("Iniciando tests de Room (EscapeCV Multijugador)...");
   assert.strictEqual(bots.length, 3);
   assert.ok(bots.every((b) => b.name.includes("Normal")),
     "El nivel va en el nombre: si no, no se sabe si al que te gana lo maneja un bot lento o el de 10 Hz");
-  // `cada` está en TICKS, no en pasos de decisión: la política se entrenó a
-  // 10 Hz y la sala tickea a 30, así que el nivel más alto decide cada 3 ticks
-  // y no cada uno. Con un tick por decisión queda fuera de su distribución y
-  // rinde peor — medido: "Imposible" daba menos supervivencia que "Difícil".
-  assert.ok(bots.every((b) => b.cada === DIFICULTADES.normal.cada * 3),
-    `El nivel Normal debe decidir cada ${DIFICULTADES.normal.cada * 3} ticks (${(30 / (DIFICULTADES.normal.cada * 3)).toFixed(1)} Hz)`);
-  const hzMax = 30 / (DIFICULTADES.imposible.cada * 3);
-  assert.ok(Math.abs(hzMax - 10) < 1e-9,
-    `El nivel más alto tiene que decidir a los 10 Hz con los que se entrenó, y da ${hzMax}`);
+  // `cadaTicks` está en ticks de simulación. La sala tickea a 30 Hz, así que
+  // 3 ticks son los 10 Hz con los que se entrenó la política y 1 es el techo
+  // que el juego permite.
+  assert.ok(bots.every((b) => b.cada === DIFICULTADES.normal.cadaTicks),
+    `El nivel Normal debe decidir cada ${DIFICULTADES.normal.cadaTicks} ticks`);
+  assert.strictEqual(DIFICULTADES.imposible.cadaTicks, 3,
+    "Imposible decide a los 10 Hz con los que se entrenó la política");
+  assert.strictEqual(DIFICULTADES.sobrehumano.cadaTicks, 1,
+    "Sobrehumano decide en cada tick: es el techo, no se puede decidir más seguido de lo que el mundo se actualiza");
+  // El orden tiene que ser estrictamente decreciente en ticks, o sea creciente
+  // en frecuencia. Si dos niveles empatan, uno de los dos no sirve de nada.
+  const ticks = Object.values(DIFICULTADES).map((d) => d.cadaTicks);
+  for (let i = 1; i < ticks.length; i++) {
+    assert.ok(ticks[i] < ticks[i - 1], "Cada nivel tiene que decidir más seguido que el anterior");
+  }
   // Fases distintas: sin esto los ocho piensan en el mismo tick.
   assert.ok(new Set(bots.map((b) => b.fase)).size > 1, "Las fases de decisión tienen que estar escalonadas");
 
@@ -354,14 +360,14 @@ console.log("Iniciando tests de Room (EscapeCV Multijugador)...");
 
   room.configurarBots(3, "normal");
   let bots = [...room.players.values()].filter((p) => p.esBot);
-  assert.ok(bots.every((b) => b.cada === DIFICULTADES.normal.cada * 3));
+  assert.ok(bots.every((b) => b.cada === DIFICULTADES.normal.cadaTicks));
   assert.ok(bots.every((b) => b.name.endsWith("Normal")));
 
   // MISMA cantidad, otro nivel: es el caso que estaba roto.
   room.configurarBots(3, "imposible");
   bots = [...room.players.values()].filter((p) => p.esBot);
   assert.strictEqual(bots.length, 3, "No se recrean los bots, se actualizan");
-  assert.ok(bots.every((b) => b.cada === DIFICULTADES.imposible.cada * 3),
+  assert.ok(bots.every((b) => b.cada === DIFICULTADES.imposible.cadaTicks),
     "Los bots que ya existían tienen que pasar al nivel nuevo");
   assert.ok(bots.every((b) => b.name.endsWith("Imposible")),
     "Y el nombre tiene que decir el nivel real, no el viejo");
@@ -370,10 +376,41 @@ console.log("Iniciando tests de Room (EscapeCV Multijugador)...");
   // Y para abajo también.
   room.configurarBots(3, "facil");
   bots = [...room.players.values()].filter((p) => p.esBot);
-  assert.ok(bots.every((b) => b.cada === DIFICULTADES.facil.cada * 3));
+  assert.ok(bots.every((b) => b.cada === DIFICULTADES.facil.cadaTicks));
   assert.ok(bots.every((b) => b.name.endsWith("Fácil")));
 
   console.log("  ✓ Cambiar el nivel sin cambiar la cantidad actualiza los bots que ya están");
+}
+
+// 10d. El nivel Sobrehumano limita la cantidad por costo
+{
+  /**
+   * El costo es lineal en las decisiones por segundo y el servidor es
+   * mono-hilo. Medido en el VPS: siete bots a 30 Hz piden unos 36 ms por tick
+   * contra un presupuesto de 33,3 — más que todo el presupuesto de una sala, y
+   * el mismo loop atiende /agarra y /escapecv.
+   */
+  const falsa = {
+    paso: 0, accionEnEspejo: () => 0, vectorDe: () => ({ dx: 0, dy: 0 }),
+    espejoAlAzar: () => ({ nombre: "identidad", sx: 1, sy: 1 }),
+  };
+  const room = new Room("TOPE", { isPublic: false, mode: "battle", politica: falsa });
+  room.addPlayer("h1", "Humano");
+
+  room.configurarBots(7, "imposible");
+  assert.strictEqual([...room.players.values()].filter((p) => p.esBot).length, 7,
+    "A 10 Hz entran los siete");
+
+  room.configurarBots(7, "sobrehumano");
+  const n = [...room.players.values()].filter((p) => p.esBot).length;
+  assert.strictEqual(n, DIFICULTADES.sobrehumano.maxBots,
+    `Sobrehumano se topa en ${DIFICULTADES.sobrehumano.maxBots}, y pidieron 7`);
+  assert.strictEqual(room.snapshot().maxBots, DIFICULTADES.sobrehumano.maxBots,
+    "Y el lobby se entera del tope para no ofrecer más");
+  assert.ok([...room.players.values()].filter((p) => p.esBot).every((b) => b.cada === 1),
+    "Los que quedaron deciden en cada tick");
+
+  console.log(`  ✓ Sobrehumano decide a 30 Hz y se topa en ${DIFICULTADES.sobrehumano.maxBots} bots por costo de CPU`);
 }
 
 // 11. Arrancar exige un humano

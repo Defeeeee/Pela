@@ -394,8 +394,33 @@ agarraIo.on("connection", (socket) => {
 });
 
 let agarraTickCount = 0;
+let agarraVacioDesde = 0;
 const AGARRA_TICK_MS = 1000 / 30; // 30 Hz simulación
 setInterval(() => {
+  /**
+   * La arena no simula si no hay nadie mirando.
+   *
+   * Medido en el VPS: los ocho bots con red cuestan 9,34 ms por tick, el 28% del
+   * presupuesto de 33,3 ms, y este intervalo corría sin ningún guard — o sea que
+   * el proceso quemaba más de un cuarto de core las veinticuatro horas para una
+   * arena vacía. Con los bots de escapecv sumando hasta 12 ms más por sala, eso
+   * dejaba el loop a un paso de no llegar, y cuando un loop de ticks no llega el
+   * juego se pone lento para TODOS: /agarra, /escapecv y el leaderboard viven en
+   * el mismo proceso mono-hilo.
+   *
+   * Se sigue emitiendo el snapshot final una vez al vaciarse, para que el último
+   * que se va no quede con la pantalla congelada a mitad de un movimiento.
+   */
+  const hayPublico = agarraIo.sockets.size > 0;
+  if (!hayPublico) {
+    if (agarraVacioDesde === 0) {
+      agarraVacioDesde = 1;
+      agarraIo.emit("tick", agarraArena.deltaSnapshot());
+    }
+    return;
+  }
+  agarraVacioDesde = 0;
+
   agarraArena.tick(AGARRA_TICK_MS);
   agarraTickCount++;
 
