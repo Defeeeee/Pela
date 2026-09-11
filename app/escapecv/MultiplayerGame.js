@@ -634,14 +634,16 @@ export default function MultiplayerGame({ onExit }) {
                     <option value="normal">Normal</option>
                     <option value="dificil">Difícil</option>
                     <option value="imposible">Imposible</option>
+                    <option value="sobrehumano">Sobrehumano — hasta 3 bots</option>
                   </select>
                 </label>
               )}
               {(room.bots ?? 0) > 0 && (
                 <p className="mp-bots-nota">
                   Los bots aprendieron a esquivar solos. Lo que cambia entre niveles es cada
-                  cuánto reaccionan, no cuánto saben: el Fácil no es tonto, es lento. En
-                  Imposible reacciona diez veces por segundo y aguanta más de dos minutos.
+                  cuánto reaccionan, no cuánto saben: el Fácil no es tonto, es lento.
+                  Sobrehumano piensa en cada tick del juego —treinta veces por segundo, el
+                  techo que la simulación permite— y por eso está limitado a tres.
                 </p>
               )}
             </div>
