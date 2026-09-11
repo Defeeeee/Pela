@@ -205,17 +205,33 @@ export class Room {
 
     for (let i = actuales.length; i > quiero; i--) this.players.delete(actuales[i - 1].id);
     for (let i = actuales.length; i < quiero; i++) this.#altaBot();
+
+    // Y se le aplica la dificultad vigente a los que YA estaban. Sin esto,
+    // cambiar el nivel sin cambiar la cantidad no hacía nada: ninguno de los
+    // dos bucles de arriba corre, y los bots seguían con el nivel con el que
+    // nacieron mientras la interfaz mostraba el nuevo.
+    const dif = DIFICULTADES[this.dificultad] || DIFICULTADES.normal;
+    let i = 0;
+    for (const b of this.players.values()) {
+      if (!b.esBot) continue;
+      i++;
+      b.cada = dif.cada * TICKS_POR_DECISION;
+      b.fase = (i * TICKS_POR_DECISION) % Math.max(1, b.cada);
+      b.name = `${b.nombreBase} · ${dif.etiqueta}`;
+    }
   }
 
   #altaBot() {
     const n = this.proximoBot++;
     const id = `bot_${this.code}_${n}`;
     const dif = DIFICULTADES[this.dificultad] || DIFICULTADES.normal;
+    const nombreBase = BOT_NAMES[(n - 1) % BOT_NAMES.length];
     const bot = {
       id,
+      nombreBase,
       // El nivel va en el nombre: sin esto no se puede saber si al que te está
       // ganando lo maneja un bot lento o el de 10 Hz.
-      name: `${BOT_NAMES[(n - 1) % BOT_NAMES.length]} · ${dif.etiqueta}`,
+      name: `${nombreBase} · ${dif.etiqueta}`,
       color: COLORS[this.players.size % COLORS.length],
       x: CORRAL_X + CORRAL_W / 2,
       y: CORRAL_Y + CORRAL_H / 2,
@@ -480,31 +496,28 @@ export class Room {
     }
 
     /**
-     * Fin de partida. Coop termina cuando no queda nadie vivo; battle también
-     * corta apenas queda un único sobreviviente.
+     * Fin de partida.
      *
-     * Con bots hay una regla más, y es de RITMO, no de reglas del juego: la
-     * ronda termina cuando no queda ningún HUMANO en pie. Un bot en "Imposible"
-     * aguanta 96 segundos y un jugador promedio bastante menos, así que sin
-     * esto la partida seguiría con vos muerto mirando cómo esquivan.
+     * COOP espera a que caigan TODOS, humanos y bots. Que te reanimen es la
+     * mecánica del modo, y para eso el bot necesita tiempo de caminar hasta el
+     * cuerpo — no alcanza con darle margen sólo si ya está encima. Mientras
+     * quede alguien en pie hay esperanza, y cuando cae el último se terminó
+     * para todos a la vez.
      *
-     * La excepción es estar siendo reanimado: si un bot ya está parado encima de
-     * un humano caído, se le da la chance de levantarlo. Sin esa excepción, los
-     * bots no podrían nunca reanimar al último humano vivo, que es justamente
-     * la mecánica del modo cooperativo.
+     * BATTLE corta cuando queda un solo sobreviviente, y además cuando no queda
+     * ningún humano en pie: ahí no hay reanimación posible, así que seguir sería
+     * hacerte mirar a dos bots peleando entre ellos por una ronda que ya
+     * perdiste.
      */
-    const vivos = this.alivePlayers();
-    const aliveCount = vivos.length;
+    const aliveCount = this.alivePlayers().length;
     const humanos = [...this.players.values()].filter((p) => !p.esBot);
-    const hayHumanos = humanos.length > 0;
     const humanoEnPie = humanos.some((p) => p.alive);
-    const humanoLevantandose = humanos.some((p) => !p.alive && p.isBeingRevived);
 
     const shouldEnd =
       this.playerCount > 0 &&
       (aliveCount === 0 ||
-        (this.mode === "battle" && this.playerCount > 1 && aliveCount <= 1) ||
-        (hayHumanos && !humanoEnPie && !humanoLevantandose));
+        (this.mode === "battle" &&
+          ((this.playerCount > 1 && aliveCount <= 1) || (humanos.length > 0 && !humanoEnPie))));
 
     if (shouldEnd) {
       this.state = "ended";
