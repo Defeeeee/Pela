@@ -51,8 +51,23 @@ export function sanitizarHandle(bruto) {
 export class LeaderboardStore {
   constructor(options = {}) {
     const dataDir = options.dataDir || process.env.MP_DATA_DIR || DEFAULT_DATA_DIR;
-    this.filePath = path.join(dataDir, "leaderboard.json");
+    // Archivo propio por juego. Dos juegos diarios NO pueden compartir store:
+    // `daily` se indexa por número de día y colisionaría, y `history` es por
+    // jugador y no por juego, así que las rachas de uno sobrescribirían las del
+    // otro.
+    this.filePath = path.join(dataDir, options.archivo || "leaderboard.json");
     this.dirPath = dataDir;
+
+    /**
+     * De dónde salen las cuentas y los apodos.
+     *
+     * Las identidades viven en UN solo lugar —el store de Pelardle, que es
+     * quien las creó— y los demás juegos las consultan. Duplicarlas dejaría a
+     * todos sin rankear en el store nuevo, porque `idsRankeables()` exige
+     * cuenta vinculada y apodo reservado, y los de un archivo recién creado
+     * están vacíos.
+     */
+    this.identidades = options.identidades || null;
 
     // Estado en memoria
     this.daily = {}; // puzzleId -> [ { playerId, playerName, attempts, solved, solvedAt } ]
@@ -404,6 +419,7 @@ export class LeaderboardStore {
 
   /** Apodo reservado por una identidad, o null si todavía no eligió ninguno. */
   apodoDe(playerId) {
+    if (this.identidades) return this.identidades.apodoDe(playerId);
     const pId = String(playerId);
     for (const registro of Object.values(this.apodos)) {
       if (registro.playerId === pId) return registro.apodo;
@@ -661,6 +677,7 @@ export class LeaderboardStore {
    * cuentas, y llamarlo por cada fila sería cuadrático.
    */
   idsRankeables() {
+    if (this.identidades) return this.identidades.idsRankeables();
     const conApodo = new Set(Object.values(this.apodos).map((r) => r.playerId));
     const rankeables = new Set();
     for (const cuenta of Object.values(this.cuentas)) {
