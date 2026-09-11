@@ -256,43 +256,64 @@ console.log("Iniciando tests de Room (EscapeCV Multijugador)...");
   console.log("  ✓ Sin el archivo de pesos no hay bots, y el multijugador sigue funcionando");
 }
 
-// 9. La ronda no sigue para los bots
+// 9. En coop la ronda espera a que caigan todos
 {
   /**
-   * El problema de RITMO que traen bots buenos: en "Imposible" aguantan 96 s y
-   * un jugador promedio bastante menos. Sin esta regla, la partida seguiría con
-   * el humano muerto mirando cómo esquivan.
+   * Que te reanimen es la mecánica del cooperativo, y para eso el bot necesita
+   * tiempo de CAMINAR hasta el cuerpo. Una versión anterior sólo daba margen si
+   * el bot ya estaba encima, y con eso la ronda cortaba en el instante en que
+   * caía el humano: nunca llegaba nadie.
    */
   const falsa = {
     paso: 0, accionEnEspejo: () => 0, vectorDe: () => ({ dx: 0, dy: 0 }),
     espejoAlAzar: () => ({ nombre: "identidad", sx: 1, sy: 1 }),
   };
-  const room = new Room("RITMO", { isPublic: false, mode: "coop", politica: falsa });
+  const room = new Room("COOPFIN", { isPublic: false, mode: "coop", politica: falsa });
   const h = room.addPlayer("h1", "Humano");
   room.configurarBots(2, "imposible");
   room.beginPlaying();
   room.enemies = []; room.warnings = [];
 
   const bots = [...room.players.values()].filter((p) => p.esBot);
-  // Los bots lejos, para que no reanimen a nadie.
+  // Los bots LEJOS: ni siquiera están reanimando, y la ronda igual sigue.
   bots.forEach((b, i) => { b.x = 300 + i * 60; b.y = 200; });
   h.x = 900; h.y = 700;
-
-  assert.strictEqual(room.tick(TICK_MS), false, "Con el humano vivo la ronda sigue");
-
   h.alive = false;
   h.isBeingRevived = false;
-  const termino = room.tick(TICK_MS);
-  assert.strictEqual(termino, true, "Muerto el último humano, la ronda termina aunque los bots sigan vivos");
-  assert.ok(bots.some((b) => b.alive), "Y los bots estaban efectivamente vivos");
 
-  console.log("  ✓ La ronda termina cuando cae el último humano: no se juega para los bots");
+  assert.strictEqual(room.tick(TICK_MS), false,
+    "Con el humano caído pero bots vivos, la ronda sigue: pueden venir a levantarlo");
+
+  // Ahora sí caen todos.
+  bots.forEach((b) => { b.alive = false; });
+  assert.strictEqual(room.tick(TICK_MS), true, "Recién cuando cae el último se termina");
+
+  console.log("  ✓ En coop la ronda espera a que caigan todos, así el bot puede llegar a reanimarte");
 }
 
-// 10. Pero un bot sí puede reanimarte
+// 10. En battle no, porque ahí no hay reanimación
 {
-  // La excepción a la regla de arriba, y es la mecánica del modo cooperativo:
-  // si un bot ya está parado encima de un humano caído, se le da la chance.
+  const falsa = {
+    paso: 0, accionEnEspejo: () => 0, vectorDe: () => ({ dx: 0, dy: 0 }),
+    espejoAlAzar: () => ({ nombre: "identidad", sx: 1, sy: 1 }),
+  };
+  const room = new Room("BATFIN", { isPublic: false, mode: "battle", politica: falsa });
+  const h = room.addPlayer("h1", "Humano");
+  room.configurarBots(3, "normal");
+  room.beginPlaying();
+  room.enemies = []; room.warnings = [];
+
+  h.alive = false;
+  const bots = [...room.players.values()].filter((p) => p.esBot);
+  assert.ok(bots.filter((b) => b.alive).length >= 2, "Quedan al menos dos bots vivos");
+  assert.strictEqual(room.tick(TICK_MS), true,
+    "En battle no hay reanimación: sin humanos en pie la ronda termina en vez de hacerte mirar bots peleando");
+
+  console.log("  ✓ En battle la ronda termina al caer el último humano: ahí no hay nada que esperar");
+}
+
+// 10b. Un bot puede reanimarte de verdad
+{
   const falsa = {
     paso: 0, accionEnEspejo: () => 0, vectorDe: () => ({ dx: 0, dy: 0 }),
     espejoAlAzar: () => ({ nombre: "identidad", sx: 1, sy: 1 }),
@@ -305,17 +326,54 @@ console.log("Iniciando tests de Room (EscapeCV Multijugador)...");
 
   const bot = [...room.players.values()].find((p) => p.esBot);
   h.x = 800; h.y = 450;
-  bot.x = 800; bot.y = 450; // encima del humano
+  bot.x = 800; bot.y = 450;
   h.alive = false;
   h.reviveProgressMs = 0;
 
-  assert.strictEqual(room.tick(TICK_MS), false, "Con el bot encima, la ronda no corta: puede levantarlo");
-  assert.ok(h.isBeingRevived, "Y el humano figura como en reanimación");
-
   room.tick(REVIVE_TIME_MS);
   assert.strictEqual(h.alive, true, "El bot lo revivió");
+  assert.ok(h.immuneUntil > room.tiempo, "Y quedó con la inmunidad de un segundo");
 
-  console.log("  ✓ Un bot puede reanimar al último humano caído, y la ronda le da la chance");
+  console.log("  ✓ Un bot reanima al humano caído y le deja la inmunidad de siempre");
+}
+
+// 10c. Cambiar el nivel afecta a los bots que YA existen
+{
+  /**
+   * El bug que reportó el usuario: seleccionar "Imposible" dejaba los bots en
+   * Normal. `sincronizarBots` sólo creaba o borraba según la cantidad, así que
+   * con el número igual ninguno de los dos bucles corría y los bots seguían con
+   * el nivel con el que nacieron — mientras la interfaz mostraba el nuevo.
+   */
+  const falsa = {
+    paso: 0, accionEnEspejo: () => 0, vectorDe: () => ({ dx: 0, dy: 0 }),
+    espejoAlAzar: () => ({ nombre: "identidad", sx: 1, sy: 1 }),
+  };
+  const room = new Room("NIVEL", { isPublic: false, mode: "coop", politica: falsa });
+  room.addPlayer("h1", "Humano");
+
+  room.configurarBots(3, "normal");
+  let bots = [...room.players.values()].filter((p) => p.esBot);
+  assert.ok(bots.every((b) => b.cada === DIFICULTADES.normal.cada * 3));
+  assert.ok(bots.every((b) => b.name.endsWith("Normal")));
+
+  // MISMA cantidad, otro nivel: es el caso que estaba roto.
+  room.configurarBots(3, "imposible");
+  bots = [...room.players.values()].filter((p) => p.esBot);
+  assert.strictEqual(bots.length, 3, "No se recrean los bots, se actualizan");
+  assert.ok(bots.every((b) => b.cada === DIFICULTADES.imposible.cada * 3),
+    "Los bots que ya existían tienen que pasar al nivel nuevo");
+  assert.ok(bots.every((b) => b.name.endsWith("Imposible")),
+    "Y el nombre tiene que decir el nivel real, no el viejo");
+  assert.strictEqual(room.snapshot().dificultad, "imposible");
+
+  // Y para abajo también.
+  room.configurarBots(3, "facil");
+  bots = [...room.players.values()].filter((p) => p.esBot);
+  assert.ok(bots.every((b) => b.cada === DIFICULTADES.facil.cada * 3));
+  assert.ok(bots.every((b) => b.name.endsWith("Fácil")));
+
+  console.log("  ✓ Cambiar el nivel sin cambiar la cantidad actualiza los bots que ya están");
 }
 
 // 11. Arrancar exige un humano
