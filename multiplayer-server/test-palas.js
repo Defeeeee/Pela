@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  escenaDelDia, escenaPublica, corregir,
+  escenaDelDia, escenaPublica, corregir, registrarIntento,
   ANCHO, ALTO, MIN_PALAS, MAX_PALAS, SEGUNDOS_VISIBLE,
 } from "./palas.js";
 
@@ -143,6 +143,63 @@ console.log("Iniciando tests de ¿Cuántas palas?...");
   const ms = Number(process.hrtime.bigint() - t0) / 1e6 / 200;
   assert.ok(ms < 5, `Generar una escena tarda ${ms.toFixed(2)} ms, demasiado para hacerlo por pedido`);
   console.log(`  ✓ Generar una escena cuesta ${ms.toFixed(2)} ms`);
+}
+
+// 8. La respuesta nunca vuelve al cliente, ni después de jugar
+{
+  /**
+   * `corregir()` devuelve el total porque es interno: el servidor lo necesita
+   * para calcular la distancia. Lo que NO puede salir hacia el cliente es ese
+   * total, y eso lo decide `registrarIntento`.
+   *
+   * Sabiendo sólo la distancia quedan dos candidatos —el número dicho más y
+   * menos el error— así que la respuesta sigue siendo secreta y el texto de
+   * compartir no spoilea.
+   *
+   * El test llama a la función REAL. Copiar acá la forma de la respuesta sería
+   * un test que reimplementa lo que quiere verificar, y no protegería nada.
+   */
+  const DIA = 99;
+  const { total } = escenaDelDia(DIA);
+
+  // Store de mentira con lo mínimo que usa registrarIntento.
+  const store = {
+    daily: {},
+    recordCompletion(dia, playerId, playerName, attempts, solved) {
+      (this.daily[dia] = this.daily[dia] || []).push({ playerId, playerName, attempts, solved });
+    },
+  };
+
+  const r = registrarIntento(store, { dia: DIA, playerId: "p1", playerName: "defe", intento: total - 6 });
+
+  assert.ok(!("total" in r), "La respuesta del intento no puede llevar el total");
+  assert.strictEqual(r.distancia, 6);
+  assert.strictEqual(r.exacto, false);
+  assert.strictEqual(r.intento, total - 6, "Sí devuelve lo que dijo el jugador: eso ya lo sabe");
+
+  // De la respuesta no se puede deducir el total sin ambigüedad.
+  const candidatos = new Set([r.intento - r.distancia, r.intento + r.distancia]);
+  assert.strictEqual(candidatos.size, 2, "Con distancia mayor a cero quedan dos candidatos");
+  assert.ok(candidatos.has(total), "Y uno de los dos es el total, claro");
+
+  // Un segundo intento el mismo día se rechaza, y tampoco filtra el total.
+  const otra = registrarIntento(store, { dia: DIA, playerId: "p1", intento: total });
+  assert.strictEqual(otra.yaJugado, true);
+  assert.ok(!("total" in otra), "Ni el rechazo por haber jugado puede filtrar el total");
+  assert.strictEqual(otra.distancia, 6, "Y devuelve la distancia de aquella vez");
+
+  // Otro jugador sí puede jugar.
+  const dos = registrarIntento(store, { dia: DIA, playerId: "p2", intento: total });
+  assert.strictEqual(dos.exacto, true);
+  assert.strictEqual(dos.distancia, 0);
+  assert.ok(!("total" in dos), "Ni acertando se manda el total: el propio intento ya lo es");
+
+  // Pedidos inválidos.
+  assert.ok(registrarIntento(store, { dia: 0, playerId: "p3", intento: 20 }).error);
+  assert.ok(registrarIntento(store, { dia: DIA, playerId: "", intento: 20 }).error);
+  assert.ok(registrarIntento(store, { dia: DIA, playerId: "p3", intento: "muchas" }).error);
+
+  console.log("  ✓ El total no sale nunca al cliente, y con la distancia quedan dos candidatos");
 }
 
 console.log("\n¡Todos los tests de ¿Cuántas palas? pasaron exitosamente!");

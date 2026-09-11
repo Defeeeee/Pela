@@ -15,7 +15,7 @@ import {
 import { cargarPoliticas } from "./politica-bots.js";
 import { cargarPolitica as cargarPoliticaEscape } from "./politica-escape.js";
 import { LeaderboardStore } from "./leaderboard.js";
-import { escenaPublica, corregir } from "./palas.js";
+import { escenaPublica, registrarIntento } from "./palas.js";
 
 const PORT = process.env.MP_PORT || 9315;
 // Override por si hace falta probar desde otro dispositivo de la LAN (por
@@ -157,7 +157,7 @@ const httpServer = createServer(async (req, res) => {
     "/cuentas/importar": (body) => leaderboardStore.importarProgresoLocal(body),
     "/cuentas/apodo": (body) => leaderboardStore.reservarApodo(body),
     "/cuentas/records": (body) => leaderboardStore.updateRecords(body.playerId, body.records),
-    "/palas/intento": (body) => registrarIntentoPalas(body),
+    "/palas/intento": (body) => registrarIntento(palasStore, body),
   };
 
   const handler = postHandlers[url.pathname];
@@ -207,42 +207,6 @@ const httpServer = createServer(async (req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("pela-multiplayer ok");
 });
-
-/**
- * Registra el único intento del día de un jugador.
- *
- * Un solo intento es la mecánica: una estimación con reintentos es un conteo, y
- * entonces el juego no premia mirar bien sino insistir. El guard se reconstruye
- * del ranking ya persistido y no de memoria, porque la memoria se pierde en cada
- * reinicio de PM2 —o sea en cada push a master— y eso ya dejó re-jugar y pisarse
- * el puntaje en Pelardle.
- */
-function registrarIntentoPalas({ dia, playerId, playerName, intento }) {
-  const d = Number(dia);
-  if (!Number.isFinite(d) || d < 1) return { error: "Falta el día." };
-  if (!playerId) return { error: "Falta el jugador." };
-
-  const yaJugo = (palasStore.daily[d] || []).some((e) => e.playerId === playerId);
-  if (yaJugo) {
-    const previo = (palasStore.daily[d] || []).find((e) => e.playerId === playerId);
-    return {
-      error: "Ya jugaste el de hoy.",
-      yaJugado: true,
-      distancia: previo.attempts,
-      exacto: previo.solved,
-    };
-  }
-
-  const r = corregir(d, intento);
-  if (typeof r.error === "string") return { error: r.error };
-
-  // `attempts` lleva el ERROR de estimación. Tiene la misma forma de "menos es
-  // mejor" que los intentos de Pelardle, así que el ordenamiento del ranking
-  // sirve sin tocarlo: primero los exactos, después por error, después por hora.
-  palasStore.recordCompletion(d, playerId, playerName || "Pelado Anónimo", r.error, r.exacto);
-
-  return { ok: true, total: r.total, intento: r.intento, distancia: r.error, exacto: r.exacto };
-}
 
 const io = new Server(httpServer, {
   // No hay datos sensibles en juego (ni cookies, ni auth) así que un CORS
