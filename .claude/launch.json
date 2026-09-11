@@ -4,8 +4,19 @@
     {
       "name": "pela-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 9314
+    },
+    {
+      "name": "pela-multiplayer",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "multiplayer-server/server.js"
+      ],
+      "port": 9315
     }
   ]
 }

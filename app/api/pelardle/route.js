@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
+import { diaHabil, fechaArgentina } from "../../lib/diaHabil";
 
 export const dynamic = "force-dynamic";
 
 const WORD_LENGTH = 5;
 const MAX_ATTEMPTS = 6;
-const EPOCH = "2026-01-01";
-const TZ = "America/Argentina/Buenos_Aires";
 
 // Padrón Folicular: la palabra nunca viaja al cliente hasta que el juego termina.
 const WORDS = [
@@ -30,24 +29,6 @@ const RESOLUCIONES = [
   "El Comité de Redacción Folicular lamenta comunicar que la palabra era"
 ];
 
-// Cache de feriados por año (mismo criterio que proxy.js: 12hs)
-const holidaysCache = new Map();
-const CACHE_TTL = 1000 * 60 * 60 * 12;
-
-async function fetchHolidaysForYear(year) {
-  const cached = holidaysCache.get(year);
-  if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) return cached.data;
-  try {
-    const res = await fetch(`https://api.argentinadatos.com/v1/feriados/${year}`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    holidaysCache.set(year, { data, fetchedAt: Date.now() });
-    return data;
-  } catch (e) {
-    return null;
-  }
-}
-
 /**
  * Normaliza a mayúsculas sin tildes, PERO conservando la Ñ.
  * normalize("NFD") descompone la Ñ en N + tilde, así que hay que blindarla antes.
@@ -61,45 +42,6 @@ function norm(str) {
     .replace(/\u0001/g, "\u00d1");
 }
 
-/** Fecha YYYY-MM-DD en hora argentina (nunca UTC: el puzzle cambiaría a las 21:00). */
-function arDateString(d = new Date()) {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d);
-}
-
-/**
- * Cuenta días hábiles desde EPOCH hasta dateStr inclusive, salteando finde y feriados.
- * El índice hace doble función: elige la palabra (no se "gastan" palabras el finde)
- * y permite que la racha del cliente tolere los días en que el sitio está cerrado.
- */
-async function workingDayInfo(dateStr) {
-  const start = new Date(`${EPOCH}T00:00:00Z`);
-  const end = new Date(`${dateStr}T00:00:00Z`);
-
-  const holidaySet = new Set();
-  for (let y = start.getUTCFullYear(); y <= end.getUTCFullYear(); y++) {
-    const hs = await fetchHolidaysForYear(y);
-    if (Array.isArray(hs)) {
-      for (const h of hs) {
-        if (h?.fecha) holidaySet.add(String(h.fecha).slice(0, 10));
-      }
-    }
-  }
-
-  const isWorking = (iso, dow) => dow !== 0 && dow !== 6 && !holidaySet.has(iso);
-
-  let index = 0;
-  let openToday = false;
-  const cur = new Date(start);
-  while (cur <= end) {
-    const iso = cur.toISOString().slice(0, 10);
-    const open = isWorking(iso, cur.getUTCDay());
-    if (open) index++;
-    if (iso === dateStr) openToday = open;
-    cur.setUTCDate(cur.getUTCDate() + 1);
-  }
-
-  return { index: Math.max(1, index), open: openToday };
-}
 
 function wordFor(index) {
   return WORDS[(index - 1) % WORDS.length];
@@ -130,8 +72,8 @@ function scoreGuess(guess, answer) {
 }
 
 export async function GET() {
-  const fecha = arDateString();
-  const { index, open } = await workingDayInfo(fecha);
+  const fecha = fechaArgentina();
+  const { index, open } = await diaHabil(fecha);
 
   return NextResponse.json({
     puzzle: index,
@@ -157,8 +99,8 @@ export async function POST(request) {
       });
     }
 
-    const fecha = arDateString();
-    const { index } = await workingDayInfo(fecha);
+    const fecha = fechaArgentina();
+    const { index } = await diaHabil(fecha);
     const answer = wordFor(index);
 
     const result = scoreGuess(guess, answer);

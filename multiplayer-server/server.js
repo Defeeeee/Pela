@@ -15,6 +15,7 @@ import {
 import { cargarPoliticas } from "./politica-bots.js";
 import { cargarPolitica as cargarPoliticaEscape } from "./politica-escape.js";
 import { LeaderboardStore } from "./leaderboard.js";
+import { escenaPublica, corregir } from "./palas.js";
 
 const PORT = process.env.MP_PORT || 9315;
 // Override por si hace falta probar desde otro dispositivo de la LAN (por
@@ -61,10 +62,27 @@ leaderboardStore.init().catch((err) => {
   console.error("[pela-multiplayer] Error iniciando LeaderboardStore:", err);
 });
 
+/**
+ * Store de "¿Cuántas palas?", con archivo propio.
+ *
+ * No comparte el de Pelardle porque `daily` se indexa por número de día y
+ * colisionaría, y `history` es por jugador y no por juego, así que las rachas de
+ * uno sobrescribirían las del otro. Las cuentas y los apodos SÍ se comparten:
+ * son de la persona, no del juego, y viven en un solo lugar.
+ */
+const palasStore = new LeaderboardStore({
+  archivo: "palas.json",
+  identidades: leaderboardStore,
+});
+palasStore.init().catch((err) => {
+  console.error("[pela-multiplayer] Error iniciando el store de palas:", err);
+});
+
 // Guardar a disco de inmediato al recibir señales de apagado
 const gracefulShutdown = async () => {
   console.log("[pela-multiplayer] Guardando leaderboard antes de apagar...");
   await leaderboardStore.flushToDisk().catch(() => {});
+  await palasStore.flushToDisk().catch(() => {});
   process.exit(0);
 };
 process.on("SIGTERM", gracefulShutdown);
@@ -87,6 +105,27 @@ const httpServer = createServer(async (req, res) => {
   if (url.pathname === "/pelardle/board" && req.method === "GET") {
     const puzzle = url.searchParams.get("puzzle") || "";
     const board = leaderboardStore.getBoard(puzzle);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, ...board }));
+    return;
+  }
+
+  // ¿Cuántas palas? — la escena del día, SIN el total. El total se queda acá
+  // porque es la respuesta.
+  if (url.pathname === "/palas/escena" && req.method === "GET") {
+    const dia = Number(url.searchParams.get("dia"));
+    if (!Number.isFinite(dia) || dia < 1) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Falta el día." }));
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, escena: escenaPublica(dia) }));
+    return;
+  }
+
+  if (url.pathname === "/palas/board" && req.method === "GET") {
+    const board = palasStore.getBoard(url.searchParams.get("dia") || "");
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true, ...board }));
     return;
@@ -118,6 +157,7 @@ const httpServer = createServer(async (req, res) => {
     "/cuentas/importar": (body) => leaderboardStore.importarProgresoLocal(body),
     "/cuentas/apodo": (body) => leaderboardStore.reservarApodo(body),
     "/cuentas/records": (body) => leaderboardStore.updateRecords(body.playerId, body.records),
+    "/palas/intento": (body) => registrarIntentoPalas(body),
   };
 
   const handler = postHandlers[url.pathname];
@@ -167,6 +207,42 @@ const httpServer = createServer(async (req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("pela-multiplayer ok");
 });
+
+/**
+ * Registra el único intento del día de un jugador.
+ *
+ * Un solo intento es la mecánica: una estimación con reintentos es un conteo, y
+ * entonces el juego no premia mirar bien sino insistir. El guard se reconstruye
+ * del ranking ya persistido y no de memoria, porque la memoria se pierde en cada
+ * reinicio de PM2 —o sea en cada push a master— y eso ya dejó re-jugar y pisarse
+ * el puntaje en Pelardle.
+ */
+function registrarIntentoPalas({ dia, playerId, playerName, intento }) {
+  const d = Number(dia);
+  if (!Number.isFinite(d) || d < 1) return { error: "Falta el día." };
+  if (!playerId) return { error: "Falta el jugador." };
+
+  const yaJugo = (palasStore.daily[d] || []).some((e) => e.playerId === playerId);
+  if (yaJugo) {
+    const previo = (palasStore.daily[d] || []).find((e) => e.playerId === playerId);
+    return {
+      error: "Ya jugaste el de hoy.",
+      yaJugado: true,
+      distancia: previo.attempts,
+      exacto: previo.solved,
+    };
+  }
+
+  const r = corregir(d, intento);
+  if (typeof r.error === "string") return { error: r.error };
+
+  // `attempts` lleva el ERROR de estimación. Tiene la misma forma de "menos es
+  // mejor" que los intentos de Pelardle, así que el ordenamiento del ranking
+  // sirve sin tocarlo: primero los exactos, después por error, después por hora.
+  palasStore.recordCompletion(d, playerId, playerName || "Pelado Anónimo", r.error, r.exacto);
+
+  return { ok: true, total: r.total, intento: r.intento, distancia: r.error, exacto: r.exacto };
+}
 
 const io = new Server(httpServer, {
   // No hay datos sensibles en juego (ni cookies, ni auth) así que un CORS

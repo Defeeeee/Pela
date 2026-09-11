@@ -509,3 +509,31 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
 - **Cómo se opera:** `~/pela-rl/entrenamiento-escape/arrancar.sh` en DefeServer. Panel en `http://defeserver:8421` con 30 gráficos, incluido el radial de las 17 acciones, el rastro polar del sesgo y el mapa de calor de acciones en el tiempo. `sondear.py` interroga a la política con escenas sintéticas. Para llevar una política a producción: `exportar.py` y copiar `pesos-escape.bin` y `.json` a `multiplayer-server/`.
 
 - **Pendiente:** verificar que `Room` con un jugador replique de verdad el modo solitario del cliente (se asumió por los comentarios del código, nunca se comprobó). `rivalesSobrevividos` en battle está plano en 0,9 de 3 desde el paso 1 y no se va a mover con esta recompensa: empujar a un rival contra una pala no paga nada. Y el sondeo necesita escenas tomadas de la distribución real para volver a ser útil.
+
+---
+
+## ¿Cuántas palas? — el segundo puzzle diario
+
+- **Pedido:** el usuario preguntó qué otros puzzles diarios se podían implementar sin que fueran de palabras, y eligió el de estimación.
+
+- **La mecánica.** Una pila generada por procedimiento a partir del índice del día: palas rotadas, de tamaños distintos, en racimos que se enciman. Se muestra **12 segundos** y después se tapa. Un solo intento, y se rankea por **cercanía** — no hace falta acertar exacto para entrar a la tabla.
+
+- **El reloj ES la mecánica**, no una restricción técnica. Sin él el juego se vuelve contar con el dedo, que premia la paciencia y no la vista. Arrancó en 18 segundos y el usuario pidió bajarlo: con 18 alcanzaba para contar tranquilo y el juego dejaba de ser de estimación.
+
+- **Lo que hizo barato construirlo:** la infraestructura diaria **ya era agnóstica del juego**. `registerAttempt` se indexa por un `puzzle` numérico cualquiera y `recordCompletion` rankea por un entero donde menos es mejor — que es exactamente la forma de "error de estimación". Se guarda el error en el campo `attempts` y el ordenamiento del ranking sirve sin tocarlo: primero los exactos, después por error, después por hora.
+
+- **Dos juegos diarios NO pueden compartir store**, y eso obligó a un cambio real: `daily` se indexa por número de día y colisionaría, y `history` es por jugador y no por juego, así que las rachas de uno sobrescribirían las del otro. Se agregó `options.archivo` para darle archivo propio. Pero las **cuentas y los apodos sí se comparten**: son de la persona y no del juego, así que el store nuevo recibe `options.identidades` y delega `idsRankeables()` y `apodoDe()`. Sin eso, con un archivo recién creado nadie sería rankeable.
+
+- **`app/lib/diaHabil.js`.** El cálculo del día hábil —que saltea findes y feriados argentinos— vivía dentro de la ruta de Pelardle. Se extrajo: duplicar un cálculo de fechas con feriados es la forma más segura de que dos juegos no coincidan en qué día es, y entonces uno rankee contra la escena equivocada.
+
+- **Un bug que el test agarró en el primer intento.** El generador daba **25 palas todos los días**. La causa no era el empaquetado sino el RNG: xorshift devuelve casi el mismo primer valor para semillas consecutivas —0,3165 para los días 1, 2 y 3— y el primer valor es justo el que elige cuántas palas hay. Se pasa la semilla por splitmix32 antes de usarla, que está hecho para convertir contadores consecutivos en valores independientes. El test que exigía variedad de totales lo detectó de una: 25 valores distintos entre 18 y 42 sobre 520 días.
+
+- **El rango 18-42 es una decisión de diseño.** Con menos de quince se cuenta sin esfuerzo y no hay juego; con más de cincuenta contar exacto es suerte, el "acertaste" nunca llega y la racha se muere. En este rango contar exacto es difícil pero posible, y por eso el acierto exacto puede ser la condición de racha.
+
+- **Ninguna pala queda completamente tapada**, verificado al generar y en los tests: si el centro de una cae dentro de otra, se descarta la posición. Sin eso el puzzle sería injusto — habría palas imposibles de ver y el número correcto parecería un error. Los solapes **parciales** sí tienen que existir, y hay un test que exige un mínimo: sin ellos contar es trivial.
+
+- **Lo que este juego NO defiende, y queda escrito igual que el agujero de identidad de Pelardle:** la escena se dibuja en el cliente, así que quien abra las herramientas del navegador puede contar los elementos del arreglo en vez de mirarlos. Cerrarlo requeriría renderizar la imagen en el servidor. La defensa real es el reloj.
+
+- **Otro bug, encontrado probando en el navegador:** la página leía `pela_player_id` del localStorage pero **nada lo creaba ahí**, así que cualquiera que entrara por primera vez no podía enviar su intento. Se usa `idAnonimo()`, que lo crea si falta. Los tests de servidor no podían verlo porque el bug era del cliente.
+
+- **Ideas descartadas y por qué**, para no volver a proponerlas sin resolver esto primero: cualquier variante de acertijo con pistas (nonograma, organigrama, trámite del día) necesita un generador con **solución única demostrable**, y sin eso el ranking no significa nada. Y "adivinar el pelado" con fotos tiene una pregunta de derechos sin resolver.
