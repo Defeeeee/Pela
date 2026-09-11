@@ -26,6 +26,7 @@ const routesConfig = [
   { path: "/palas", label: "¿Cuántas palas?", desc: "Mirá la pila del día unos segundos y decí cuántas hay. Un intento.", icon: "🔢" },
   { path: "/bitgolf", label: "Bit Golf", desc: "De un byte a otro en los menos golpes posibles. El par está a la vista.", icon: "⛳" },
   { path: "/pila", label: "La pila de palas", desc: "PUSH, POP y un puntero que apunta al lugar libre. Seguilo hasta el final.", icon: "📚" },
+  { path: "/asm", label: "¿Qué devuelve?", desc: "Diez líneas de x86-64 y cuatro entradas. Decí qué devuelve cada una.", icon: "🔬" },
   { path: "/escapecv", label: "Escape a la pala", desc: "Esquivá las palas. Un juego de supervivencia folicular.", icon: "🏃" },
   { path: "/agarra", label: "Agarrá.io", desc: "Comé palas, crecé de tamaño y morfate a otros pelados en vivo.", icon: "🦠" },
   { path: "/video", label: "Pela TV", desc: "Sistema de Radiodifusión Folicular ininterrumpida.", icon: "📺" },

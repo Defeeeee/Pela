@@ -589,3 +589,31 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
 - **Dos cosas que sólo aparecieron jugando en el navegador**, como el bug de identidad de palas: la secuencia de la pila se leía en zigzag (1, 2 / 3, 4) en dos columnas cuando el único trabajo del juego es trazar en orden — ahora el flujo es por columna; y el placeholder del campo de `R7` decía `1E`, que es justo el valor inicial y una de las respuestas más plausibles, así que parecía una respuesta ya puesta.
 
 - **Sobre el menú:** los dos entraron a `routesConfig` junto al resto. Siguen siendo nicho, y agruparlos en una sección "Orga" aparte sigue pareciendo mejor que mezclarlos con Pelardle y las palas — pero eso es una reorganización del menú que no se pidió.
+
+---
+
+## ¿Qué devuelve? — el puzzle diario de leer código ajeno
+
+- **Pedido:** el usuario pidió ideas diarias con x86-64 y eligió ésta de la lista. Es **la única de las que propuse con una habilidad que el sitio no medía**: los otros cuatro juegos diarios son percepción (palas), deducción (Pelardle), búsqueda (bit golf) y trazado (la pila). Leer código de otro y entender qué hace no lo tocaba ninguno.
+
+- **La mecánica.** Seis a diez instrucciones de x86-64 que reciben un entero y devuelven otro; el jugador dice qué devuelve para cuatro entradas. Puntaje de 0 a 4 según cuántas erró, la misma forma que La pila de palas.
+
+- **Lo que lo hace construible es que la función se GENERA, no se analiza.** Dar código y preguntar qué hace suena imposible de automatizar: haría falta un analizador que entienda x86 y demuestre qué computa. Pero el problema está dado vuelta. Si la función se arma componiendo operaciones conocidas, su semántica se sabe por construcción — se evalúa con el mismo árbol con el que se generó. **El texto en assembler es una impresión de esa estructura, no su fuente.** Por eso la respuesta existe, es única y es exacta, que es la condición que hundió a la mitad de las ideas de puzzle.
+
+- **`verificar-cpu.js`: la verificación contra el procesador de verdad.** El evaluador es *mi idea* de lo que hace cada instrucción, y ningún test escrito por mí puede agarrar el bug de haber entendido mal una instrucción — el test tendría el mismo error. Así que hay un script aparte que genera las funciones de N días, las ensambla con clang, las corre y exige coincidencia. **1000 evaluaciones sobre 250 días coinciden exactamente.** No está en la suite a propósito: necesita toolchain x86-64, y tanto el VPS como el Mac de desarrollo son ARM (en el Mac anda por Rosetta). Meterlo en `test-asm.js` haría fallar los tests en las dos máquinas donde el proyecto corre.
+
+- **Evaluación e impresión viven juntas en la misma tabla.** El peor bug posible acá sería mostrar una instrucción y corregir con otra: el jugador tendría razón y no habría forma de que lo supiera. Si vivieran separadas, una podría cambiar sin la otra.
+
+- **`shr` está afuera a propósito.** La diferencia entre `shr` y `sar` es real y valdría un puzzle propio, pero un corrimiento lógico sobre un negativo da un número de diez dígitos, y ahí se deja de poder trazar a mano — que es el único requisito que este juego no puede negociar.
+
+- **Las cinco garantías del generador**, todas verificadas sobre 520 días: al menos tres resultados distintos entre los cuatro (la lección de la pila, donde una pregunta se acertaba el 58% contestando siempre lo mismo); las dos ramas se toman; ningún resultado igual a su entrada; todo en un rango trazable; y **cada rama tiene que importar**.
+
+- **Esa última garantía salió de un test que medía una cosa y decía otra.** Verificaba "las dos ramas se usan" vaciando una rama y comparando resultados, y falló con 32 de 520 días. No era que las cuatro entradas cayeran del mismo lado —eso lo garantiza la construcción— sino que en esos 32 días **una rama era un no-op efectivo**: `add 4` seguido de `sub 4`, o un `or 0`. Se toma sin cambiar nada, así que el listado muestra una bifurcación que no hace falta entender y el puzzle es más fácil de lo que aparenta. Son dos propiedades distintas; ahora el generador exige las dos y el test las verifica por separado, preguntando por la condición real en vez de inferirla.
+
+- **Otro error mío, del mismo tipo que ya cometí antes:** en el comentario de la función de emergencia escribí cuatro resultados **calculados a ojo**, y tres de los cuatro estaban mal. El evaluador estaba bien y el comentario era mentira. Ahora esos números están comprobados contra la CPU y el test lo dice explícitamente.
+
+- **Lo que este juego NO defiende:** el código es público, así que quien lo pegue en un compilador tiene las cuatro respuestas sin pensar. No se tapa, y el motivo es medible: **hacer la trampa cuesta lo mismo que jugar** —armar el archivo, compilar y correr son los mismos minutos que trazarlo a mano—. Es distinto del caso de las palas, donde contar por consola es diez veces más rápido que contar con el ojo, y por eso allá hizo falta un reloj y acá no.
+
+- **Lo único que se esconde son los cuatro resultados.** Si volvieran del servidor, el segundo jugador los copia del primero. Se devuelve cuáles acertó —para los cuadraditos de compartir y para que el resultado enseñe algo— y la pantalla de resultado muestra **lo que contestó el jugador**, nunca el número correcto.
+
+- **La cuarta ruta sobre `puzzleDiario.js`**, sin tocar el molde. El recurso se llama `funcion`; el nombre `puzzle` sigue prohibido por la colisión con el índice del día que ya está documentada ahí.

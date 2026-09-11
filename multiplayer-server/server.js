@@ -18,6 +18,7 @@ import { LeaderboardStore } from "./leaderboard.js";
 import { escenaPublica, registrarIntento as registrarPalas } from "./palas.js";
 import { puzzleDelDia, registrarIntento as registrarBitGolf } from "./bitgolf.js";
 import { secuenciaPublica, registrarIntento as registrarPila } from "./pila.js";
+import { funcionPublica, registrarIntento as registrarAsm } from "./asm.js";
 
 const PORT = process.env.MP_PORT || 9315;
 // Override por si hace falta probar desde otro dispositivo de la LAN (por
@@ -86,7 +87,8 @@ palasStore.init().catch((err) => {
  */
 const bitgolfStore = new LeaderboardStore({ archivo: "bitgolf.json", identidades: leaderboardStore });
 const pilaStore = new LeaderboardStore({ archivo: "pila.json", identidades: leaderboardStore });
-for (const [nombre, store] of [["bitgolf", bitgolfStore], ["pila", pilaStore]]) {
+const asmStore = new LeaderboardStore({ archivo: "asm.json", identidades: leaderboardStore });
+for (const [nombre, store] of [["bitgolf", bitgolfStore], ["pila", pilaStore], ["asm", asmStore]]) {
   store.init().catch((err) => {
     console.error(`[pela-multiplayer] Error iniciando el store de ${nombre}:`, err);
   });
@@ -99,6 +101,7 @@ const gracefulShutdown = async () => {
   await palasStore.flushToDisk().catch(() => {});
   await bitgolfStore.flushToDisk().catch(() => {});
   await pilaStore.flushToDisk().catch(() => {});
+  await asmStore.flushToDisk().catch(() => {});
   process.exit(0);
 };
 process.on("SIGTERM", gracefulShutdown);
@@ -139,6 +142,7 @@ const httpServer = createServer(async (req, res) => {
     "/palas/escena": (dia) => ({ escena: escenaPublica(dia) }),
     "/bitgolf/hoyo": (dia) => ({ hoyo: puzzleDelDia(dia) }),
     "/pila/secuencia": (dia) => ({ secuencia: secuenciaPublica(dia) }),
+    "/asm/funcion": (dia) => ({ funcion: funcionPublica(dia) }),
   };
   const generador = puzzlesDelDia[url.pathname];
   if (generador && req.method === "GET") {
@@ -158,6 +162,7 @@ const httpServer = createServer(async (req, res) => {
     "/palas/board": palasStore,
     "/bitgolf/board": bitgolfStore,
     "/pila/board": pilaStore,
+    "/asm/board": asmStore,
   };
   const storeDelBoard = boardsDiarios[url.pathname];
   if (storeDelBoard && req.method === "GET") {
@@ -196,6 +201,7 @@ const httpServer = createServer(async (req, res) => {
     "/palas/intento": (body) => registrarPalas(palasStore, body),
     "/bitgolf/intento": (body) => registrarBitGolf(bitgolfStore, body),
     "/pila/intento": (body) => registrarPila(pilaStore, body),
+    "/asm/intento": (body) => registrarAsm(asmStore, body),
   };
 
   const handler = postHandlers[url.pathname];
