@@ -96,6 +96,19 @@ export class PoliticaBots {
    * Decide y aplica la acción de un bot dentro de la arena.
    * Devuelve true si se dividió, para que el llamador lo sepa.
    */
+  /**
+   * Elige una acción a partir de una observación YA codificada, sin tocar la
+   * sala. Es la vía para sondear la política sobre observaciones que vienen de
+   * otro lado — por ejemplo del entorno de entrenamiento, que las entrega ya
+   * espejadas, y que es el único marco donde tiene sentido medir la simetría.
+   */
+  accionPara(obs, base = 0, msc = null) {
+    this.obs.set(obs.subarray(base, base + TAM_OBS));
+    if (msc) this.msc.set(msc.subarray(base ? 0 : 0, NUM_ACCIONES));
+    else this.msc.fill(1);
+    return this.#elegirAccion();
+  }
+
   jugar(sala, id) {
     codificar(sala, id, this.obs, 0);
     mascara(sala, id, this.msc, 0);

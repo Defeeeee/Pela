@@ -20,6 +20,14 @@ ROLLOUT="${ROLLOUT:-32}"
 EPOCAS="${EPOCAS:-6}"
 ANCHO="${ANCHO:-1024}"
 MINILOTE="${MINILOTE:-32768}"
+# Pasos hasta que el recocido de entropía y de learning rate toque su piso.
+#
+# NO se hereda el 4000 del Agarrá: allá un paso son 98.304 transiciones y acá
+# 32.768, así que el mismo número agota la agenda con un tercio de la
+# experiencia. Con 4000, a los 35 minutos la corrida quedaba con lr 3e-5 y KL
+# 0,0007 —cuarenta veces por debajo de su propio tope de 0,03— dando pasos
+# minúsculos y amesetada en 43 s.
+RECOCIDO="${RECOCIDO:-20000}"
 LIMPIAR="${LIMPIAR:-0}"
 
 cd "$RAIZ" || exit 1
@@ -55,7 +63,7 @@ fi
 nohup "$PY" entrenamiento-escape/aprendiz.py \
   --workers "$WORKERS" --salas "$SALAS" --agentes "$AGENTES" \
   --rollout "$ROLLOUT" --epocas "$EPOCAS" --ancho "$ANCHO" \
-  --minilote "$MINILOTE" > registros/aprendiz-escape.log 2>&1 &
+  --minilote "$MINILOTE" --recocido "$RECOCIDO" > registros/aprendiz-escape.log 2>&1 &
 echo "[arrancar] aprendiz pid $!"
 
 sleep 2

@@ -1,6 +1,7 @@
 import { Room, TICK_MS, CORRAL_X, CORRAL_Y, CORRAL_W, CORRAL_H, REVIVE_TIME_MS } from "../multiplayer-server/rooms.js";
 import { codificar, TAM_OBS } from "../multiplayer-server/observacion-escape.js";
 import { decodificar, mascara, NUM_ACCIONES } from "../multiplayer-server/acciones-escape.js";
+import { espejarObs, espejarMascara, desespejarAccion, espejoAlAzar, ESPEJOS } from "../multiplayer-server/simetria-escape.js";
 
 /**
  * Entorno vectorizado para entrenar a los bots de escapecv.
@@ -23,6 +24,25 @@ import { decodificar, mascara, NUM_ACCIONES } from "../multiplayer-server/accion
  *
  *  3. Los modos se mezclan entre salas. Una sola política juega los tres, y el
  *     modo entra en la observación como canal propio.
+ *
+ *  4. Cada sala tiene un ESPEJO fijo, sorteado al nacer entre los cuatro que la
+ *     simetría del corral admite. La observación se codifica en ese marco y la
+ *     acción se desespeja antes de aplicarla.
+ *
+ *     Sin esto, la política gasta capacidad en elegir arbitrariamente una de
+ *     cuatro versiones equivalentes de la misma estrategia: medido en el paso
+ *     ~2000, terminaba apretada contra la pared IZQUIERDA el 70% del tiempo y
+ *     contra la derecha el 0,0%, cuando la política espejada sería
+ *     idénticamente buena.
+ *
+ *     Va acá y no en el aprendiz a propósito: así la acción fue realmente
+ *     muestreada de la red con esa observación, y el `log_prob` que PPO usa
+ *     para el cociente de importancia es exacto sin ninguna corrección.
+ *     Aumentar el lote del lado del aprendiz habría requerido recalcularlo,
+ *     porque el `log_prob` viejo de una muestra sintética no es el de la
+ *     original salvo que la política ya sea simétrica — que es justo lo que no
+ *     es. El espejo es fijo por sala y no por paso: si cambiara a mitad de un
+ *     episodio, el mundo se daría vuelta bajo los pies del agente.
  */
 
 export const REPETIR_ACCION = 3; // 10 decisiones por segundo simulado
@@ -59,6 +79,9 @@ export class EntornoVectorial {
     avanceMaxMs = 150000,
     // Cuando está en un solo modo, sirve para evaluar por separado.
     modoFijo = null,
+    // Se puede apagar para medir sin espejos, o para reproducir una corrida
+    // vieja. En entrenamiento va siempre encendida.
+    simetria = true,
   } = {}) {
     this.nSalas = salas;
     this.porSala = agentesPorSala;
@@ -67,9 +90,15 @@ export class EntornoVectorial {
     this.fraccionAvanzada = fraccionAvanzada;
     this.avanceMaxMs = avanceMaxMs;
     this.modoFijo = modoFijo;
+    this.simetria = simetria;
 
     this.rng = rngSemilla(semilla);
     this.rngCurriculo = rngSemilla(semilla ^ 0x9e3779b9);
+    // Generador propio para el espejo. Compartir el del curriculum correlaciona
+    // las dos decisiones —el generador es un LCG simple— y en tandas chicas el
+    // reparto entre los cuatro espejos sale desbalanceado. El test de cableado
+    // lo detectó al quedar 91/57 donde esperaba mitad y mitad.
+    this.rngEspejo = rngSemilla(semilla ^ 0x85ebca6b);
 
     this.salas = [];
     this.ids = new Array(this.nAgentes);
@@ -89,6 +118,7 @@ export class EntornoVectorial {
     // métrica de este proyecto que se habría inflado por el denominador —o en
     // este caso, por el origen— equivocado.
     this.tiempoInicial = new Float64Array(this.nSalas);
+    this.espejos = new Array(this.nSalas);
     this.vivoPrevio = new Uint8Array(this.nAgentes);
     this.reanimPrevias = new Int32Array(this.nAgentes);
 
@@ -159,6 +189,7 @@ export class EntornoVectorial {
     this.salas[a] = sala;
     this.pasos[a] = 0;
     this.tiempoInicial[a] = sala.tiempo;
+    this.espejos[a] = this.simetria ? espejoAlAzar(this.rngEspejo()) : ESPEJOS[0];
 
     for (let i = 0; i < this.porSala; i++) {
       const g = a * this.porSala + i;
@@ -178,6 +209,11 @@ export class EntornoVectorial {
       const a = (g / this.porSala) | 0;
       codificar(this.salas[a], this.ids[g], this.obs, g * TAM_OBS);
       mascara(this.salas[a], this.ids[g], this.mascaras, g * NUM_ACCIONES);
+      const e = this.espejos[a];
+      if (e.sx !== 1 || e.sy !== 1) {
+        espejarObs(this.obs, g * TAM_OBS, e);
+        espejarMascara(this.mascaras, g * NUM_ACCIONES, e);
+      }
     }
   }
 
@@ -192,7 +228,11 @@ export class EntornoVectorial {
       const a = (g / this.porSala) | 0;
       const p = this.salas[a].players.get(this.ids[g]);
       if (!p || !p.alive) continue;
-      const { dx, dy } = decodificar(acciones[g]);
+      // La red eligió en el marco espejado de su sala; al servidor va el rumbo
+      // del mundo. "Quieto" es punto fijo de los cuatro espejos, así que la
+      // estadística de quietud sigue siendo correcta sin traducir.
+      const enMundo = desespejarAccion(acciones[g], this.espejos[a]);
+      const { dx, dy } = decodificar(enMundo);
       this.salas[a].setInput(this.ids[g], dx, dy);
       if (acciones[g] === 0) this.stats.pasosQuieto++;
     }

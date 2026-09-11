@@ -728,7 +728,13 @@ def main():
                 evaluador.recibir()
                 vent_eval.append(np.array(evaluador.stats, dtype=np.float64))
 
-            ev = np.sum(vent_eval, axis=0)
+            vent = np.stack(vent_eval)
+            ev = vent.sum(axis=0)
+            # La supervivencia máxima es un MÁXIMO, no un contador: sumar el
+            # máximo de cada ciclo de la ventana daba la suma de los mejores de
+            # cada uno y reportaba 59.133 segundos. Es el mismo error que en el
+            # Agarrá infló el récord ocho veces.
+            ev[IDX_SUPERVIVENCIA_MAX] = vent[:, IDX_SUPERVIVENCIA_MAX].max()
             e_eps = max(1.0, ev[0])
             # El evaluador de este juego es mejor que el del Agarrá por
             # construcción: el rival es el generador de oleadas, que es fijo y
