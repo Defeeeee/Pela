@@ -537,3 +537,83 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
 - **Otro bug, encontrado probando en el navegador:** la página leía `pela_player_id` del localStorage pero **nada lo creaba ahí**, así que cualquiera que entrara por primera vez no podía enviar su intento. Se usa `idAnonimo()`, que lo crea si falta. Los tests de servidor no podían verlo porque el bug era del cliente.
 
 - **Ideas descartadas y por qué**, para no volver a proponerlas sin resolver esto primero: cualquier variante de acertijo con pistas (nonograma, organigrama, trámite del día) necesita un generador con **solución única demostrable**, y sin eso el ranking no significa nada. Y "adivinar el pelado" con fotos tiene una pregunta de derechos sin resolver.
+
+---
+
+## Bit Golf y La pila de palas — los dos puzzles de Orga
+
+- **Pedido:** el usuario compartió una conversación aparte sobre la microarquitectura de OrgaSmall —little endian, la pila y el puntero de pila, POPADD, FLIPBITS— y pidió puzzles diarios con esa temática. De la lista propuesta eligió dos.
+
+### Bit Golf
+
+- **La mecánica.** Un byte de salida, uno de llegada y cinco operaciones: `SHL`, `SHR`, `NOT`, `XOR 0x0F`, `ADD 1`. Llegar en los menos golpes. Se rankea por golpes, que tiene la misma forma de "menos es mejor" que los intentos de Pelardle, así que el ordenamiento del leaderboard sirvió sin tocarlo.
+
+- **Lo que lo hace viable es que el par se CALCULA.** Son 256 estados y cinco operaciones: un recorrido en anchura da la distancia exacta entre cualquier par de bytes. Eso resuelve de raíz el problema que hundió a la mitad de las ideas de puzzle —no hay que estimar la dificultad ni rezar que tenga solución— y permite rankear por cuánto te pasaste del óptimo, que es un puntaje con gradiente y no acertar o no acertar. `INC` está en el repertorio para garantizar que ningún puzzle sea imposible: sola alcanza para llegar de cualquier byte a cualquier otro, y el test lo verifica sobre los 65.536 pares.
+
+- **Acá NO hay nada secreto, y es deliberado.** Los dos bytes, las operaciones y hasta el par viajan al cliente, que simula solo. Alguien puede escribir un solucionador y sacar el par siempre — igual que en el ajedrez, que se juega con el tablero a la vista. Lo que se mide es en cuántos golpes llegaste y el desempate es la hora. Queda escrito para que nadie lo descubra en dos meses creyendo que es un descuido.
+
+- **El par se elige PRIMERO y después el destino.** Sorteando pares de bytes uniformemente el juego quedaba pegado a la parte fácil: la distribución de distancias de este grafo tiene el 33% en par 4 y el 29% en par 5, así que la mitad de los días salía el par más bajo (medido: 242 de 520). Eligiendo el par primero y sorteando entre los destinos a esa distancia exacta, los tres niveles salen en tercios (174/177/169).
+
+- **El par 7 y el 8 quedaron afuera por una razón medida.** El par 7 es el 1% de los pares y sólo 100 de los 256 bytes tienen algún destino a esa distancia, muchos con un único destino posible: forzarlo sería sortear de un pozo diminuto y repetir el mismo puzzle. El 8 existe —29 pares en 65.536— y por lo mismo tampoco entra.
+
+- **Un test mío estaba mal, no el código.** Exigí que los 520 días de dos años dieran puzzles todos distintos y falló con 517. No era un defecto del generador sino la paradoja del cumpleaños: 47.091 pares válidos y 520 sorteos predicen 2,87 colisiones, y salieron 3. Exigir cero repeticiones sería exigir que el generador esté **sesgado contra repetir**, o sea que no sea uniforme. El test ahora calcula la expectativa en vez de hardcodearla — y de paso la primera versión de ese cálculo promediaba los tres pozos y daba 2,9 donde el cálculo por par da 4,1.
+
+- **El listón de repetición es bajo a propósito**, al revés que en ¿Cuántas palas?. Ahí una escena repetida filtraría la respuesta porque la respuesta es secreta; acá no hay nada secreto y un puzzle repetido no le regala a nadie nada que no pudiera calcular igual. Lo único que molestaría es repetir dentro de la misma semana.
+
+- **Una solución que no llega puntúa con el tope de golpes, no con los que usó.** Sin eso, entregar dos golpes que no llegan rankearía mejor que cinco que sí, y la mejor estrategia del juego sería mandar un golpe al azar. Y el que no encuentra el camino igual puede entregar: sin esa salida se queda sin jugar el día y la racha se le corta sin que nada se lo diga.
+
+### La pila de palas
+
+- **El chiste es que "pila" en castellano son las dos cosas**, el montón y la estructura de datos, y ¿Cuántas palas? ya dibuja un montón. Una secuencia de `PUSH`/`POP` y cuatro preguntas: dónde queda `R7`, qué pala quedó arriba, cuántas hay, y qué hay en una dirección suelta. Se rankea por cuántas erró, de 0 a 4.
+
+- **La convención de OrgaSmall es genuinamente contraintuitiva y por eso es buen puzzle.** Tres reglas que se pelean con la intuición: la pila **crece hacia abajo**; `R7` apunta al **próximo lugar libre** y no al tope, así que el de arriba está en `R7 + 1`; y **popear no borra nada**, la pala se queda en memoria hasta que otra la pise. El test clava las tres con secuencias trazadas a mano: si alguien "arregla" `simular` para que R7 apunte al tope —que es el error que el juego enseña a no cometer— revienta.
+
+- **La regla se muestra, no se esconde.** El puzzle no es adivinar la convención sino aplicarla sin marearse; esconderla lo volvería un juego de adivinanza y lo haría peor. Lo que **no** se muestra es la traza: la pantalla podría ir dibujando la pila operación por operación y quedaría lindísimo, pero eso lo resolvería por el jugador. La memoria arranca vacía y se queda vacía.
+
+- **Las palas se numeran al azar y no 1, 2, 3 en orden de apilado.** Con un contador, la de arriba es siempre la de número más alto sin popear y se resuelve por ese atajo sin seguir el puntero. Y arreglaba un problema de tamaño serio: enumeré el espacio de secuencias válidas de 10 a 14 operaciones y son **3.111**, así que hasta sorteando perfecto habría 43 repeticiones en dos años — salían 449 días distintos de 520. Con números sueltos el espacio se vuelve enorme y la repetición desaparece.
+
+- **Un bug que destapó el propio test al imprimir el reparto.** La condición de corte decía `quedan <= profundidad - 1`, que fuerza POPs mucho antes de hacer falta, y la pila terminaba **siempre con una o dos palas**: "cuántas quedan" se acertaba el 58% contestando 2 sin mirar nada, y una de las cuatro preguntas no medía. Con el corte correcto va de 1 a 5 y la mejor conjetura ciega baja al 28%. Hay una aserción que lo fija.
+
+- **"Nada" tiene que ser a veces la respuesta correcta.** La dirección que se pregunta sale siempre de fuera de la pila, pero dos de cada tres días guarda una pala colgada de un POP y el otro tercio está vacía. Si tuviera siempre una pala, el jugador aprendería a descartar "nada" sin pensar — que es justo el razonamiento que el puzzle quiere provocar. Las vacías se buscan pegadas al puntero, no en la otra punta de la memoria.
+
+- **Lo único que este juego esconde son las cuatro respuestas.** La secuencia es pública y se simula a mano, que es el juego; pero si el servidor devolviera las respuestas correctas, el segundo jugador las copia del primero. Se devuelve **cuáles** acertó —para que el resultado enseñe algo, y para los cuadraditos de compartir— y no cuál era la buena. El test clava el conjunto exacto de claves de la respuesta: mi primera versión buscaba que el string `"r7"` no apareciera en el JSON y fallaba, porque `r7` es una de las claves de `detalle`, que va a propósito. Buscar el nombre de una clave no verifica nada sobre el valor.
+
+### Lo común a los dos
+
+- **`app/lib/puzzleDiario.js`.** Las tres rutas de puzzle diario —palas, bit golf y la pila— eran el mismo proxy con distinto nombre, así que el molde se extrajo en vez de copiarlo dos veces más. Codifica las decisiones que tienen que valer para los tres: el ranking falla en silencio si el servicio no contesta (es accesorio), el puzzle devuelve 503 con mensaje (sin puzzle no hay juego), y el día sale siempre de `diaHabil`.
+
+- **Un choque de nombres que el molde compartido hizo visible.** El recurso de bit golf se llamaba `puzzle`, que es también la clave del índice del día: la segunda pisaba a la primera y la página habría recibido un objeto donde espera un número. Se renombró a `hoyo`, que además es el término del golf. Queda anotado en el molde para que nadie lo vuelva a elegir.
+
+- **En el servidor los tres endpoints van por tabla** en vez de tres bloques idénticos: repetir el bloque tres veces son tres lugares donde arreglar el mismo bug. Cada juego tiene archivo propio (`bitgolf.json`, `pila.json`) por la misma razón que palas, y comparte identidades por la misma razón que palas.
+
+- **Dos cosas que sólo aparecieron jugando en el navegador**, como el bug de identidad de palas: la secuencia de la pila se leía en zigzag (1, 2 / 3, 4) en dos columnas cuando el único trabajo del juego es trazar en orden — ahora el flujo es por columna; y el placeholder del campo de `R7` decía `1E`, que es justo el valor inicial y una de las respuestas más plausibles, así que parecía una respuesta ya puesta.
+
+- **Sobre el menú:** los dos entraron a `routesConfig` junto al resto. Siguen siendo nicho, y agruparlos en una sección "Orga" aparte sigue pareciendo mejor que mezclarlos con Pelardle y las palas — pero eso es una reorganización del menú que no se pidió.
+
+---
+
+## ¿Qué devuelve? — el puzzle diario de leer código ajeno
+
+- **Pedido:** el usuario pidió ideas diarias con x86-64 y eligió ésta de la lista. Es **la única de las que propuse con una habilidad que el sitio no medía**: los otros cuatro juegos diarios son percepción (palas), deducción (Pelardle), búsqueda (bit golf) y trazado (la pila). Leer código de otro y entender qué hace no lo tocaba ninguno.
+
+- **La mecánica.** Seis a diez instrucciones de x86-64 que reciben un entero y devuelven otro; el jugador dice qué devuelve para cuatro entradas. Puntaje de 0 a 4 según cuántas erró, la misma forma que La pila de palas.
+
+- **Lo que lo hace construible es que la función se GENERA, no se analiza.** Dar código y preguntar qué hace suena imposible de automatizar: haría falta un analizador que entienda x86 y demuestre qué computa. Pero el problema está dado vuelta. Si la función se arma componiendo operaciones conocidas, su semántica se sabe por construcción — se evalúa con el mismo árbol con el que se generó. **El texto en assembler es una impresión de esa estructura, no su fuente.** Por eso la respuesta existe, es única y es exacta, que es la condición que hundió a la mitad de las ideas de puzzle.
+
+- **`verificar-cpu.js`: la verificación contra el procesador de verdad.** El evaluador es *mi idea* de lo que hace cada instrucción, y ningún test escrito por mí puede agarrar el bug de haber entendido mal una instrucción — el test tendría el mismo error. Así que hay un script aparte que genera las funciones de N días, las ensambla con clang, las corre y exige coincidencia. **1000 evaluaciones sobre 250 días coinciden exactamente.** No está en la suite a propósito: necesita toolchain x86-64, y tanto el VPS como el Mac de desarrollo son ARM (en el Mac anda por Rosetta). Meterlo en `test-asm.js` haría fallar los tests en las dos máquinas donde el proyecto corre.
+
+- **Evaluación e impresión viven juntas en la misma tabla.** El peor bug posible acá sería mostrar una instrucción y corregir con otra: el jugador tendría razón y no habría forma de que lo supiera. Si vivieran separadas, una podría cambiar sin la otra.
+
+- **`shr` está afuera a propósito.** La diferencia entre `shr` y `sar` es real y valdría un puzzle propio, pero un corrimiento lógico sobre un negativo da un número de diez dígitos, y ahí se deja de poder trazar a mano — que es el único requisito que este juego no puede negociar.
+
+- **Las cinco garantías del generador**, todas verificadas sobre 520 días: al menos tres resultados distintos entre los cuatro (la lección de la pila, donde una pregunta se acertaba el 58% contestando siempre lo mismo); las dos ramas se toman; ningún resultado igual a su entrada; todo en un rango trazable; y **cada rama tiene que importar**.
+
+- **Esa última garantía salió de un test que medía una cosa y decía otra.** Verificaba "las dos ramas se usan" vaciando una rama y comparando resultados, y falló con 32 de 520 días. No era que las cuatro entradas cayeran del mismo lado —eso lo garantiza la construcción— sino que en esos 32 días **una rama era un no-op efectivo**: `add 4` seguido de `sub 4`, o un `or 0`. Se toma sin cambiar nada, así que el listado muestra una bifurcación que no hace falta entender y el puzzle es más fácil de lo que aparenta. Son dos propiedades distintas; ahora el generador exige las dos y el test las verifica por separado, preguntando por la condición real en vez de inferirla.
+
+- **Otro error mío, del mismo tipo que ya cometí antes:** en el comentario de la función de emergencia escribí cuatro resultados **calculados a ojo**, y tres de los cuatro estaban mal. El evaluador estaba bien y el comentario era mentira. Ahora esos números están comprobados contra la CPU y el test lo dice explícitamente.
+
+- **Lo que este juego NO defiende:** el código es público, así que quien lo pegue en un compilador tiene las cuatro respuestas sin pensar. No se tapa, y el motivo es medible: **hacer la trampa cuesta lo mismo que jugar** —armar el archivo, compilar y correr son los mismos minutos que trazarlo a mano—. Es distinto del caso de las palas, donde contar por consola es diez veces más rápido que contar con el ojo, y por eso allá hizo falta un reloj y acá no.
+
+- **Lo único que se esconde son los cuatro resultados.** Si volvieran del servidor, el segundo jugador los copia del primero. Se devuelve cuáles acertó —para los cuadraditos de compartir y para que el resultado enseñe algo— y la pantalla de resultado muestra **lo que contestó el jugador**, nunca el número correcto.
+
+- **La cuarta ruta sobre `puzzleDiario.js`**, sin tocar el molde. El recurso se llama `funcion`; el nombre `puzzle` sigue prohibido por la colisión con el índice del día que ya está documentada ahí.
