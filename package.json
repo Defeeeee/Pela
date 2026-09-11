@@ -6,7 +6,8 @@
     "dev": "next dev -p 9314",
     "build": "next build",
     "start": "next start -p 9314",
-    "lint": "next lint"
+    "lint": "next lint",
+    "check-undef": "eslint --config eslint-no-undef.config.mjs app multiplayer-server entrenamiento-escape"
   },
   "keywords": [],
   "author": "",
