@@ -212,6 +212,21 @@ export default function MultiplayerGame({ onExit }) {
     });
   };
 
+  /**
+   * Pide al servidor la cantidad y el nivel de los bots.
+   *
+   * Los dos `select` son controlados por `room.bots` y `room.dificultad`, que
+   * llegan en el snapshot: si el servidor rechaza el cambio, el control vuelve
+   * solo a su valor anterior y el error se muestra. O sea que la interfaz nunca
+   * miente sobre lo que hay en la sala.
+   */
+  const configurarBots = (cantidad, dificultad) => {
+    socketRef.current?.emit('configurarBots', { cantidad, dificultad }, (res) => {
+      if (res?.error) setError(res.error);
+      else setError('');
+    });
+  };
+
   const startPrivateGame = async () => {
     await requestOrientationPermission();
     socketRef.current?.emit('startGame', {}, (res) => {
