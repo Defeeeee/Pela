@@ -1,0 +1,698 @@
+<meta charset="utf-8">
+<title>escapecv · entrenamiento</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root {
+  --fondo: #0f1311;
+  --panel: #171c19;
+  --linea: #2a312c;
+  --linea-2: #212722;
+  --tinta: #e4e8e3;
+  --tinta-2: #a8b0a9;
+  --tinta-3: #737b74;
+  --actor: #5eead4;
+  --critico: #fbbf24;
+  --mal: #fb7185;
+  --bien: #a3e635;
+  --azul: #7dd3fc;
+  --violeta: #d8b4fe;
+  --rosa: #f9a8d4;
+  --naranja: #fdba74;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--fondo); color: var(--tinta);
+  font: 400 13px/1.5 "IBM Plex Mono", ui-monospace, monospace;
+  -webkit-font-smoothing: antialiased;
+}
+header {
+  padding: 11px 20px; border-bottom: 1px solid var(--linea);
+  display: flex; align-items: baseline; gap: 20px; flex-wrap: wrap;
+  position: sticky; top: 0; background: var(--fondo); z-index: 30;
+}
+h1 { font: 700 15px/1 Bitter, Georgia, serif; margin: 0; }
+.meta { color: var(--tinta-3); font-size: 12px; display: flex; gap: 15px; flex-wrap: wrap; }
+.meta b { color: var(--tinta-2); font-weight: 500; }
+.vivo { color: var(--bien); } .muerto { color: var(--mal); }
+
+main { padding: 14px 20px 70px; display: flex; flex-direction: column; gap: 22px; }
+.seccion { display: flex; flex-direction: column; gap: 12px; }
+.tituloSec {
+  font: 600 10px/1 "IBM Plex Mono", monospace; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--tinta-3);
+  border-bottom: 1px solid var(--linea); padding-bottom: 7px;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+}
+.tituloSec em { font-style: normal; letter-spacing: 0; text-transform: none; font-size: 11px; color: var(--tinta-3); }
+.rejilla { display: grid; gap: 12px; }
+.r5 { grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); }
+.r4 { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.r3 { grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); }
+.r2 { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
+.ancho { grid-column: 1 / -1; }
+
+.caja { background: var(--panel); border: 1px solid var(--linea); border-radius: 4px; padding: 10px 12px; }
+.caja > h2 {
+  margin: 0 0 7px; font: 600 9.5px/1.3 "IBM Plex Mono", monospace;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--tinta-3);
+  display: flex; justify-content: space-between; align-items: baseline; gap: 7px;
+}
+.caja > h2 em { font-style: normal; color: var(--tinta-2); letter-spacing: 0; text-transform: none; font-size: 10.5px; flex: none; }
+.num { font: 500 24px/1.1 Bitter, Georgia, serif; font-variant-numeric: tabular-nums; }
+.num s { font: 400 11.5px/1 "IBM Plex Mono", monospace; color: var(--tinta-3); text-decoration: none; margin-left: 2px; }
+.num.chico { font-size: 19px; }
+.sub { color: var(--tinta-3); font-size: 10.5px; margin: 4px 0 0; line-height: 1.45; }
+.sub b { color: var(--tinta-2); font-weight: 500; }
+.hito { background: linear-gradient(180deg, color-mix(in srgb, var(--actor) 10%, var(--panel)), var(--panel)); }
+.hito .num { color: var(--actor); }
+svg, canvas { display: block; width: 100%; height: auto; }
+
+table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+td { padding: 3px 4px; text-align: right; font-variant-numeric: tabular-nums; }
+td:first-child { text-align: left; color: var(--tinta-3); }
+td.n { color: var(--tinta-3); font-size: 10.5px; }
+tr + tr td { border-top: 1px solid var(--linea-2); }
+
+.leyenda { display: flex; gap: 4px 12px; flex-wrap: wrap; margin-top: 7px; font-size: 10.5px; color: var(--tinta-3); }
+.leyenda span { display: inline-flex; align-items: center; gap: 4px; }
+.leyenda i { width: 12px; height: 3px; border-radius: 2px; flex: none; }
+.aviso {
+  border-left: 3px solid var(--critico); background: color-mix(in srgb, var(--critico) 8%, var(--panel));
+  padding: 9px 13px; font-size: 12px; color: var(--critico); border-radius: 0 4px 4px 0;
+}
+#arena { background: #060907; border-radius: 3px; }
+.chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px; }
+.chip { font-size: 10px; padding: 2px 6px; border-radius: 9px; border: 1px solid var(--linea); color: var(--tinta-3); }
+.chip b { color: var(--tinta-2); font-weight: 500; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header>
+  <h1>escapecv · entrenamiento</h1>
+  <div class="meta" id="meta">conectando…</div>
+</header>
+
+<main>
+  <div id="aviso"></div>
+
+  <!-- ═══ RESUMEN ═══ -->
+  <div class="seccion">
+    <div class="tituloSec"><span>Resumen</span><em id="sec-resumen"></em></div>
+    <div class="rejilla r5" id="kpis"></div>
+  </div>
+
+  <!-- ═══ APRENDIZAJE ═══ -->
+  <div class="seccion">
+    <div class="tituloSec"><span>Aprendizaje</span><em>la curva de evaluación es la única que no mezcla modos ni dificultad</em></div>
+    <div class="caja ancho">
+      <h2>Supervivencia contra las tres varas<em id="cab-curva"></em></h2>
+      <svg id="g-curva" viewBox="0 0 1000 240" role="img" aria-label="Supervivencia"></svg>
+      <div class="leyenda">
+        <span><i style="background:var(--actor)"></i>evaluación · solo, sin curriculum</span>
+        <span><i style="background:var(--tinta-3)"></i>entrenamiento · mezcla modos y dificultad</span>
+        <span><i style="border-top:2px dashed var(--tinta-3);height:0"></i>varas guionadas</span>
+      </div>
+    </div>
+    <div class="rejilla r3">
+      <div class="caja"><h2>Ritmo de mejora<em>seg. ganados / 1.000 pasos</em></h2><svg id="g-mejora" viewBox="0 0 300 130"></svg><p class="sub" id="pie-mejora">—</p></div>
+      <div class="caja"><h2>Récord de una vida<em>escalera</em></h2><svg id="g-record" viewBox="0 0 300 130"></svg><p class="sub" id="pie-record">—</p></div>
+      <div class="caja"><h2>Brecha evaluación − entrenamiento</h2><svg id="g-brecha" viewBox="0 0 300 130"></svg><p class="sub">Positiva quiere decir que rinde mejor solo y desde cero que en la mezcla del entrenamiento, que es más difícil. Si se fuera muy negativa, sería señal de que sólo aprende con el curriculum puesto.</p></div>
+    </div>
+  </div>
+
+  <!-- ═══ COMPORTAMIENTO ═══ -->
+  <div class="seccion">
+    <div class="tituloSec"><span>Comportamiento</span><em>qué hace, no cuánto dura · aumentación por simetría desde el paso 3.200</em></div>
+    <div class="rejilla r3">
+      <div class="caja">
+        <h2>Qué acción elige · marco de la red<em id="cab-acciones"></em></h2>
+        <svg id="g-radial" viewBox="0 0 300 300"></svg>
+        <p class="sub" id="pie-radial">—</p>
+        <p class="sub">Ojo con el marco: desde la aumentación, cada sala le presenta el mundo en uno de cuatro espejos, y esto es la distribución <b>en el marco de entrada de la red</b>. Un favorito acá ya no es sesgo en el mundo — la misma acción cae en una pared distinta según el espejo de la sala.</p>
+      </div>
+      <div class="caja">
+        <h2>Rastro del sesgo · marco de la red<em>una marca por ciclo</em></h2>
+        <svg id="g-rastro" viewBox="0 0 300 300"></svg>
+        <p class="sub">Cada marca es la dirección media de un ciclo; las claras son recientes. <b>Antes</b> de la aumentación esto medía sesgo en el mundo y era desperdicio. <b>Ahora</b> mide preferencia dentro del marco de entrada, que es inofensiva: el espejo de cada sala la reparte entre las cuatro paredes. Predije que se derrumbaría con la aumentación y me equivoqué de observable — este número no tenía por qué moverse.</p>
+      </div>
+      <div class="caja">
+        <h2>Magnitud del sesgo y concentración</h2>
+        <svg id="g-sesgo" viewBox="0 0 300 130"></svg>
+        <div class="leyenda">
+          <span><i style="background:var(--critico)"></i>sesgo direccional</span>
+          <span><i style="background:var(--rosa)"></i>acción más probable</span>
+        </div>
+        <p class="sub" id="pie-sesgo">—</p>
+      </div>
+    </div>
+    <div class="caja ancho">
+      <h2>Las 17 acciones a lo largo del entrenamiento<em>claro = más probable</em></h2>
+      <canvas id="c-acciones" height="220"></canvas>
+      <p class="sub">Cada franja horizontal es una acción; el eje horizontal es el paso. Una banda clara que se mantiene es un rumbo favorito; una que se mueve es el sesgo rotando.</p>
+    </div>
+    <div class="rejilla r3">
+      <div class="caja">
+        <h2>Los dos hábitos y el riesgo</h2>
+        <svg id="g-habitos" viewBox="0 0 300 150"></svg>
+        <div class="leyenda">
+          <span><i style="background:var(--critico)"></i>contra la pared</span>
+          <span><i style="background:var(--actor)"></i>quieto</span>
+          <span><i style="background:var(--mal)"></i>en peligro</span>
+        </div>
+      </div>
+      <div class="caja">
+        <h2>Los mismos hábitos, medidos solo<em>evaluación</em></h2>
+        <svg id="g-habitos-eval" viewBox="0 0 300 150"></svg>
+        <p class="sub">La evaluación mide las mismas fracciones con un agente solo y sin curriculum. Si difieren mucho del entrenamiento, el comportamiento depende de tener compañeros y no es la política "pura".</p>
+      </div>
+      <div class="caja">
+        <h2>Esquives al límite<em>por millón</em></h2>
+        <svg id="g-esquives" viewBox="0 0 300 150"></svg>
+        <p class="sub" id="pie-esquives">Pasar a menos de 12 px de una pala sin tocarla. Subiendo puede ser dominio —esquivar justo— o exceso de confianza. Se lee junto con la mortalidad.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODOS ═══ -->
+  <div class="seccion">
+    <div class="tituloSec"><span>Los tres modos</span><em>solitario, cooperativo y todos contra todos</em></div>
+    <div class="rejilla r4">
+      <div class="caja"><h2>Supervivencia por modo</h2><svg id="g-modos" viewBox="0 0 300 150"></svg><div class="leyenda"><span><i style="background:var(--azul)"></i>coop</span><span><i style="background:var(--violeta)"></i>battle</span><span><i style="background:var(--actor)"></i>solo (eval)</span></div></div>
+      <div class="caja"><h2>Rivales sobrevividos<em>battle, de 3</em></h2><svg id="g-rivales" viewBox="0 0 300 150"></svg><p class="sub" id="pie-rivales">—</p></div>
+      <div class="caja"><h2>Reanimaciones<em>por episodio de coop</em></h2><svg id="g-reanim" viewBox="0 0 300 150"></svg><p class="sub" id="pie-reanim">—</p></div>
+      <div class="caja"><h2>Reanimar: dar y recibir<em>por millón</em></h2><svg id="g-reanim2" viewBox="0 0 300 150"></svg><div class="leyenda"><span><i style="background:var(--azul)"></i>hechas</span><span><i style="background:var(--rosa)"></i>recibidas</span></div></div>
+    </div>
+  </div>
+
+  <!-- ═══ ESPECTADOR ═══ -->
+  <div class="seccion">
+    <div class="tituloSec"><span>En vivo</span><em>la sala del agente que más está aguantando</em></div>
+    <div class="caja ancho">
+      <h2>Espectador<em id="arena-info"></em></h2>
+      <canvas id="arena" height="330"></canvas>
+      <div class="leyenda">
+        <span><i style="background:var(--bien);width:9px;height:9px;border-radius:0"></i>agente vivo</span>
+        <span><i style="background:var(--critico);width:9px;height:9px;border-radius:0"></i>inmune</span>
+        <span><i style="background:var(--mal);width:9px;height:9px;border-radius:0"></i>caído</span>
+        <span><i style="background:#e2e8f0;width:9px;height:9px;border-radius:50%"></i>pala</span>
+        <span><i style="background:var(--critico);width:9px;height:9px;border-radius:50%;opacity:.45"></i>aviso · todavía no existe</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ PPO ═══ -->
+  <div class="seccion">
+    <div class="tituloSec"><span>Salud del PPO</span><em>si algo se rompe, se rompe acá primero</em></div>
+    <div class="rejilla r4">
+      <div class="caja"><h2>Entropía y su recocido</h2><svg id="g-entropia" viewBox="0 0 300 140"></svg><div class="leyenda"><span><i style="background:var(--critico)"></i>entropía</span><span><i style="background:var(--naranja)"></i>coef. × 100</span></div></div>
+      <div class="caja"><h2>KL y recorte<em id="cab-kl"></em></h2><svg id="g-kl" viewBox="0 0 300 140"></svg><div class="leyenda"><span><i style="background:var(--mal)"></i>KL aprox</span><span><i style="background:var(--rosa)"></i>fracción recortada</span></div></div>
+      <div class="caja"><h2>Retorno y recompensa por paso</h2><svg id="g-retorno" viewBox="0 0 300 140"></svg><div class="leyenda"><span><i style="background:var(--violeta)"></i>retorno</span><span><i style="background:var(--bien)"></i>recomp/paso × 100</span></div></div>
+      <div class="caja"><h2>Varianza explicada<em>el crítico</em></h2><svg id="g-varexp" viewBox="0 0 300 140"></svg><p class="sub" id="pie-varexp">—</p></div>
+      <div class="caja"><h2>Pérdida de política</h2><svg id="g-perdpol" viewBox="0 0 300 140"></svg><p class="sub">Oscila alrededor de cero por diseño: es la ventaja recortada, no un error a minimizar.</p></div>
+      <div class="caja"><h2>Pérdida de valor</h2><svg id="g-perdval" viewBox="0 0 300 140"></svg><p class="sub">Sube cuando los retornos crecen: el crítico persigue un blanco que se aleja.</p></div>
+      <div class="caja"><h2>Tasa de aprendizaje</h2><svg id="g-lr" viewBox="0 0 300 140"></svg><p class="sub" id="pie-lr">—</p></div>
+      <div class="caja"><h2>Muestras en las ventanas</h2><svg id="g-muestras" viewBox="0 0 300 140"></svg><div class="leyenda"><span><i style="background:var(--actor)"></i>eval</span><span><i style="background:var(--tinta-3)"></i>entrenamiento</span><span><i style="border-top:2px dashed var(--critico);height:0"></i>piso de confianza</span></div></div>
+    </div>
+  </div>
+
+  <!-- ═══ ENTORNO ═══ -->
+  <div class="seccion">
+    <div class="tituloSec"><span>El entorno</span><em>cuán difícil se puso el juego que está jugando</em></div>
+    <div class="rejilla r4">
+      <div class="caja"><h2>Palas en pantalla</h2><svg id="g-enemigos" viewBox="0 0 300 140"></svg><p class="sub" id="pie-enemigos">—</p></div>
+      <div class="caja"><h2>Muertes por episodio</h2><svg id="g-muertes" viewBox="0 0 300 140"></svg><p class="sub">Puede pasar de 1: en coop te reaniman y podés volver a morir en el mismo episodio.</p></div>
+      <div class="caja"><h2>Episodios por segundo</h2><svg id="g-eps" viewBox="0 0 300 140"></svg><p class="sub" id="pie-eps">—</p></div>
+      <div class="caja"><h2>Llegó al tope de 10 min</h2><svg id="g-tope" viewBox="0 0 300 140"></svg><p class="sub" id="pie-tope">—</p></div>
+    </div>
+  </div>
+
+  <!-- ═══ MAQUINA ═══ -->
+  <div class="seccion">
+    <div class="tituloSec"><span>La máquina</span><em>en este juego la GPU es el cuello, al revés que en el Agarrá</em></div>
+    <div class="rejilla r4">
+      <div class="caja"><h2>GPU</h2><svg id="g-gpu" viewBox="0 0 300 140"></svg><div class="leyenda"><span><i style="background:var(--bien)"></i>uso</span><span><i style="background:var(--naranja)"></i>temperatura</span></div></div>
+      <div class="caja"><h2>VRAM<em id="cab-vram"></em></h2><svg id="g-vram" viewBox="0 0 300 140"></svg><p class="sub" id="pie-vram">—</p></div>
+      <div class="caja"><h2>Transiciones por segundo</h2><svg id="g-trans" viewBox="0 0 300 140"></svg><p class="sub" id="pie-trans">—</p></div>
+      <div class="caja"><h2>Carga de CPU</h2><svg id="g-cpu" viewBox="0 0 300 140"></svg><p class="sub" id="pie-cpu">—</p></div>
+      <div class="caja"><h2>Detalle</h2><table id="t-maquina"></table></div>
+      <div class="caja"><h2>Configuración</h2><table id="t-config"></table></div>
+      <div class="caja"><h2>Fracciones del ciclo</h2><table id="t-ciclo"></table></div>
+      <div class="caja"><h2>Notas del panel</h2><table id="t-notas"></table></div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Varas medidas con medir.js y con políticas guionadas. Cableadas para que
+// ninguna curva se lea como progreso sin tener contra qué compararse.
+const VARAS = { azar: 19.2, pared: 21.1, esquivar: 34.0 };
+// Piso de episodios para creerle a un cociente de evaluación: la regla de oro
+// del proyecto, después de que cuatro veces engañaran muestras de 5 a 15.
+const MIN_EPISODIOS = 190;
+
+let filas = [], espectador = null, ultimoTs = 0;
+
+const $ = (s) => document.querySelector(s);
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const f1 = (v, d = 1) => (v == null || Number.isNaN(v) ? "—" : Number(v).toFixed(d));
+const mil = (v) => (v == null ? "—" : Math.round(v).toLocaleString("es"));
+const pc = (v, d = 1) => (v == null ? "—" : (v * 100).toFixed(d) + "%");
+
+function tx(x, y, t, o = {}) {
+  return `<text x="${x}" y="${y}" fill="${o.fill || css("--tinta-3")}" font-family="IBM Plex Mono, monospace" font-size="${o.s || 9.5}" text-anchor="${o.a || "start"}"${o.w ? ` font-weight="${o.w}"` : ""}>${t}</text>`;
+}
+function ruta(pts, color, w = 1.8, dash) {
+  if (pts.length < 2) return "";
+  return `<path d="${pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ")}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round"${dash ? ` stroke-dasharray="${dash}"` : ""}/>`;
+}
+
+/**
+ * Gráfico de líneas reusado por todo el panel. `refs` dibuja reglas con
+ * etiqueta, que es lo que convierte una curva en una medición.
+ */
+function graf(sel, W, H, series, o = {}) {
+  const el = $(sel);
+  if (!el) return;
+  const { ML = 36, MR = 10, MT = 10, MB = 19, refs = [], max: mxF, min: mnF, etiq = (v) => f1(v, 0), rejilla = 3, escalones = false } = o;
+  const w = W - ML - MR, h = H - MT - MB;
+  if (!filas.length) { el.innerHTML = ""; return; }
+  const minP = filas[0].paso, maxP = filas[filas.length - 1].paso;
+  const vals = series.flatMap((s) => filas.map((f) => f[s.campo])).filter((v) => typeof v === "number");
+  if (!vals.length) { el.innerHTML = tx(ML, MT + h / 2, "sin datos"); return; }
+  let mx = mxF != null ? mxF : Math.max(...vals, ...refs.map((r) => r.v));
+  let mn = mnF != null ? mnF : Math.min(...vals, ...refs.map((r) => r.v));
+  if (mx === mn) { mx += 1; mn -= 1; }
+  mx += (mx - mn) * 0.1;
+  const X = (p) => ML + ((p - minP) / Math.max(1, maxP - minP)) * w;
+  const Y = (v) => MT + h - ((v - mn) / (mx - mn)) * h;
+
+  let s = "";
+  for (let i = 0; i <= rejilla; i++) {
+    const v = mn + ((mx - mn) / rejilla) * i;
+    s += `<line x1="${ML}" y1="${Y(v)}" x2="${ML + w}" y2="${Y(v)}" stroke="${css("--linea-2")}"/>`;
+    s += tx(ML - 5, Y(v) + 3.2, etiq(v), { a: "end" });
+  }
+  for (const r of refs) {
+    s += `<line x1="${ML}" y1="${Y(r.v)}" x2="${ML + w}" y2="${Y(r.v)}" stroke="${r.c || css("--tinta-3")}" stroke-dasharray="4 4" opacity=".75"/>`;
+    if (r.t) s += tx(ML + w - 3, Y(r.v) - 4, r.t, { a: "end", s: 9 });
+  }
+  for (const se of series) {
+    const dat = filas.filter((f) => typeof f[se.campo] === "number");
+    const pts = [];
+    for (const f of dat) {
+      if (escalones && pts.length) pts.push([X(f.paso), pts[pts.length - 1][1]]);
+      pts.push([X(f.paso), Y(f[se.campo])]);
+    }
+    if (se.relleno && pts.length > 1) {
+      s += `<path d="${pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ")} L${pts[pts.length - 1][0].toFixed(1)} ${MT + h} L${pts[0][0].toFixed(1)} ${MT + h} Z" fill="${se.color}" opacity=".12"/>`;
+    }
+    s += ruta(pts, se.color, se.w || 1.7, se.dash);
+    if (pts.length) s += `<circle cx="${pts[pts.length - 1][0]}" cy="${pts[pts.length - 1][1]}" r="2.6" fill="${se.color}"/>`;
+  }
+  s += tx(ML, MT + h + 14, mil(minP));
+  s += tx(ML + w, MT + h + 14, mil(maxP), { a: "end" });
+  el.innerHTML = s;
+}
+
+/** Dirección media de la política: 0 = simétrica, 1 = siempre el mismo rumbo. */
+function sesgo(d) {
+  if (!d || d.length < 17) return null;
+  let x = 0, y = 0, movil = 0;
+  for (let i = 1; i < 17; i++) {
+    const a = ((i - 1) / 16) * Math.PI * 2;
+    x += d[i] * Math.cos(a); y += d[i] * Math.sin(a); movil += d[i];
+  }
+  if (movil < 1e-9) return null;
+  return { mag: Math.hypot(x, y) / movil, ang: Math.atan2(y, x) };
+}
+
+/** Campos derivados, para que los gráficos los traten como cualquier otro. */
+function derivar() {
+  for (let i = 0; i < filas.length; i++) {
+    const f = filas[i];
+    const s = sesgo(f.distribucionAcciones);
+    if (s) { f._sesgoMag = s.mag; f._sesgoAng = s.ang; }
+    if (f.distribucionAcciones) f._concentracion = Math.max(...f.distribucionAcciones);
+    if (f.coefEntropia != null) f._coefE100 = f.coefEntropia * 100;
+    if (f.recompensaPorPaso != null) f._recomp100 = f.recompensaPorPaso * 100;
+    if (f.evalSupervivenciaSeg != null && f.supervivenciaSeg != null) f._brecha = f.evalSupervivenciaSeg - f.supervivenciaSeg;
+    // Ritmo de mejora sobre una ventana, no ciclo a ciclo: la derivada de un
+    // solo ciclo es casi todo ruido.
+    const V = 25;
+    if (i >= V) {
+      const a = filas[i - V], b = f;
+      if (a.evalSupervivenciaSeg != null && b.evalSupervivenciaSeg != null && b.paso > a.paso) {
+        f._mejora = ((b.evalSupervivenciaSeg - a.evalSupervivenciaSeg) / (b.paso - a.paso)) * 1000;
+      }
+    }
+  }
+}
+
+// ── Radial de acciones ─────────────────────────────────────────────────────
+function radial() {
+  const u = filas[filas.length - 1];
+  const d = u && u.distribucionAcciones;
+  if (!d || d.length < 17) { $("#g-radial").innerHTML = ""; return; }
+  const S = 300, cx = 150, cy = 142, R0 = 32, R1 = 118;
+  const rumbos = d.slice(1);
+  const mx = Math.max(...rumbos, 1e-4);
+  let s = "";
+  for (const fr of [0.5, 1]) s += `<circle cx="${cx}" cy="${cy}" r="${R0 + (R1 - R0) * fr}" fill="none" stroke="${css("--linea")}" stroke-dasharray="2 4"/>`;
+  const unif = (1 - d[0]) / 16;
+  s += `<circle cx="${cx}" cy="${cy}" r="${R0 + (unif / mx) * (R1 - R0)}" fill="none" stroke="${css("--tinta-3")}" stroke-dasharray="1 3" opacity=".8"/>`;
+  rumbos.forEach((p, i) => {
+    const a0 = (i / 16) * Math.PI * 2 - Math.PI / 16, a1 = (i / 16) * Math.PI * 2 + Math.PI / 16;
+    const r = R0 + (p / mx) * (R1 - R0);
+    const P = (a, rr) => `${(cx + Math.cos(a) * rr).toFixed(1)} ${(cy + Math.sin(a) * rr).toFixed(1)}`;
+    const esMx = p === mx;
+    s += `<path d="M${P(a0, R0)} L${P(a0, r)} A${r} ${r} 0 0 1 ${P(a1, r)} L${P(a1, R0)} A${R0} ${R0} 0 0 0 ${P(a0, R0)} Z" fill="${esMx ? css("--critico") : css("--actor")}" opacity="${esMx ? .88 : .4}"/>`;
+  });
+  s += `<circle cx="${cx}" cy="${cy}" r="${R0}" fill="none" stroke="${css("--linea")}"/>`;
+  s += `<circle cx="${cx}" cy="${cy}" r="${Math.max(3, R0 * Math.min(1, Math.sqrt(d[0] / mx)))}" fill="${css("--bien")}" opacity=".72"/>`;
+  s += tx(cx, cy + 3.4, (d[0] * 100).toFixed(0) + "%", { a: "middle", s: 10, fill: css("--fondo"), w: 600 });
+  // Puntos cardinales, no grados desnudos: 0° es DERECHA y la y crece hacia
+  // abajo, así que 90° es abajo. Sin este ancla se lee como brújula y el número
+  // parece estar mal.
+  for (const [g, et] of [[0, "der"], [90, "aba"], [180, "izq"], [270, "arr"]]) {
+    const a = (g / 360) * Math.PI * 2;
+    s += tx(cx + Math.cos(a) * (R1 + 13), cy + Math.sin(a) * (R1 + 13) + 3, et, { a: "middle", s: 9, fill: css("--tinta-2") });
+  }
+  s += tx(cx, S - 22, "quieto al centro · rumbos alrededor", { a: "middle" });
+  s += tx(cx, S - 8, "0° = derecha · la y del mundo crece hacia abajo", { a: "middle", s: 9 });
+  $("#g-radial").innerHTML = s;
+
+  const iMx = rumbos.indexOf(mx);
+  $("#pie-radial").innerHTML =
+    `Favorito <b style="color:var(--critico)">${Math.round((iMx / 16) * 360)}°</b> (${["derecha", "abajo", "izquierda", "arriba"][Math.round((iMx / 16) * 4) % 4]}) con ${(mx * 100).toFixed(1)}%, ` +
+    `<b>${(mx / unif).toFixed(1)}×</b> el reparto uniforme. Quieto <b>${(d[0] * 100).toFixed(1)}%</b>.`;
+}
+
+// ── Rastro del sesgo ───────────────────────────────────────────────────────
+function rastro() {
+  const S = 300, cx = 150, cy = 145, R = 118;
+  const pts = filas.filter((f) => f._sesgoMag != null);
+  if (!pts.length) { $("#g-rastro").innerHTML = ""; return; }
+  const mx = Math.max(...pts.map((p) => p._sesgoMag), 0.05);
+  let s = "";
+  for (const fr of [0.33, 0.66, 1]) {
+    s += `<circle cx="${cx}" cy="${cy}" r="${R * fr}" fill="none" stroke="${css("--linea")}" stroke-dasharray="2 4"/>`;
+    s += tx(cx + 3, cy - R * fr + 9, (mx * fr).toFixed(2), { s: 8.5 });
+  }
+  for (const a of [0, 90, 180, 270]) {
+    const rad = (a / 360) * Math.PI * 2;
+    s += `<line x1="${cx}" y1="${cy}" x2="${cx + Math.cos(rad) * R}" y2="${cy + Math.sin(rad) * R}" stroke="${css("--linea-2")}"/>`;
+  }
+  const paso = Math.max(1, Math.floor(pts.length / 160));
+  const muestra = pts.filter((_, i) => i % paso === 0);
+  muestra.forEach((p, i) => {
+    const t = i / Math.max(1, muestra.length - 1);
+    const r = (p._sesgoMag / mx) * R;
+    s += `<circle cx="${(cx + Math.cos(p._sesgoAng) * r).toFixed(1)}" cy="${(cy + Math.sin(p._sesgoAng) * r).toFixed(1)}" r="${1.6 + t * 2}" fill="${css("--critico")}" opacity="${0.12 + t * 0.8}"/>`;
+  });
+  const u = pts[pts.length - 1];
+  const ru = (u._sesgoMag / mx) * R;
+  s += `<line x1="${cx}" y1="${cy}" x2="${(cx + Math.cos(u._sesgoAng) * ru).toFixed(1)}" y2="${(cy + Math.sin(u._sesgoAng) * ru).toFixed(1)}" stroke="${css("--critico")}" stroke-width="1.6" opacity=".7"/>`;
+  s += `<circle cx="${cx}" cy="${cy}" r="2.4" fill="${css("--tinta-3")}"/>`;
+  s += tx(cx, S - 8, `ahora ${Math.round(((u._sesgoAng / (Math.PI * 2)) * 360 + 360) % 360)}° · magnitud ${u._sesgoMag.toFixed(3)}`, { a: "middle", fill: css("--tinta-2") });
+  $("#g-rastro").innerHTML = s;
+}
+
+// ── Mapa de calor de las 17 acciones ──────────────────────────────────────
+function mapaAcciones() {
+  const cv = $("#c-acciones"), c = cv.getContext("2d");
+  const w = cv.width = cv.clientWidth * devicePixelRatio;
+  const h = cv.height = 220 * devicePixelRatio;
+  c.clearRect(0, 0, w, h);
+  const dat = filas.filter((f) => f.distribucionAcciones && f.distribucionAcciones.length >= 17);
+  if (!dat.length) return;
+  const ML = 46 * devicePixelRatio, MB = 18 * devicePixelRatio;
+  const gw = w - ML, gh = h - MB;
+  const N = 17, ch = gh / N;
+  const cw = gw / dat.length;
+  const mx = Math.max(...dat.flatMap((f) => f.distribucionAcciones));
+  dat.forEach((f, x) => {
+    for (let a = 0; a < N; a++) {
+      const t = Math.min(1, f.distribucionAcciones[a] / mx);
+      c.fillStyle = `lch(${8 + t * 78}% ${14 + t * 48} ${a === 0 ? 130 : 186 - t * 22})`;
+      c.fillRect(ML + x * cw, gh - (a + 1) * ch, Math.max(1, cw + 0.7), ch + 0.7);
+    }
+  });
+  c.font = `${9.5 * devicePixelRatio}px "IBM Plex Mono", monospace`;
+  c.fillStyle = css("--tinta-3");
+  c.textAlign = "right";
+  for (let a = 0; a < N; a++) {
+    if (a !== 0 && a % 4 !== 1) continue;
+    const et = a === 0 ? "quieto" : `${Math.round(((a - 1) / 16) * 360)}°`;
+    c.fillText(et, ML - 5 * devicePixelRatio, gh - a * ch - ch * 0.28);
+  }
+  c.textAlign = "left";
+  c.fillText("paso " + mil(dat[0].paso), ML, h - 5 * devicePixelRatio);
+  c.textAlign = "right";
+  c.fillText(mil(dat[dat.length - 1].paso), w, h - 5 * devicePixelRatio);
+}
+
+// ── Pintado ────────────────────────────────────────────────────────────────
+function pintar() {
+  if (!filas.length) return;
+  derivar();
+  const u = filas[filas.length - 1];
+  const eps = u.evalEpisodios || 0;
+  const confia = eps >= MIN_EPISODIOS;
+  const edad = Date.now() / 1000 - ultimoTs;
+  const ev = u.evalSupervivenciaSeg || 0;
+
+  $("#meta").innerHTML =
+    `<span class="${edad < 90 ? "vivo" : "muerto"}">${edad < 90 ? "● entrenando" : "○ sin datos nuevos"}</span>` +
+    `<span>paso <b>${mil(u.paso)}</b></span><span><b>${mil(u.transicionesTotales / 1e6)}M</b> transiciones</span>` +
+    `<span><b>${f1(u.tiempo / 3600, 1)}</b> h</span><span>GPU <b>${f1(u.gpuUso, 0)}%</b></span>` +
+    `<span>CPU <b>${f1(u.cargaCPU, 1)}</b>/${u.cores}</span><span><b>${mil(u.transicionesPorSeg)}</b>/s</span>`;
+
+  $("#sec-resumen").textContent = `${mil(filas.length)} ciclos en la ventana del panel`;
+  $("#aviso").className = confia ? "" : "aviso";
+  $("#aviso").innerHTML = confia ? "" : `La ventana de evaluación tiene ${mil(eps)} episodios y el piso para creerle es ${MIN_EPISODIOS}. Se está llenando.`;
+
+  const cual = ev > VARAS.esquivar ? ["esquivador guionado", VARAS.esquivar] : ev > VARAS.pared ? ["la pared", VARAS.pared] : ["el azar", VARAS.azar];
+  $("#kpis").innerHTML = [
+    { c: "hito", k: "supervivencia · eval", v: f1(ev, 1), u: "s", n: confia ? `${mil(eps)} episodios · solo, desde el segundo cero` : `<span style="color:var(--critico)">${mil(eps)} ep — muestra chica</span>` },
+    { k: "contra la vara", v: `+${(((ev / cual[1]) - 1) * 100).toFixed(0)}%`, u: "", n: `sobre ${cual[0]} (${cual[1]} s)` },
+    { k: "récord de una vida", v: f1(u.supervivenciaRecordSeg, 1), u: "s", n: `máximo del ciclo ${f1(u.supervivenciaMaxSeg, 1)}s` },
+    { k: "coop", v: f1(u.supervivenciaCoopSeg, 1), u: "s", n: `${mil(u.episodiosCoop)} episodios en ventana` },
+    { k: "battle", v: f1(u.supervivenciaBattleSeg, 1), u: "s", n: `corta al quedar uno: techo estructural` },
+    { k: "rivales sobrevividos", v: f1(u.rivalesSobrevividos, 2), u: "/3", n: "la medida de ganar en battle" },
+    { k: "reanimaciones", v: f1(u.reanimacionesPorEpisodioCoop, 2), u: "", n: "por episodio de coop" },
+    { k: "ritmo de mejora", v: f1(u._mejora, 2), u: "s/1k", n: "segundos ganados cada 1.000 pasos" },
+    { k: "sesgo direccional", v: f1(u._sesgoMag, 3), u: "", n: "0 sería simétrico, como el juego" },
+    { k: "entropía", v: f1(u.entropia, 2), u: `/${f1(u.entropiaMax, 2)}`, n: "cuánto explora todavía" },
+  ].map((t) => `<div class="caja ${t.c || ""}"><h2>${t.k}</h2><div class="num${String(t.v).length > 5 ? " chico" : ""}">${t.v}${t.u ? `<s>${t.u}</s>` : ""}</div><p class="sub">${t.n}</p></div>`).join("");
+
+  $("#cab-curva").textContent = ev > VARAS.esquivar
+    ? `pasó al esquivador guionado por ${(((ev / VARAS.esquivar) - 1) * 100).toFixed(0)}%`
+    : `le falta ${(((VARAS.esquivar / Math.max(.1, ev)) - 1) * 100).toFixed(0)}%`;
+
+  graf("#g-curva", 1000, 240, [
+    { campo: "supervivenciaSeg", color: css("--tinta-3"), w: 1.2 },
+    { campo: "evalSupervivenciaSeg", color: css("--actor"), w: 2.3, relleno: true },
+  ], { ML: 40, refs: [{ v: VARAS.azar, t: "azar" }, { v: VARAS.pared, t: "a la pared" }, { v: VARAS.esquivar, t: "esquivador guionado" }], etiq: (v) => f1(v, 0) + "s", rejilla: 5, min: 0 });
+
+  graf("#g-mejora", 300, 130, [{ campo: "_mejora", color: css("--bien"), relleno: true }], { refs: [{ v: 0 }], etiq: (v) => f1(v, 1) });
+  $("#pie-mejora").innerHTML = `<b>${f1(u._mejora, 2)}</b> s cada 1.000 pasos. Cuando cruce el cero de forma sostenida, se amesetó.`;
+
+  graf("#g-record", 300, 130, [{ campo: "supervivenciaRecordSeg", color: css("--naranja"), relleno: true }], { escalones: true, etiq: (v) => f1(v, 0) + "s" });
+  $("#pie-record").innerHTML = `Mejor vida de toda la corrida: <b>${f1(u.supervivenciaRecordSeg, 1)} s</b>. Sólo puede subir.`;
+
+  graf("#g-brecha", 300, 130, [{ campo: "_brecha", color: css("--azul"), relleno: true }], { refs: [{ v: 0 }], etiq: (v) => f1(v, 0) + "s" });
+
+  radial(); rastro(); mapaAcciones();
+  $("#cab-acciones").textContent = `H ${f1(u.entropia, 2)}/${f1(u.entropiaMax, 2)}`;
+
+  graf("#g-sesgo", 300, 130, [
+    { campo: "_sesgoMag", color: css("--critico") },
+    { campo: "_concentracion", color: css("--rosa") },
+  ], { min: 0, etiq: (v) => f1(v, 2) });
+  $("#pie-sesgo").innerHTML = `Sesgo <b>${f1(u._sesgoMag, 3)}</b> · acción más probable <b>${pc(u._concentracion)}</b>. Medido en el marco de entrada, así que no se espera que baje: la simetría del mundo la garantiza el espejo por sala, no la forma de esta distribución.`;
+
+  graf("#g-habitos", 300, 150, [
+    { campo: "fraccionEnPared", color: css("--critico") },
+    { campo: "fraccionQuieto", color: css("--actor") },
+    { campo: "fraccionEnPeligro", color: css("--mal"), dash: "4 3" },
+  ], { max: 1, min: 0, etiq: (v) => Math.round(v * 100) + "%" });
+
+  graf("#g-habitos-eval", 300, 150, [
+    { campo: "evalFraccionEnPared", color: css("--critico") },
+    { campo: "evalFraccionQuieto", color: css("--actor") },
+    { campo: "evalFraccionEnPeligro", color: css("--mal"), dash: "4 3" },
+  ], { max: 1, min: 0, etiq: (v) => Math.round(v * 100) + "%" });
+
+  graf("#g-esquives", 300, 150, [{ campo: "esquivesAlLimitePorMillon", color: css("--rosa"), relleno: true }], { etiq: (v) => mil(v / 1000) + "k" });
+  $("#pie-esquives").innerHTML = `<b>${mil(u.esquivesAlLimitePorMillon)}</b> por millón, con la mortalidad en <b>${f1(u.tasaMuerte, 2)}</b>. Si suben los esquives y también las muertes, es exceso de confianza y no dominio.`;
+
+  graf("#g-modos", 300, 150, [
+    { campo: "supervivenciaCoopSeg", color: css("--azul") },
+    { campo: "supervivenciaBattleSeg", color: css("--violeta") },
+    { campo: "evalSupervivenciaSeg", color: css("--actor"), dash: "4 3" },
+  ], { etiq: (v) => f1(v, 0) + "s", min: 0 });
+
+  graf("#g-rivales", 300, 150, [{ campo: "rivalesSobrevividos", color: css("--violeta"), relleno: true }], { max: 3, min: 0, etiq: (v) => f1(v, 1) });
+  $("#pie-rivales").innerHTML = `<b>${f1(u.rivalesSobrevividos, 2)}</b> de 3, y plano desde el arranque. Empujar a un rival contra una pala no paga nada en la recompensa: si querés que pelee, es un cambio de recompensa y no más entrenamiento.`;
+
+  graf("#g-reanim", 300, 150, [{ campo: "reanimacionesPorEpisodioCoop", color: css("--azul"), relleno: true }], { min: 0, etiq: (v) => f1(v, 2) });
+  $("#pie-reanim").innerHTML = `<b>${f1(u.reanimacionesPorEpisodioCoop, 2)}</b> por episodio. Cada una cuesta 3 s parado sin esquivar, y el bonus es chico a propósito.`;
+
+  graf("#g-reanim2", 300, 150, [
+    { campo: "reanimacionesPorMillon", color: css("--azul") },
+    { campo: "reanimacionesRecibidasPorMillon", color: css("--rosa") },
+  ], { min: 0, etiq: (v) => mil(v) });
+
+  graf("#g-entropia", 300, 140, [
+    { campo: "entropia", color: css("--critico") },
+    { campo: "_coefE100", color: css("--naranja"), dash: "4 3" },
+  ], { min: 0, max: Math.max(u.entropiaMax || 2.84, 2.9), etiq: (v) => f1(v, 1) });
+
+  graf("#g-kl", 300, 140, [
+    { campo: "klAprox", color: css("--mal") },
+    { campo: "fraccionRecortada", color: css("--rosa"), dash: "4 3" },
+  ], { min: 0, refs: [{ v: 0.03, t: "tope KL", c: css("--mal") }], etiq: (v) => f1(v, 3) });
+  $("#cab-kl").textContent = u.epocasCortadas ? "época cortada" : "sin cortes";
+
+  graf("#g-retorno", 300, 140, [
+    { campo: "retornoMedio", color: css("--violeta"), relleno: true },
+    { campo: "_recomp100", color: css("--bien"), dash: "4 3" },
+  ], { min: 0, etiq: (v) => f1(v, 0) });
+
+  graf("#g-varexp", 300, 140, [{ campo: "varianzaExplicada", color: css("--bien"), relleno: true }], { min: 0, max: 1, etiq: (v) => f1(v, 2) });
+  $("#pie-varexp").innerHTML = `<b>${pc(u.varianzaExplicada)}</b>. Cuánto de la variación del retorno logra predecir el crítico. Si se cae, las ventajas se vuelven ruido y la política deja de mejorar.`;
+
+  graf("#g-perdpol", 300, 140, [{ campo: "perdidaPolitica", color: css("--rosa") }], { refs: [{ v: 0 }], etiq: (v) => v.toFixed(3) });
+  graf("#g-perdval", 300, 140, [{ campo: "perdidaValor", color: css("--naranja"), relleno: true }], { min: 0, etiq: (v) => f1(v, 1) });
+
+  graf("#g-lr", 300, 140, [{ campo: "lr", color: css("--azul") }], { min: 0, etiq: (v) => (v * 1e4).toFixed(1) });
+  $("#pie-lr").innerHTML = `<b>${(u.lr || 0).toExponential(1)}</b>, en unidades de 10⁻⁴ en el eje. Baja por recocido junto con el coeficiente de entropía.`;
+
+  graf("#g-muestras", 300, 140, [
+    { campo: "evalEpisodios", color: css("--actor") },
+    { campo: "episodiosEnVentana", color: css("--tinta-3") },
+  ], { min: 0, refs: [{ v: MIN_EPISODIOS, t: "piso", c: css("--critico") }], etiq: (v) => mil(v) });
+
+  graf("#g-enemigos", 300, 140, [{ campo: "enemigosEnPantalla", color: css("--tinta-2"), relleno: true }], { min: 0, etiq: (v) => f1(v, 0) });
+  $("#pie-enemigos").innerHTML = `<b>${f1(u.enemigosEnPantalla, 1)}</b> de media. Sube cuando el agente sobrevive más: llega a minutos de partida donde entran más y más rápido. O sea que el juego que enfrenta se endurece solo.`;
+
+  graf("#g-muertes", 300, 140, [{ campo: "tasaMuerte", color: css("--mal"), relleno: true }], { min: 0, refs: [{ v: 1 }], etiq: (v) => f1(v, 2) });
+
+  graf("#g-eps", 300, 140, [{ campo: "episodiosPorSeg", color: css("--bien"), relleno: true }], { min: 0, etiq: (v) => mil(v) });
+  $("#pie-eps").innerHTML = `<b>${mil(u.episodiosPorSeg)}</b> por segundo, ${mil(u.reinicios)} salas reiniciadas en la corrida. Baja cuando los agentes duran más, así que su caída es buena noticia.`;
+
+  graf("#g-tope", 300, 140, [{ campo: "fraccionPorTope", color: css("--violeta"), relleno: true }], { min: 0, etiq: (v) => pc(v, 0) });
+  $("#pie-tope").innerHTML = `<b>${pc(u.fraccionPorTope, 2)}</b> de los episodios llegan a los 10 minutos simulados. Cuando esto empiece a crecer, el tope de <code>MAX_PASOS</code> pasa a ser el techo de la medición y hay que subirlo.`;
+
+  graf("#g-gpu", 300, 140, [
+    { campo: "gpuUso", color: css("--bien") },
+    { campo: "gpuTemp", color: css("--naranja"), dash: "4 3" },
+  ], { min: 0, max: 100, etiq: (v) => f1(v, 0) });
+
+  graf("#g-vram", 300, 140, [{ campo: "gpuMemMB", color: css("--azul"), relleno: true }], { min: 0, max: u.gpuMemTotalMB || 4096, etiq: (v) => mil(v / 1024) + "G" });
+  $("#cab-vram").textContent = `${mil(u.gpuMemMB)} / ${mil(u.gpuMemTotalMB)} MB`;
+  $("#pie-vram").innerHTML = `Queda <b>${pc(1 - (u.gpuMemMB || 0) / (u.gpuMemTotalMB || 1), 0)}</b> libre. Hay margen de sobra para una red más grande si esta topa.`;
+
+  graf("#g-trans", 300, 140, [{ campo: "transicionesPorSeg", color: css("--actor"), relleno: true }], { min: 0, etiq: (v) => mil(v / 1000) + "k" });
+  $("#pie-trans").innerHTML = `<b>${mil(u.transicionesPorSeg)}</b>/s, o <b>${mil(u.vecesTiempoReal)}×</b> el tiempo real.`;
+
+  graf("#g-cpu", 300, 140, [{ campo: "cargaCPU", color: css("--rosa"), relleno: true }], { min: 0, max: u.cores || 8, refs: [{ v: u.cores || 8, t: "cores" }], etiq: (v) => f1(v, 1) });
+  $("#pie-cpu").innerHTML = `<b>${f1(u.cargaCPU, 1)}</b> de ${u.cores}. En el Agarrá esto estaba clavado en 7 y la GPU sobraba; acá es al revés porque este entorno simula 13 veces más rápido.`;
+
+  const tabla = (sel, filas_) => { $(sel).innerHTML = filas_.map((r) => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="n">${r[2] || ""}</td></tr>`).join(""); };
+  tabla("#t-maquina", [
+    ["GPU", f1(u.gpuUso, 0) + "%", `pico ${f1(u.gpuPico, 0)}%`],
+    ["temperatura", f1(u.gpuTemp, 0) + "°", ""],
+    ["VRAM", mil(u.gpuMemMB) + " MB", `de ${mil(u.gpuMemTotalMB)}`],
+    ["ticks/s", mil(u.ticksPorSeg), ""],
+    ["s simulados/s", mil(u.segSimuladosPorSeg), ""],
+    ["carga", f1(u.cargaCPU, 2), `de ${u.cores}`],
+  ]);
+  tabla("#t-config", [
+    ["agentes", mil(u.agentes), ""],
+    ["workers", u.workers, `× ${u.salasPorWorker} salas`],
+    ["lote", mil(u.loteRollout), ""],
+    ["lr", (u.lr || 0).toExponential(1), ""],
+    ["coef. entropía", f1(u.coefEntropia, 5), ""],
+    ["recorte PPO", pc(u.fraccionRecortada), ""],
+  ]);
+  tabla("#t-ciclo", [
+    ["simulando", pc(u.fraccionSimulando), ""],
+    ["aprendiendo", f1(u.fraccionAprendiendo, 2), "solapado, puede pasar 1"],
+    ["espera por aprendiz", pc(u.esperaPorAprendiz, 2), ""],
+    ["episodios totales", mil(u.episodios), ""],
+    ["salas reiniciadas", mil(u.reinicios), ""],
+    ["muestras de GPU", mil(u.gpuMuestras), "por ciclo"],
+  ]);
+  tabla("#t-notas", [
+    ["evalMuerte", "no se muestra", "tautológico: solo, sólo termina al morir"],
+    ["evalSupervivenciaMaxSeg", f1(u.evalSupervivenciaMaxSeg, 1) + " s", "bug de suma de máximos, arreglado"],
+    ["evalRivales / evalReanim", "siempre 0", "el evaluador juega solo"],
+    ["varas", "azar 19,2 s", "pared 21,1 · esquivador 34,0"],
+    ["piso de confianza", MIN_EPISODIOS + " ep", "para los cocientes de eval"],
+  ]);
+}
+
+// ── Espectador ─────────────────────────────────────────────────────────────
+function pintarArena() {
+  const cv = $("#arena"), c = cv.getContext("2d");
+  const w = cv.width = cv.clientWidth * devicePixelRatio;
+  const h = cv.height = 330 * devicePixelRatio;
+  c.clearRect(0, 0, w, h);
+  if (!espectador || espectador.vacio) {
+    c.fillStyle = css("--tinta-3");
+    c.font = `${12 * devicePixelRatio}px "IBM Plex Mono", monospace`;
+    c.fillText("sin volcado del espectador", 12 * devicePixelRatio, 22 * devicePixelRatio);
+    $("#arena-info").textContent = ""; return;
+  }
+  const [MW, MH] = espectador.mundo || [1600, 900];
+  const esc = Math.min(w / MW, h / MH);
+  const ox = (w - MW * esc) / 2, oy = (h - MH * esc) / 2;
+  const X = (x) => ox + x * esc, Y = (y) => oy + y * esc;
+  const CW = MW * 0.707, CH = MH * 0.707;
+  c.strokeStyle = css("--linea"); c.lineWidth = devicePixelRatio;
+  c.strokeRect(X((MW - CW) / 2), Y((MH - CH) / 2), CW * esc, CH * esc);
+  for (const [x, y, size, falta] of espectador.avisos || []) {
+    c.fillStyle = `rgba(251,191,36,${Math.max(.1, 1 - falta / 1500) * .4})`;
+    c.beginPath(); c.arc(X(x), Y(y), Math.max(3, size * .35 * esc), 0, 7); c.fill();
+  }
+  for (const [x, y, size, vx, vy] of espectador.enemigos || []) {
+    c.strokeStyle = "rgba(226,232,240,.28)"; c.lineWidth = devicePixelRatio;
+    c.beginPath(); c.moveTo(X(x), Y(y)); c.lineTo(X(x + vx * 14), Y(y + vy * 14)); c.stroke();
+    c.fillStyle = size >= 60 ? "#fff" : "#cbd5e1";
+    c.beginPath(); c.arc(X(x), Y(y), Math.max(1.5, size * .35 * esc), 0, 7); c.fill();
+  }
+  for (const p of espectador.jugadores || []) {
+    const s = p.size * esc;
+    c.globalAlpha = p.vivo ? 1 : .45;
+    c.fillStyle = p.vivo ? (p.inmune ? css("--critico") : css("--bien")) : css("--mal");
+    c.fillRect(X(p.x) - s / 2, Y(p.y) - s / 2, s, s);
+    c.globalAlpha = 1;
+    if (!p.vivo && p.progresoReanim > 0) {
+      c.strokeStyle = css("--bien"); c.lineWidth = 2.4 * devicePixelRatio;
+      c.beginPath(); c.arc(X(p.x), Y(p.y), s * .85, -Math.PI / 2, -Math.PI / 2 + p.progresoReanim * Math.PI * 2); c.stroke();
+    }
+    c.fillStyle = css("--tinta-3");
+    c.font = `${9 * devicePixelRatio}px "IBM Plex Mono", monospace`;
+    c.fillText(`${(p.vividoMs / 1000).toFixed(0)}s`, X(p.x) - s / 2, Y(p.y) - s / 2 - 3 * devicePixelRatio);
+  }
+  $("#arena-info").textContent =
+    `${espectador.modo} · el mejor lleva ${(espectador.vividoMs / 1000).toFixed(1)}s · minuto ${(espectador.tiempoMs / 60000).toFixed(1)} · ${(espectador.enemigos || []).length} palas`;
+}
+
+async function cargar() {
+  try {
+    filas = (await (await fetch("/metricas?n=1200")).json()).filas;
+    ultimoTs = Date.now() / 1000;
+    pintar();
+  } catch (e) { $("#meta").innerHTML = `<span class="muerto">○ el panel no puede leer las métricas</span>`; }
+}
+async function cargarEsp() {
+  try { espectador = await (await fetch("/espectador")).json(); } catch (e) { espectador = null; }
+  pintarArena();
+}
+cargar(); cargarEsp();
+setInterval(cargar, 4000);
+setInterval(cargarEsp, 450);
+addEventListener("resize", () => { pintar(); pintarArena(); });
+</script>

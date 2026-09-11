@@ -466,6 +466,23 @@ export default function MultiplayerGame({ onExit }) {
         .mp-sesion { color: #8b949e; font-size: 0.75rem; margin-bottom: 8px; }
         .mp-section-title { font-size: 0.8rem; color: #999; text-transform: uppercase; letter-spacing: 0.05em; margin: 18px 0 8px; }
         .mp-code { font-size: 2rem; font-weight: 900; letter-spacing: 0.2em; color: #ffeb3b; margin: 10px 0; }
+        .mp-bots {
+          display: flex; flex-direction: column; gap: 6px;
+          margin: 10px 0; padding: 10px 12px;
+          border: 1px solid #333; border-radius: 8px; background: #141414;
+        }
+        .mp-bots-fila {
+          display: flex; align-items: center; justify-content: space-between; gap: 10px;
+          font-size: 0.85rem; color: #ccc;
+        }
+        .mp-bots-fila select {
+          background: #1e1e1e; color: #eee; border: 1px solid #3a3a3a;
+          border-radius: 6px; padding: 5px 8px; font-size: 0.85rem; font-family: inherit;
+          min-width: 11rem;
+        }
+        .mp-bots-nota {
+          margin: 2px 0 0; font-size: 0.75rem; color: #888; line-height: 1.4;
+        }
         .mp-players { list-style: none; padding: 0; margin: 12px 0; text-align: left; }
         .mp-players li { padding: 6px 10px; border-radius: 6px; background: rgba(255,255,255,0.04); margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
         .mp-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
@@ -553,7 +570,7 @@ export default function MultiplayerGame({ onExit }) {
               <ol className="mp-results-list">
                 {results.map((r, i) => (
                   <li key={r.id}>
-                    <span>#{i + 1} {r.name}</span>
+                    <span>#{i + 1} {r.name} {r.esBot ? '🤖' : ''}</span>
                     <span>{fmtTime(r.survivedMs)}</span>
                   </li>
                 ))}
@@ -573,10 +590,47 @@ export default function MultiplayerGame({ onExit }) {
             {room.players.map((p) => (
               <li key={p.id}>
                 <span className="mp-dot" style={{ background: p.color }} />
-                {p.name} {p.id === room.hostId && !room.isPublic ? '👑' : ''}
+                {p.name} {p.esBot ? '🤖' : ''}{p.id === room.hostId && !room.isPublic ? '👑' : ''}
               </li>
             ))}
           </ul>
+
+          {!room.isPublic && room.state !== 'countdown' && isHost && room.botsDisponibles && (
+            <div className="mp-bots">
+              <label className="mp-bots-fila">
+                <span>Bots</span>
+                <select
+                  value={room.bots ?? 0}
+                  onChange={(e) => configurarBots(Number(e.target.value), room.dificultad)}
+                >
+                  {Array.from({ length: (room.maxBots ?? 7) + 1 }, (_, n) => (
+                    <option key={n} value={n}>{n === 0 ? 'Sin bots' : n}</option>
+                  ))}
+                </select>
+              </label>
+              {(room.bots ?? 0) > 0 && (
+                <label className="mp-bots-fila">
+                  <span>Nivel</span>
+                  <select
+                    value={room.dificultad || 'normal'}
+                    onChange={(e) => configurarBots(room.bots, e.target.value)}
+                  >
+                    <option value="facil">Fácil</option>
+                    <option value="normal">Normal</option>
+                    <option value="dificil">Difícil</option>
+                    <option value="imposible">Imposible</option>
+                  </select>
+                </label>
+              )}
+              {(room.bots ?? 0) > 0 && (
+                <p className="mp-bots-nota">
+                  Los bots aprendieron a esquivar solos. Lo que cambia entre niveles es cada
+                  cuánto reaccionan, no cuánto saben: el Fácil no es tonto, es lento. En
+                  Imposible reacciona diez veces por segundo y aguanta más de dos minutos.
+                </p>
+              )}
+            </div>
+          )}
 
           {!room.isPublic && room.state !== 'countdown' && isHost && (
             <button className="mp-btn" onClick={startPrivateGame}>

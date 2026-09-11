@@ -459,3 +459,47 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
 - **Desplegado:** `pesos-nueva` pasa del paso 9460 al 20680. Se conserva `pesos-bots` (7680) como línea de base congelada, así `🧠v1` contra `🧠v2` en la arena pública queda como un A/B permanente entre la primera política desplegada y la mejor que haya. Costo 3,86 ms por tick contra 33,3 de presupuesto.
 
 - **Pendiente, y es lo importante:** arreglar el evaluador. Vidas de 2 minutos no pueden medir un juego cuyo 86% ocurre después. Subir `--evalVida` cuesta que el buffer se llene ~5 veces más lento, así que hay que bajar el piso de 190 episodios o esperar mucho más entre lecturas confiables. Y hace falta un segundo evaluador contra un checkpoint viejo de la liga: los heurísticos ya no son rival para medir progreso.
+
+---
+
+## Bots que aprendieron a jugar al escapecv, opcionales y con dificultad real
+
+- **Pedido:** *"quiero armar bots inteligentes que aprendan a jugar al escapecv en todos los modos, siendo opcionales a opción del jugador"*, entrenados como los del Agarrá pero con otras métricas, en la máquina de la GTX 1650, con dashboard.
+
+- **Lo que hizo viable el proyecto**, igual que en el Agarrá: `rooms.js` ya era un simulador headless porque sus tests corren sin sockets. Hubo que sacarle el reloj de pared (`this.tiempo`) y darle un RNG inyectable. Resultado: **30 segundos simulados en 3 ms reales**, y el entorno da **460.000 transiciones por segundo por core** contra las 35.000 del Agarrá — no hay 600 palas con grilla ni división de células. Eso invierte el cuello de botella: acá **la GPU trabaja al 80-90% y la CPU usa 2 de 8 cores**, exactamente al revés que en el Agarrá.
+
+- **La decisión de percepción que importa.** Este juego es geométrico y determinista: las palas cruzan en línea recta a velocidad constante. Así que la observación no le pasa posiciones crudas esperando que derive la geometría, le pasa **resuelto el tiempo al acercamiento máximo y el margen de paso** de cada pala. Y los **avisos** —los 900-1400 ms en que la sala anuncia dónde va a aparecer una pala antes de que exista— tienen canales propios. 163 números, 17 acciones (quieto más 16 rumbos, sin split).
+
+- **Recompensa: supervivencia y nada más.** 1 por segundo vivo, −5 al morir, +3 por completar una reanimación. Ya es densa, así que no hay ningún término de forma — en el Agarrá cada intento de moldearla produjo una política degenerada. El bonus de reanimar es chico y sólo al completarla: tres segundos parado sobre un cadáver son tres segundos sin esquivar, y un bonus por progreso invitaría a dejar morir a un compañero para cobrarlo de nuevo.
+
+- **Morir es terminal en battle y NO en coop**, que es la semántica del juego: si morir cortara el episodio, ser reanimado no valdría nada para el reanimado.
+
+- **El evaluador es solitario y sin curriculum**, y es una vara mejor que la del Agarrá: ahí el rival fijo eran bots heurísticos que la política terminó saturando, y acá el rival es el generador de oleadas, **fijo por construcción**. Con compañeros la política jugaría contra copias de sí misma y en coop un compañero que mejora te hace sobrevivir más sin haber mejorado vos.
+
+- **Aumentación por simetría.** El corral es 1131×636 centrado en el mundo: reflejarlo lo deja idéntico, así que hay cuatro versiones equivalentes de cada situación y la política aprendía una sola (elegía "izquierda" el 32% de las veces y terminaba contra la pared izquierda el 70% del tiempo, con la derecha en 0,0%). Se aplica **en el actor**: cada sala recibe un espejo fijo al nacer, se codifica en ese marco y se desespeja la acción. Así la acción FUE muestreada de la red con esa observación y el `log_prob` de PPO es exacto sin corrección. Aumentar el lote del lado del aprendiz está **mal** —el `log_prob` viejo de una muestra sintética no es el de la original salvo que la política ya sea simétrica— y simetrizar la red promediando los cuatro forwards costaría 4× de GPU.
+
+- **El test que sostiene todo eso es la equivarianza:** codificar una sala *físicamente* espejada da bit por bit lo mismo que espejar la codificación de la original (diferencia 0,0 en 288 comparaciones). Sin él, un canal mal mapeado corrompería cada muestra en silencio y lo único visible sería que el agente no aprende.
+
+- **La causa del amesetamiento fue un error de traducción entre proyectos.** Se heredó `--recocido 4000` del Agarrá, donde un paso son 98.304 transiciones contra 32.768 acá: la agenda se agotaba con un tercio de la experiencia. La corrida quedaba con lr 3e-5 y **KL 0,0007, cuarenta veces por debajo de su propio tope de 0,03**, con cero épocas cortadas, dando pasos minúsculos y clavada en 43 s. Extendido a 20.000 y después a 40.000, la supervivencia pasó de **43 a 122 segundos**. La lección general: **un hiperparámetro medido en pasos no se copia entre proyectos con distinto tamaño de lote.**
+
+- **Cuatro métricas mentirosas, todas evitadas por mirar el tamaño de muestra:**
+  1. La supervivencia salía del reloj de la sala, que el curriculum adelanta: una sala que empezaba en el segundo 100 y perdía al jugador cinco segundos después reportaba 105 de supervivencia. La vara del azar cayó de 42 s a 14,9 al arreglarlo.
+  2. `evalSupervivenciaMaxSeg` sumaba el máximo de cada ciclo de la ventana en vez de tomar el máximo: reportaba 59.133 segundos.
+  3. La primera escalera de dificultad se midió por tiempo de reloj, y como cada configuración gasta distinta cantidad de forwards, cada una recibió distinto tiempo simulado. Reportó 0,0 s al nivel máximo. **Lo delató el contador de vidas en 0.**
+  4. El sondeo con escenas sintéticas perdió validez al mejorar la política: sus escenas tienen *una* pala en un corral vacío y la política ahora vive con 26 en pantalla. Su `P(quieto) = 0,99` no dice que no sepa esquivar, dice que la estoy interrogando fuera de su distribución.
+
+- **Una predicción mía que falló, y por qué.** Predije que la aumentación derrumbaría la magnitud del sesgo direccional. No se movió, y no tenía por qué: `distribucionAcciones` se calcula sobre las acciones muestreadas, que viven en el **marco espejado**. Ahí el sesgo persiste por diseño — lo que se vuelve simétrico es el marco del mundo. Medí el observable equivocado.
+
+- **Los bots en producción (`DIFICULTADES` en `rooms.js`).** La dificultad es **la frecuencia de decisión**, no un handicap falso: la política se entrenó a 10 Hz y bajarle el ritmo la hace reaccionar más tarde sin mentirle sobre el mundo. No es un bot tonto, es un bot lento, que es exactamente en qué es peor una persona. Medido con 24 rondas por nivel: **Fácil 28,0 s · Normal 44,9 · Difícil 84,7 · Imposible 121,8**. El espaciado es 9/4/2/1 y no 9/6/4/1 porque la supervivencia no es lineal en el ritmo: con el segundo, Fácil y Normal daban lo mismo. **Los segundos no se muestran en la interfaz**: la política sigue mejorando y cualquier número absoluto envejece; el orden no.
+
+- **Un solo checkpoint sirve toda la escalera**, así que no hay que archivar versiones por nivel y el entrenamiento puede seguir libre.
+
+- **Dos bugs que los tests encontraron al cablear los bots:**
+  - `cada` se contaba en **ticks** y no en pasos de decisión, así que el nivel máximo decidía a 30 Hz cuando la política se entrenó a 10. Quedaba fuera de su distribución y **rendía peor que el nivel de abajo**, además de triplicar el costo.
+  - `leaveCurrentRoom` limpiaba la sala con `playerCount === 0`, y con bots eso nunca ocurre: una sala abandonada seguiría tickeando siete forwards de 1,75M de parámetros para siempre. Se agregó `humanCount`.
+
+- **El ritmo de partida fue una decisión de diseño, no de reglas.** Un bot en Imposible aguanta más de dos minutos y un jugador promedio bastante menos, así que **la ronda termina cuando cae el último humano**: sin eso, la partida seguía con vos muerto mirando cómo esquivan. La excepción es estar siendo reanimado, porque si no los bots nunca podrían levantar al último humano — que es justamente la mecánica del modo cooperativo.
+
+- **Cómo se opera:** `~/pela-rl/entrenamiento-escape/arrancar.sh` en DefeServer. Panel en `http://defeserver:8421` con 30 gráficos, incluido el radial de las 17 acciones, el rastro polar del sesgo y el mapa de calor de acciones en el tiempo. `sondear.py` interroga a la política con escenas sintéticas. Para llevar una política a producción: `exportar.py` y copiar `pesos-escape.bin` y `.json` a `multiplayer-server/`.
+
+- **Pendiente:** verificar que `Room` con un jugador replique de verdad el modo solitario del cliente (se asumió por los comentarios del código, nunca se comprobó). `rivalesSobrevividos` en battle está plano en 0,9 de 3 desde el paso 1 y no se va a mover con esta recompensa: empujar a un rival contra una pala no paga nada. Y el sondeo necesita escenas tomadas de la distribución real para volver a ser útil.

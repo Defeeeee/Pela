@@ -13,6 +13,7 @@ import {
   WORLD_HEIGHT as AGARRA_WORLD_H,
 } from "./agarra.js";
 import { cargarPoliticas } from "./politica-bots.js";
+import { cargarPolitica as cargarPoliticaEscape } from "./politica-escape.js";
 import { LeaderboardStore } from "./leaderboard.js";
 
 const PORT = process.env.MP_PORT || 9315;
@@ -174,7 +175,13 @@ const io = new Server(httpServer, {
   cors: { origin: "*" },
 });
 
-const manager = new RoomManager();
+/**
+ * Política de los bots de escapecv. Si el archivo de pesos no está, queda en
+ * null y las salas simplemente no ofrecen bots: el multijugador funciona igual.
+ */
+const politicaEscape = cargarPoliticaEscape();
+
+const manager = new RoomManager(politicaEscape);
 
 function broadcastRoom(room) {
   if (room.playerCount === 0) return;
@@ -189,7 +196,10 @@ function leaveCurrentRoom(socket) {
   if (room) {
     room.removePlayer(socket.id);
     socket.leave(code);
-    if (room.playerCount === 0) {
+    // Por humanos y no por `playerCount`: con bots, el total nunca llega a cero
+    // y la sala abandonada seguiría tickeando para siempre.
+    if (room.humanCount === 0) {
+      room.configurarBots(0, room.dificultad); // sacar los bots antes de limpiar
       manager.cleanupIfEmpty(room);
     } else {
       broadcastRoom(room);
@@ -248,6 +258,23 @@ io.on("connection", (socket) => {
     ack?.(joinRoom(socket, room, name));
   });
 
+  socket.on("configurarBots", ({ cantidad, dificultad } = {}, ack) => {
+    const room = manager.get(socket.data.roomCode);
+    if (!room) return ack?.({ error: "No estás en ninguna sala." });
+    // Sólo salas privadas: en una pública nadie es dueño de la decisión, y los
+    // bots dispararían el arranque automático por cantidad de jugadores.
+    if (room.isPublic) return ack?.({ error: "Las salas públicas no llevan bots." });
+    if (room.hostId !== socket.id) return ack?.({ error: "Sólo quien creó la sala puede poner bots." });
+    if (room.state === "playing" || room.state === "countdown") {
+      return ack?.({ error: "No se pueden cambiar los bots con la partida en curso." });
+    }
+    if (!politicaEscape) return ack?.({ error: "Los bots no están disponibles en este servidor." });
+
+    room.configurarBots(cantidad, dificultad);
+    broadcastRoom(room);
+    ack?.({ ok: true, bots: room.bots, dificultad: room.dificultad });
+  });
+
   socket.on("startGame", (_payload, ack) => {
     const room = manager.get(socket.data.roomCode);
     if (!room) return ack?.({ error: "No estás en ninguna sala." });
@@ -276,7 +303,7 @@ setInterval(() => {
   const now = Date.now();
 
   for (const room of manager.rooms.values()) {
-    if (room.playerCount === 0 && !room.isPublic) continue;
+    if (room.humanCount === 0 && !room.isPublic) continue;
 
     if (room.isPublic && room.state === "lobby" && room.playerCount >= PUBLIC_LOBBY_MIN_PLAYERS) {
       room.startCountdown();
