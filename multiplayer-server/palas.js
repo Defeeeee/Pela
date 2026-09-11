@@ -38,9 +38,10 @@ export const MAX_PALAS = 42;
 
 // Segundos que la escena queda a la vista antes de taparse. Es la mecánica, no
 // una restricción técnica: sin reloj el juego se vuelve contar con el dedo.
-// Doce y no dieciocho: con dieciocho alcanzaba para contar tranquilo y el juego
-// pasaba de estimar a contar despacio, que premia la paciencia y no la vista.
-export const SEGUNDOS_VISIBLE = 12;
+// Ocho. Arrancó en dieciocho y bajó dos veces por la misma razón: con tiempo de
+// sobra el juego pasa de estimar a contar despacio, y eso premia la paciencia en
+// vez de la vista. Ocho alcanza para barrer la pila una vez y no para dos.
+export const SEGUNDOS_VISIBLE = 8;
 
 const LARGO_MIN = 46;
 const LARGO_MAX = 78;
@@ -176,4 +177,58 @@ export function corregir(dia, intento) {
   if (!Number.isFinite(n) || n < 0 || n > 999) return { error: "Intento inválido." };
   const error = Math.abs(n - total);
   return { total, intento: n, error, exacto: error === 0 };
+}
+
+/**
+ * Registra el único intento del día de un jugador.
+ *
+ * Vive acá y no en server.js para que los tests llamen a ESTA función y no a
+ * una copia de la forma de su respuesta: un test que reimplementa lo que quiere
+ * verificar no protege nada.
+ *
+ * Un solo intento es la mecánica: una estimación con reintentos es un conteo, y
+ * entonces el juego no premia mirar bien sino insistir. El guard se reconstruye
+ * del ranking ya persistido y no de memoria, porque la memoria se pierde en cada
+ * reinicio de PM2 —o sea en cada push a master— y eso ya dejó re-jugar y
+ * pisarse el puntaje en Pelardle.
+ */
+export function registrarIntento(store, { dia, playerId, playerName, intento }) {
+  const d = Number(dia);
+  if (!Number.isFinite(d) || d < 1) return { error: "Falta el día." };
+  if (!playerId) return { error: "Falta el jugador." };
+
+  const previo = (store.daily[d] || []).find((e) => e.playerId === playerId);
+  if (previo) {
+    return {
+      error: "Ya jugaste el de hoy.",
+      yaJugado: true,
+      intento: previo.intento ?? null,
+      distancia: previo.attempts,
+      exacto: previo.solved,
+    };
+  }
+
+  const r = corregir(d, intento);
+  if (typeof r.error === "string") return { error: r.error };
+
+  // `attempts` lleva el ERROR de estimación. Tiene la misma forma de "menos es
+  // mejor" que los intentos de Pelardle, así que el ordenamiento del ranking
+  // sirve sin tocarlo: primero los exactos, después por error, después por hora.
+  store.recordCompletion(d, playerId, playerName || "Pelado Anónimo", r.error, r.exacto);
+  // El intento se guarda en la entrada para poder devolverlo si vuelve a
+  // cargar la página: sin esto, al reabrir vería su distancia sin recordar qué
+  // había dicho.
+  const entrada = (store.daily[d] || []).find((e) => e.playerId === playerId);
+  if (entrada) entrada.intento = r.intento;
+
+  /**
+   * El total NUNCA vuelve al cliente, ni después de jugar.
+   *
+   * Sabiendo sólo la distancia quedan dos candidatos —su número más y menos el
+   * error— así que la respuesta sigue siendo secreta. Eso hace que el texto de
+   * compartir no sea un spoiler, que es exactamente lo que consigue la grilla
+   * de emojis de Wordle: se puede comentar "me colgué por 3" sin arruinarle el
+   * día a nadie.
+   */
+  return { ok: true, intento: r.intento, distancia: r.error, exacto: r.exacto };
 }

@@ -169,7 +169,6 @@ export default function PalasDelDia() {
       const r = {
         puzzle: meta.puzzle,
         intento: datos.intento ?? n,
-        total: datos.total,
         distancia: datos.distancia,
         exacto: datos.exacto,
         yaJugado: !!datos.yaJugado,
@@ -194,9 +193,10 @@ export default function PalasDelDia() {
 
   const compartir = () => {
     if (!resultado) return;
+    // Sin el total: el texto tiene que poder pegarse en un grupo sin spoilear.
     const linea = resultado.exacto
-      ? `Conté las ${resultado.total} exactas 🎯`
-      : `Dije ${resultado.intento}, eran ${resultado.total} — me colgué por ${resultado.distancia}`;
+      ? 'Las conté exactas 🎯'
+      : `Me colgué por ${resultado.distancia} ${'🟨'.repeat(Math.min(5, resultado.distancia))}`;
     const texto = `¿Cuántas palas? #${resultado.puzzle}\n${linea}\npela.signai.ar/palas`;
     navigator.clipboard?.writeText(texto).then(
       () => { setCopiado(true); setTimeout(() => setCopiado(false), 2000); },
@@ -313,14 +313,26 @@ export default function PalasDelDia() {
 
               {fase === 'resuelto' && resultado && (
                 <>
+                  {/*
+                    El número grande es la DISTANCIA, no la respuesta. El total
+                    no se revela nunca: con sólo la distancia quedan dos
+                    candidatos —tu número más y menos el error— así que la
+                    respuesta sigue siendo secreta y se puede comentar sin
+                    spoilear.
+                  */}
                   <div className={`palas-numero ${resultado.exacto ? 'palas-exacto' : resultado.distancia <= 3 ? 'palas-cerca' : 'palas-lejos'}`}>
-                    {resultado.total}
+                    {resultado.exacto ? '🎯' : `±${resultado.distancia}`}
                   </div>
                   <p style={{ color: '#bbb', margin: 0 }}>
                     {resultado.exacto
-                      ? '¡Exacto! Contaste las justas.'
-                      : `Dijiste ${resultado.intento}. Te colgaste por ${resultado.distancia}.`}
+                      ? `¡Exacto! Eran ${resultado.intento}.`
+                      : `Dijiste ${resultado.intento} y te colgaste por ${resultado.distancia}.`}
                   </p>
+                  {!resultado.exacto && (
+                    <p className="palas-nota" style={{ margin: 0 }}>
+                      El número real no se revela, así que podés comentarlo sin arruinárselo a nadie.
+                    </p>
+                  )}
                 </>
               )}
 
