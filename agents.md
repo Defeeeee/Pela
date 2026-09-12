@@ -617,3 +617,28 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
 - **Lo único que se esconde son los cuatro resultados.** Si volvieran del servidor, el segundo jugador los copia del primero. Se devuelve cuáles acertó —para los cuadraditos de compartir y para que el resultado enseñe algo— y la pantalla de resultado muestra **lo que contestó el jugador**, nunca el número correcto.
 
 - **La cuarta ruta sobre `puzzleDiario.js`**, sin tocar el molde. El recurso se llama `funcion`; el nombre `puzzle` sigue prohibido por la colisión con el índice del día que ya está documentada ahí.
+
+
+---
+
+## La política de escapecv pasa al paso 118.847
+
+- **Medición contra la que estaba**, 30 rondas por nivel, mismas semillas, un bot solo, corrida en DefeServer (no en el Mac):
+
+  | nivel | vieja (43.690) | nueva (118.847) | |
+  |---|---|---|---|
+  | Fácil | 27,6 ± 2,2 | 27,6 ± 1,7 | igual |
+  | Normal | 39,0 ± 3,1 | 39,4 ± 3,0 | igual |
+  | Difícil | 85,7 ± 6,1 | 84,3 ± 5,4 | igual |
+  | Imposible | 117,3 ± 6,2 | **146,1 ± 6,0** | **+24,5%, 3,3σ** |
+  | Sobrehumano | 130,0 ± 6,9 | 136,4 ± 6,9 | +0,65σ, no significativo |
+
+- **La mejora aparece SÓLO en Imposible**, que es justo la frecuencia a la que se entrena (10 Hz, `cada 3 ticks`). A 2,5 y 5 Hz no cambia nada y a 30 Hz no pasa el ruido. Las 80.000 iteraciones extra afinaron la política *en su propio ritmo de decisión*, y eso no se transfiere a otros ritmos. Es una hipótesis consistente con los datos, no una conclusión probada: para probarla habría que entrenar a otra frecuencia y ver si la mejora se muda con ella.
+
+- **Efecto de diseño no buscado: los dos niveles de arriba se juntaron.** Imposible (146,1) y Sobrehumano (136,4) ahora están dentro del ruido uno del otro, y Sobrehumano cuesta el triple de CPU por bot. Con estos pesos el nivel de arriba dejó de agregar dificultad y sólo agrega costo. Queda anotado; arreglarlo pide entrenar a 30 Hz, no tocar `cadaTicks`.
+
+- **El entrenamiento estaba parado hacía rato.** El `lr` tocó el piso de 3e-5 en el paso 40.660 —el `RECOCIDO=40000` se agotó ahí— y desde entonces la KL por actualización es 0,0000 contra un tope de 0,03. O sea que dos tercios de la corrida transcurrieron con la política casi congelada. Es la tercera vez que este recocido se queda corto (4000 → 20.000 → 40.000).
+
+- **Un error que casi produce una conclusión falsa.** Al preparar la comparación copié los pesos "viejos" al servidor con un `||` de fallback que leía del repo, pero el repo ya estaba pisado con los nuevos: `vieja-escape.bin` terminó con el mismo hash que la nueva y el `.json` diciendo "paso 43690". Habría comparado la política contra sí misma. Se detectó comparando hashes ANTES de correr. Ahora cada bloque de la medición imprime el suyo.
+
+- **El `multiplayer-server/` de DefeServer está desactualizado** (su `rooms.js` no tiene los niveles de dificultad). La medición corre desde `/tmp/mp` con copias frescas para no pisarle nada.
