@@ -30,6 +30,7 @@ const routesConfig = [
   { path: "/escapecv", label: "Escape a la pala", desc: "Esquivá las palas. Un juego de supervivencia folicular.", icon: "🏃" },
   { path: "/agarra", label: "Agarrá.io", desc: "Comé palas, crecé de tamaño y morfate a otros pelados en vivo.", icon: "🦠" },
   { path: "/video", label: "Pela TV", desc: "Sistema de Radiodifusión Folicular ininterrumpida.", icon: "📺" },
+  { path: "/terapia", label: "Terapia", desc: "Sesión de terapia folicular.", icon: "🛋️" },
 ];
 
 export default function MenuPage() {

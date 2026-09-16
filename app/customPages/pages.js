@@ -6,6 +6,7 @@ import ShipPage from '../argumentatividad/page';
 import AutistaPage from '../autista/page';
 import EscapaPage from '../escapa/page';
 import ArgumentoPage from '../argumento/page';
+import TerapiaPage from '../terapia/page';
 
 const pages = {
   '/': HomePage,
@@ -16,6 +17,7 @@ const pages = {
   '/autista': AutistaPage,
   '/escapa': EscapaPage,
   '/argumento': ArgumentoPage,
+  '/terapia': TerapiaPage,
 };
 
 export default pages;
