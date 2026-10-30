@@ -642,3 +642,52 @@ Al terminar una tarea, se debe agregar una nueva entrada al final del documento 
 - **Un error que casi produce una conclusión falsa.** Al preparar la comparación copié los pesos "viejos" al servidor con un `||` de fallback que leía del repo, pero el repo ya estaba pisado con los nuevos: `vieja-escape.bin` terminó con el mismo hash que la nueva y el `.json` diciendo "paso 43690". Habría comparado la política contra sí misma. Se detectó comparando hashes ANTES de correr. Ahora cada bloque de la medición imprime el suyo.
 
 - **El `multiplayer-server/` de DefeServer está desactualizado** (su `rooms.js` no tiene los niveles de dificultad). La medición corre desde `/tmp/mp` con copias frescas para no pisarle nada.
+
+---
+
+## El árbol de pelados — el puzzle diario de contar procesos
+
+- **Pedido:** el usuario pasó cinco handouts de la materia (C, memoria dinámica, compilador/ensamblador/linker, introducción a SO, procesos) y pidió armar un buen juego diario con ese material.
+
+- **Por qué `fork()` y no los otros.** T13 (introducción a SO) es puramente conceptual: definiciones sin mecánica computable, así que no da puzzle. De los cuatro restantes, `fork()` tiene el mejor núcleo porque es contraintuitivo de una manera que **no se arregla leyendo la definición**: tres `fork()` seguidos crean ocho procesos y no cuatro. Es la misma propiedad que hace buenas a la pila vacía-descendente y a la diferencia entre CF y OF.
+
+- **La mecánica.** Un programa corto en C con `fork()`, condicionales, bucles y `exit()`. Cuatro preguntas: procesos en total, veces que se imprime una etiqueta, hijos directos del original, y profundidad del árbol. Puntaje de 0 a 4.
+
+- **Se genera, no se analiza**, igual que ¿Qué devuelve?: el programa se arma componiendo sentencias conocidas y se simula con el mismo árbol con el que se generó. El texto en C es una impresión de esa estructura, no su fuente.
+
+- **`verificar-fork.js`: verificación contra el SISTEMA OPERATIVO de verdad, y es la mejor de las tres que tiene el proyecto.** `fork()` es POSIX, así que no hace falta emular nada: se compila el programa generado, se corre, y se reconstruye el árbol real. **600 verificaciones (150 días × 4 respuestas) coinciden exactamente.** No está en la suite porque crea cientos de procesos de verdad y eso no tiene nada que hacer corriendo en el VPS junto al multijugador.
+  - **La trampa de la reconstrucción:** `getppid()` NO sirve. Si el padre ya salió —y estos programas tienen `exit()` a propósito— el hijo queda reparentado a init y devuelve 1. Se vio en la primera prueba: un proceso reportó padre 23943 al nacer y padre 1 tres líneas después. La solución es que el padre capture SU pid antes de bifurcar y se lo pase al hijo por la copia de memoria.
+
+- **El buffer de `printf` queda afuera a propósito.** Es la trampa más famosa del tema —el buffer se copia con el proceso— pero depende de si la salida es terminal o pipe, y una ambigüedad en un puzzle es un bug (la misma razón por la que el little-endian salió de La pila de palas). El programa arranca con `setvbuf(stdout, NULL, _IONBF, 0)`, **visible en el listado**: el puzzle enseña que la trampa existe mostrando la línea que la neutraliza.
+
+### Cuatro bugs, en orden de gravedad
+
+1. **El peor, y el que más costó encontrar: 18 días de 520 servían el MISMO programa.** Algunas combinaciones de objetivos son inalcanzables, la búsqueda agotaba sus 12.000 intentos y caía en la **salida de emergencia** — un programa fijo escrito a mano. Como es el mismo para cualquier día que falle, los 18 días compartían puzzle, y dos caían en días consecutivos (el 11 y el 12): las cuatro respuestas regaladas al día siguiente. **Se descubrió reconociendo el listado**: los días 11 y 12 mostraban exactamente el programa que yo había escrito como emergencia. Hasta ahí el síntoma parecía una colisión de semillas y busqué en el lugar equivocado — incluso probé una mirada atrás de dos niveles que costó 104 ms por día y no arregló nada. La solución es una **segunda pasada que suelta los objetivos**; el enlatado queda como lo que debía ser: un último recurso que no se usa nunca. Después: 520 programas distintos de 520, cero repeticiones consecutivas.
+
+2. **El simulador reventaba la memoria.** Dos bucles de `fork()` anidados dan 2^(n·m) procesos y un candidato explosivo tiraba "Map maximum size exceeded" — y eso corre **dentro del proceso que atiende el multijugador de /escapecv y Agarrá.io**. El techo duro tiene que vivir en el simulador y no sólo en el generador, porque el simulador es lo que corre. Hay un test que le tira una bomba de 2^24 procesos y exige que aborte en milisegundos.
+
+3. **Código muerto.** El primer programa generado tenía cinco `fork()` detrás de dos `exit(0)`: inalcanzables. El listado parecía más difícil de lo que era y buena parte era decorado — la misma lección que la garantía de ramas de ¿Qué devuelve?. Ahora el simulador marca qué sentencias ejecutó alguien y el generador rechaza las que dejan código muerto.
+
+4. **Dos de las cuatro respuestas se adivinaban.** Dejándolas salir solas, la profundidad quedaba pegada al techo —contestar "4" acertaba el 55%— y los hijos directos al piso, con "2" en 40%. La receta que ya funcionó para el par de bit golf: **elegir el valor antes de buscar el puzzle**. La profundidad por rechazo y los hijos directos **por construcción** (son exactamente los `fork()` que ejecuta el original, así que se arman). Buscar los hijos por rechazo también funcionaba pero llevaba la generación de 3,4 a **487 ms por programa**, y medio segundo de bloqueo sería un tirón visible para todos los que estén en una partida. Final: la mejor conjetura ciega de las cuatro preguntas queda en 21%, 23%, 36% y 36%.
+
+- **Lo que NO se puede fijar a la vez es la profundidad y el total**, y no por falta de ganas: están correlacionados de raíz. Un árbol de profundidad 2 sólo puede tener 6 o 7 procesos —medido, 960 de 974 casos—, porque con dos niveles no hay dónde poner más. Por eso la profundidad 2 quedó **afuera** de los objetivos: su conjunto de programas posibles es un puñado y el generador caía siempre en los mismos, que es el mismo problema de pozo diminuto que dejó al par 7 fuera de bit golf.
+
+- **Memoización.** El programa del día es función pura del día y generarlo cuesta decenas de milisegundos, así que se guarda: el primer pedido del día lo paga (unos 30 ms, uno o dos ticks) y el resto sale gratis (0,0001 ms). Mismo recurso que las tablas de distancias de `bitgolf.js`.
+
+- **La quinta ruta sobre `puzzleDiario.js`**, sin tocar el molde. El recurso se llama `programa`; `puzzle` sigue prohibido por la colisión con el índice del día.
+
+---
+
+## Segunda tanda de palabras para Pelardle
+
+- **Pedido:** más palabras, con los temas que el juego ya tiene (capilar, burocrático, lunfardo). Se había armado un cuarto grupo de palabras de sistemas por los cinco puzzles de Orga del sitio y **se sacó a pedido explícito**: desentonaba.
+
+- **La lista no estaba escasa, estaba AGOTADA.** Con 55 palabras y un puzzle por día hábil la vuelta dura 55 días, y hoy es el día 203: iba por la **cuarta vuelta**, o sea que cada palabra ya se había visto tres veces. Pasa de 55 a 101, que son cinco meses de juego.
+
+- **`wordFor` recorre la lista a saltos y no en orden**, con un paso coprimo al largo —condición para que visite las N posiciones antes de repetir ninguna, verificada en el test—. No es decoración: agregando la tanda al final y recorriendo en orden habrían salido 19 días de palabras nuevas y después 55 de las viejas otra vez. Con el salto quedan intercaladas desde el primer día (9 nuevas y 11 viejas en los próximos 20). El paso se calcula del largo, así que agregar o sacar palabras no exige revisarlo a mano — se comprobó sacando el grupo de Orga: se recalculó solo de 68 a 62.
+
+- **Dos reglas que fallan EN SILENCIO** y que el test ahora verifica sobre las 101: cinco letras exactas, y sobrevivir a `norm()` sin cambiar. Lo segundo es lo traicionero — `norm()` saca los tildes del intento pero no de la respuesta guardada, así que una palabra con tilde **no se podría acertar nunca**. La Ñ sí está blindada y se usa (`GREÑA`, `TEÑIR`).
+
+- **Un bug en mi propio test.** El extractor levantaba por regex las palabras del archivo y agarró una que estaba **dentro de un comentario**, contando 112 donde hay 101; peor, el `assert` sólo marcaba `exitCode` y seguía imprimiendo los ✓ debajo de los ✗. Se arreglaron las tres cosas: se sacan los comentarios antes de extraer, el assert corta, y se quitaron las comillas de ese comentario para que no vuelva a ser una trampa.
+
+- **Lo que esto NO esconde, y queda escrito al lado de la función:** el repositorio es **público**, así que la lista y `wordFor` están a la vista y la palabra de cualquier día es calculable por quien se tome el trabajo. Taparlo pediría sacar la lista del repo, que es la misma mudanza que hicieron los secretos a `~/pela-data/`. No se hizo porque la palabra del día no es una credencial.

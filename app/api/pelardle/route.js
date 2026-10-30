@@ -18,7 +18,34 @@ const WORDS = [
   "CUOTA", "PLAZO", "FOLIO", "ANEXO", "ACTAS", "FICHA", "TASAS",
   // Lunfardo
   "ÑOQUI", "MATES", "GUITA", "BONDI", "ASADO", "CHAPA", "GROSO", "PIBES",
-  "CHORI", "VAGOS", "YERBA", "MANGO", "CACHO", "TACHO", "FACHA"
+  "CHORI", "VAGOS", "YERBA", "MANGO", "CACHO", "TACHO", "FACHA",
+
+  // ── Segunda tanda ────────────────────────────────────────────────────────
+  // Agregada porque la lista SE AGOTÓ: con 55 palabras y un puzzle por día
+  // hábil, la vuelta dura 55 días, y el día 203 ya iba por la cuarta. Todo el
+  // mundo había visto cada palabra tres veces.
+  //
+  // Se mantienen los TRES temas que el juego ya tenía —capilar, burocrático y
+  // lunfardo— a pedido explícito. Hubo un cuarto grupo de palabras de sistemas,
+  // por los cuatro puzzles de Orga que tiene el sitio, y se sacó: desentonaba
+  // con el resto y Pelardle es de pelados, trámites y lunfardo.
+  //
+  // Toda palabra nueva tiene que cumplir dos reglas que fallan EN SILENCIO:
+  // cinco letras exactas (si no, rompe la grilla) y sobrevivir a `norm()` sin
+  // cambiar. Lo segundo es lo traicionero: `norm()` saca los tildes del intento
+  // pero no de la respuesta, así que una palabra guardada con tilde no se podría
+  // acertar nunca. La Ñ sí está blindada y se puede usar.
+
+  // Capilar
+  "GREÑA", "NUCAS", "CEJAS", "TESTA", "PELAO", "TEÑIR", "MOCHO", "CASCO",
+  "MELON", "BOCHA", "MOTAS", "LISOS",
+  // Burocrático
+  "FOJAS", "VISTO", "PAPEL", "LEYES", "DEUDA", "PAGOS", "CARGO", "JUNTA",
+  "CENSO", "SALDO", "RUBRO", "CANON", "BANDO", "VOCAL", "GIROS", "NULOS",
+  // Lunfardo
+  "MORFI", "CHETO", "GARCA", "POSTA", "PIOLA", "ZAFAR", "FIACA", "PUCHO",
+  "GRASA", "BIRRA", "TANGO", "VIEJA", "NAFTA", "SUBTE", "TERMO", "LUCAS",
+  "PALOS", "GAMBA"
 ];
 
 const RESOLUCIONES = [
@@ -43,8 +70,50 @@ function norm(str) {
 }
 
 
+/**
+ * Mayor común divisor, para elegir un paso que recorra la lista entera.
+ */
+function mcd(a, b) {
+  while (b) { const t = b; b = a % b; a = t; }
+  return a;
+}
+
+/**
+ * El paso con el que se recorre la lista.
+ *
+ * Se busca cerca de la proporción áurea del largo y se corre hasta dar con uno
+ * coprimo, que es la condición para que `(i * paso) % largo` visite LAS
+ * `largo` POSICIONES antes de repetir ninguna. Sin coprimalidad el recorrido
+ * entra en un ciclo corto y la mayoría de las palabras no saldrían nunca.
+ *
+ * Se calcula una vez y vale para cualquier largo de lista, así que agregar o
+ * sacar palabras no exige revisar este número a mano.
+ */
+const PASO = (() => {
+  const n = WORDS.length;
+  for (let p = Math.max(1, Math.floor(n * 0.618)); p < n; p++) {
+    if (mcd(p, n) === 1) return p;
+  }
+  return 1; // sólo si la lista tuviera una palabra
+})();
+
+/**
+ * La palabra del día.
+ *
+ * Se recorre a saltos y no en orden por un motivo concreto: al agregar la
+ * segunda tanda al final, un recorrido secuencial habría dado 19 días de
+ * palabras nuevas y después 55 de las viejas otra vez. Con el salto, viejas y
+ * nuevas quedan intercaladas desde el primer día.
+ *
+ * Lo que esto NO hace es esconder nada, y conviene dejarlo escrito igual que el
+ * agujero de identidad del propio Pelardle: **el repositorio es público**, así
+ * que la lista y esta función están a la vista y la palabra de cualquier día es
+ * calculable por quien se tome el trabajo. Taparlo de verdad pediría sacar la
+ * lista del repo, que es la misma mudanza que hicieron los secretos a
+ * `~/pela-data/`. No se hizo acá porque la palabra del día no es una credencial.
+ */
 function wordFor(index) {
-  return WORDS[(index - 1) % WORDS.length];
+  return WORDS[((index - 1) * PASO) % WORDS.length];
 }
 
 /**
